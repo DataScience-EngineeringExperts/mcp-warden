@@ -86,6 +86,53 @@ the `WRD-*` / `WRD-DRIFT-*` check ID) uploads straight to GitHub code scanning.
 
 ---
 
+## CI usage — drop-in gate for your own repo
+
+Three steps to add mcp-warden as a CI integrity gate:
+
+**1. Pin once** (run locally, commit the result):
+
+```bash
+pip install mcp-warden
+# Pin your server and record an approval
+mcp-warden pin node ./build/index.js \
+    --approve --approver you@example.com \
+    --lock warden.lock
+git add warden.lock && git commit -m "chore: pin MCP surface baseline"
+```
+
+**2. Add the check step to your workflow** (`.github/workflows/integrity-gate.yml`):
+
+```yaml
+- name: Install mcp-warden
+  run: pip install mcp-warden
+
+- name: MCP integrity gate (pass path — exits 0 when surface matches lock)
+  run: |
+    mcp-warden check node ./build/index.js \
+      --lock warden.lock \
+      --sarif warden.sarif
+
+- name: Upload SARIF
+  if: always()
+  uses: actions/upload-artifact@v4
+  with:
+    name: mcp-warden-sarif
+    path: warden.sarif
+```
+
+**3. On any upstream rug-pull**, `mcp-warden check` exits non-zero and the build
+fails before the drifted server reaches your agents. Re-pin only after a human
+reviews and approves the new surface.
+
+> This repo ships a live demo of this pattern in
+> [`.github/workflows/integrity-gate.yml`](.github/workflows/integrity-gate.yml):
+> the "pass path" step checks the clean fixture (exits 0) and the "blocking proof"
+> step checks the mutated fixture (exits 1, inverted to green) to show both sides
+> of the gate on every CI run.
+
+---
+
 ## CLI reference
 
 | Command | Purpose | Exit code |

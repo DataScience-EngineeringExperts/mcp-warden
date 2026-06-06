@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Job 1: pytest suite
+  # --------------------------------------------------------------------------
+  test:
+    name: Test suite (Python 3.11)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install package + dev deps
+        run: pip install -e ".[dev]"
+
+      - name: Run pytest
+        run: pytest -q
+
+  # --------------------------------------------------------------------------
+  # Job 2: MCP integrity gate demo
+  #
+  # Lock strategy: COMMITTED LOCK
+  #   tests/fixtures/clean.warden.lock was pinned once (locally, with --approve)
+  #   and committed alongside the fixture.  CI never re-pins; it only checks.
+  #   This mirrors real usage: pin once → commit the lock → CI verifies on
+  #   every subsequent push.
+  #
+  # Two steps, both leave the job GREEN:
+  #   Pass path    — check clean_server.py vs committed lock  → exit 0 (good).
+  #   Blocking proof — check mutated_server.py vs same lock  → exit 1, which
+  #                    the shell inverts to prove the gate blocks the rug-pull.
+  # --------------------------------------------------------------------------
+  integrity-gate:
+    name: MCP integrity gate
+    runs-on: ubuntu-latest
+    # Run even if the test job fails so drift findings are always visible.
+    if: always()
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install mcp-warden
+        run: pip install -e ".[dev]"
+
+      # -----------------------------------------------------------------------
+      # Pass path: clean server vs committed lock — gate should be silent (OK).
+      # -----------------------------------------------------------------------
+      - name: "Pass path: check clean server against committed lock"
+        run: |
+          mcp-warden check python tests/fixtures/clean_server.py \
+            --lock tests/fixtures/clean.warden.lock \
+            --sarif clean-check.sarif
+          echo "clean-check exit: $?"
+
+      # -----------------------------------------------------------------------
+      # Blocking proof: mutated server vs same committed lock.
+      # The gate MUST exit non-zero here.  If it exits 0, the gate is broken
+      # and we fail CI explicitly.
+      # -----------------------------------------------------------------------
+      - name: "Blocking proof: mutated server must be rejected by the gate"
+        run: |
+          echo "--- Drift output (expect DRIFT DETECTED) ---"
+          if mcp-warden check python tests/fixtures/mutated_server.py \
+               --lock tests/fixtures/clean.warden.lock \
+               --sarif mutated-check.sarif ; then
+            echo "ERROR: integrity gate failed to block drift — this is a bug"
+            exit 1
+          fi
+          echo "--- Gate correctly blocked the rug-pull (non-zero exit confirmed) ---"
+
+      # -----------------------------------------------------------------------
+      # Upload SARIF from the mutated check so the drift finding is visible
+      # in the Actions run as a build artifact.
+      # -----------------------------------------------------------------------
+      - name: Upload drift SARIF artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-warden-drift-sarif
+          path: mutated-check.sarif
+          if-no-files-found: warn

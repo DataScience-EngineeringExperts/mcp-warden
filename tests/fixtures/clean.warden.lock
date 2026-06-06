@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "warden_version": "0.1.0",
+  "server": {
+    "command": "python",
+    "args": [
+      "tests/fixtures/clean_server.py"
+    ],
+    "command_digest": "sha256:db5131f204944f8a4d13cba802e2a47c576c3932b0eaff0fc0304bba7795904c"
+  },
+  "tools": [
+    {
+      "name": "list_dir",
+      "description_hash": "sha256:86ffef9c802f84e109f8e4ffba6d5dbd379eb1366d427bd5cb46e77ae1f24e3f",
+      "input_schema_hash": "sha256:923b083c9bcab2e3d3e07c7d9b4401688ad9f3d5e2c2f0c48fcd43052bdcb71b",
+      "capabilities": [
+        "fs-read"
+      ],
+      "entry_digest": "sha256:3cf1c90e30e71ac19208ab0796998aad3e5a07c6894a75cee7d9cc5d20e2d350"
+    },
+    {
+      "name": "read_file",
+      "description_hash": "sha256:66c8359ee4b07085ddc3ff6169eef8f15add705100f66c28ca384c0fff9963e1",
+      "input_schema_hash": "sha256:49430b90983ed64ed10b24073294a1559a487be5a32fe780b93f67c308184e13",
+      "capabilities": [
+        "fs-read"
+      ],
+      "entry_digest": "sha256:98016383b3820067ad260fa6fd30ad1d4b74a3a32a763aa06256c058a222c36e"
+    }
+  ],
+  "resources": [
+    {
+      "uri": "file:///etc/motd",
+      "name": "motd",
+      "description_hash": "sha256:14ec0d6ac27d5638dc9616a064e386f712012886fa96aa756c8cd623bb966e89",
+      "mime_type": "text/plain",
+      "entry_digest": "sha256:911504f35d7216273f99671ab467220b49d527f5be56a538b06b49308e67ebc8"
+    }
+  ],
+  "prompts": [
+    {
+      "name": "summarize",
+      "description_hash": "sha256:6740f991cded1943c70e3bf53ead9f3dcbd6d201e5bc833bbe0a781f454d273d",
+      "arguments_hash": "sha256:c5dbdde6b9ec63a025c51567c4c33496f7dffc2b415b03cd8467d1ded44493ae",
+      "entry_digest": "sha256:a3214cdc0ac5cf658451d52b81aa4f23b4a3b038042d5a2d9635e71f35624945"
+    }
+  ],
+  "findings": [
+    {
+      "rule_id": "WRD-CAP-FS-READ",
+      "severity": "medium",
+      "target": "tools/list_dir",
+      "message": "Tool derives capability 'fs-read' (name token 'list')",
+      "snippet": "name token 'list'"
+    },
+    {
+      "rule_id": "WRD-CAP-FS-READ",
+      "severity": "medium",
+      "target": "tools/read_file",
+      "message": "Tool derives capability 'fs-read' (name token 'read')",
+      "snippet": "name token 'read'"
+    }
+  ],
+  "overall_digest": "sha256:bd1edd5627454dd4fcddc300bc6be6f6e7a364a477208b463cba720d6463b0ca",
+  "pin": {
+    "created_at": "2026-06-06T20:48:38Z",
+    "warden_version": "0.1.0",
+    "mcp_protocol_version": "2025-11-25",
+    "approved": true,
+    "approver": "ci-bot@example.invalid",
+    "approved_at": "2026-06-06T20:48:38Z",
+    "approved_digest": "sha256:bd1edd5627454dd4fcddc300bc6be6f6e7a364a477208b463cba720d6463b0ca"
+  }
+}
