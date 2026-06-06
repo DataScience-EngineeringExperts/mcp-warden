@@ -1,0 +1,40 @@
+[project]
+name = "mcp-warden"
+version = "0.1.0"
+description = "CI-first MCP supply-chain integrity gate: pin and verify the declared tool/resource/prompt surface of an MCP server."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Data Science & Engineering Experts, Inc." }]
+keywords = ["mcp", "supply-chain", "security", "ci", "integrity"]
+
+dependencies = [
+    "mcp>=1.0.0",
+    "rfc8785>=0.1.4",
+    "pydantic>=2.0.0",
+    "typer>=0.12.0",
+    "rich>=13.0.0",
+    "pyyaml>=6.0",
+    "anyio>=4.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[project.scripts]
+mcp-warden = "mcp_warden.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mcp_warden"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
