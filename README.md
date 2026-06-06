@@ -4,12 +4,16 @@
 prompt surface of an [MCP](https://modelcontextprotocol.io) server, then fail CI
 when that surface drifts from an approved baseline.
 
-> mcp-warden v0.1 is an **MCP supply-chain integrity gate, not an agent firewall.**
-> It verifies that a server's *declared* surface has not changed since a human
+> mcp-warden is an **MCP supply-chain integrity gate, not a full agent firewall.**
+> v0.1 verifies that a server's *declared* surface has not changed since a human
 > approved it, and flags dangerous capability shapes and leaked secrets in that
-> surface. It does **not** (and cannot in v0.1) guarantee that a tool *behaves*
-> safely — including poisoned tool results, which is the explicit v0.2 target.
-> See [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md).
+> surface. **v0.2 adds runtime tool-result inspection** (`guard` proxy + `inspect`
+> analyzer): it detects control/ANSI escapes, echoed secrets, and configured exfil
+> domains (deterministic, blockable on opt-in) and monitors a narrow curated
+> prompt-injection phrase list (fuzzy, log-only) — **shipping shadow-default**. It still
+> does **not** defend behavioral attacks (`T-BEHAVE`) or novel result vectors.
+> See [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) and
+> [`docs/THREAT_MODEL_V2.md`](docs/THREAT_MODEL_V2.md).
 
 ---
 
@@ -25,9 +29,12 @@ inputSchema)` metadata returned by `tools/list`, `resources/list`, and
 | **Dangerous capability surface** (`MCP-CAPSURF`) | Deterministic `WRD-CAP-*` static checks (shell/exec, fs-write, fs-read, http, sql) |
 | **Secret leakage in definitions** (`MCP-SECRET`) | `WRD-SEC-*` regex + entropy checks; snippets are always redacted |
 | **Unpinned supply-chain refs** (`MCP-SUPPLY`) | `WRD-SUP-*` flags unpinned `npx`/`uvx`/`pip`, `latest`, and `curl|sh` launches |
+| **Poisoned tool results** (`T-RESULT`, v0.2) | `guard`/`inspect` run the `WRD-RES-*` catalog on tool results: ANSI/control escapes, echoed secrets, exfil domains (deterministic BLOCK), curated injection phrases (fuzzy MONITOR) — shadow-default |
 
 Reproducibility is the core guarantee: canonicalization is **RFC 8785 (JCS)** +
-**SHA-256** (`sha256:<hex>`), so `pin` and `check` agree byte-for-byte.
+**SHA-256** (`sha256:<hex>`), so `pin` and `check` agree byte-for-byte. The v0.2
+result-inspection catalog is defined once and run identically by `guard` (live) and
+`inspect` (offline).
 
 ---
 
@@ -141,9 +148,34 @@ reviews and approves the new surface.
 | `mcp-warden check <server-cmd...> [--lock F] [--sarif F] [--json]` | Re-capture + diff vs lock | **non-zero on drift**, 2 on error |
 | `mcp-warden policy lint <file> [--lock F]` | Lint a policy file (fail closed) | non-zero on lint error |
 | `mcp-warden policy eval <file> <sample.json> [--lock F]` | Evaluate one sample call | **non-zero on a deny verdict** (CI assertion) |
+| `mcp-warden guard <server-cmd...> [--lock F] [--policy F] [--block-* ...] [--audit-only] [--sarif F] [--record T]` | **(v0.2)** Transparent stdio proxy: inspects `tools/call` results + arguments at runtime. **Shadow-default** (logs, does not block unless a `--block-*` flag is set) | child's exit code; never breaks the session |
+| `mcp-warden inspect <trace.jsonl> [--lock F] [--sarif F]` | **(v0.2)** Offline analyzer over a recorded JSON-RPC session — same `WRD-RES-*` catalog as `guard` | non-zero on any BLOCK-tier finding; 2 on read error |
 
 `<server-cmd...>` is passed to the OS as an **argv array, never through a shell.**
 Set `WARDEN_LOG_LEVEL=INFO` for diagnostic logging.
+
+### Runtime result inspection (v0.2, shadow-default)
+
+`guard` sits transparently between an MCP client and server and inspects tool *results*:
+
+```bash
+# Shadow mode (default): detect + log, never block. Safe to roll out first.
+mcp-warden guard node ./build/index.js --lock warden.lock --sarif guard.sarif
+
+# Opt into deterministic blocking once you trust the findings:
+mcp-warden guard node ./build/index.js --lock warden.lock --block-deterministic
+#  blocks: ANSI/control escapes, echoed secrets, configured exfil domains, and
+#  a mid-session tools/list surface swap that diverges from warden.lock.
+
+# Re-analyze a recorded session offline with the identical rule catalog:
+mcp-warden inspect session.trace.jsonl --lock warden.lock --sarif inspect.sarif
+```
+
+Result rules (`WRD-RES-*`): `WRD-RES-ANSI`, `WRD-RES-SECRET-ECHO`, `WRD-RES-EXFIL-DOMAIN`
+(deterministic BLOCK tier) and `WRD-RES-INJECT-PHRASE` (fuzzy MONITOR tier, log-only by
+default). `--audit-only` forces every detection to a warning. See
+[`docs/RESULT_INSPECTION.md`](docs/RESULT_INSPECTION.md) and
+[`docs/GUARD_PROXY.md`](docs/GUARD_PROXY.md).
 
 ---
 

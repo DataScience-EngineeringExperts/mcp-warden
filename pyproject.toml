@@ -1,7 +1,7 @@
 [project]
 name = "mcp-warden"
-version = "0.1.0"
-description = "CI-first MCP supply-chain integrity gate: pin and verify the declared tool/resource/prompt surface of an MCP server."
+version = "0.2.0"
+description = "CI-first MCP supply-chain integrity gate: pin and verify the declared tool/resource/prompt surface of an MCP server, plus runtime tool-result inspection (guard/inspect)."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "Apache-2.0" }

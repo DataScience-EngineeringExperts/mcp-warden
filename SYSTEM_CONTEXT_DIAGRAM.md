@@ -1,9 +1,12 @@
 # mcp-warden — System Context Diagram
 
-Where mcp-warden sits, what it talks to, and where its outputs go. mcp-warden is
-a **read-only, definition-only** gate: it spawns the target MCP server over
-stdio, captures the *declared* surface, and writes a baseline + machine reports.
-There is no proxy and no runtime interception in v0.1.
+Where mcp-warden sits, what it talks to, and where its outputs go. The **v0.1** path
+(`pin`/`check`/`policy`) is a **read-only, definition-only** gate: it spawns the target
+MCP server over stdio, captures the *declared* surface, and writes a baseline + machine
+reports — no proxy, no runtime interception. The **v0.2** path adds a transparent stdio
+**proxy** (`guard`) and an **offline analyzer** (`inspect`) that inspect tool *results*
+at runtime; see C3 below. `guard` ships **shadow-default** (detect + log, no blocking
+unless explicitly opted in).
 
 > `conclave` (the 4-model adversarial council referenced in `docs/THREAT_MODEL.md`)
 > is a **dev-time design reviewer** that shaped this contract. It is **NOT** a
@@ -85,6 +88,49 @@ sequenceDiagram
 
 ---
 
+## C3 — `guard` runtime proxy + `inspect` offline analyzer (v0.2)
+
+```mermaid
+flowchart LR
+    subgraph live["Live session (v0.2 guard)"]
+        client["MCP client\n(agent / host)"]
+        guard["mcp-warden guard\n(transparent stdio proxy)\nshadow-default"]
+        server2["Target MCP server\n(child, argv array,\nNEVER via a shell)"]
+        client <-- "c2s frames" --> guard
+        guard <-- "s2c frames" --> server2
+    end
+
+    lock[("warden.lock\n+ §11 per-tool\ninspection policy")]
+    cat["WRD-RES-* catalog\n(RESULT_INSPECTION.md)\nANSI · secret-echo · exfil-domain\n· inject-phrase (monitor)"]
+    trace[("trace.jsonl\nrecorded frames")]
+
+    subgraph offline["Offline (v0.2 inspect)"]
+        inspect["mcp-warden inspect"]
+    end
+
+    lock -. "per-tool precision" .-> guard
+    cat -. "applied by BOTH (identical rules)" .-> guard
+    cat -. "applied by BOTH (identical rules)" .-> inspect
+    guard -- "--record" --> trace
+    trace --> inspect
+
+    guard --> sarif2["SARIF / JSONL\n(action: shadowed|blocked|modified)"]
+    inspect --> sarif2
+
+    guard -- "on block (opt-in): JSON-RPC error\nOR redacted-content result" --> client
+```
+
+- `guard` passes **every frame through untouched EXCEPT** `tools/call` request/response
+  (+ the `tools/list_changed` gate vs the lock). `initialize`/capabilities are never
+  rewritten; enforcement begins only at the first `tools/call` (`GUARD_PROXY.md` §2).
+- A framing/inspection **error fails open** — the frame passes through and the session is
+  never killed (`GUARD_PROXY.md` §9).
+- "Block" on the wire is a **well-formed JSON-RPC frame**: an error response for blocked
+  requests/exfil/secret-echo results, or a redacted-content result for ANSI stripping
+  (`GUARD_PROXY.md` §7).
+
+---
+
 ## Trust boundary (from `docs/THREAT_MODEL.md` §3.3)
 
 - **Trusted:** mcp-warden, the Python runtime it runs in, and `warden.lock` in
@@ -92,9 +138,19 @@ sequenceDiagram
 - **Untrusted:** everything on the server side of the stdio pipe.
 - The boundary is the **stdio channel** between mcp-warden and the spawned server.
 
-## What is explicitly NOT in this picture (v0.1)
+## What is explicitly NOT in this picture
 
+**v0.1 (`pin`/`check`/`policy`):**
 - No runtime proxy / no agent-in-the-loop (`policy` is design-time only).
-- No tool-result inspection (the headline v0.2 gap, `T-RESULT`).
-- No network calls by the checks; no DNS resolution at policy time.
-- stdio transport only (HTTP/SSE deferred).
+- No tool-result inspection (the headline gap, `T-RESULT` — addressed by v0.2 `guard`).
+
+**Still NOT in scope, even with v0.2 `guard`/`inspect`:**
+- No behavioral defense (`T-BEHAVE`) — content is inspected, side effects are not.
+- No cross-call/conversational correlation; each frame is inspected independently.
+- No decoding of image/audio/blob/base64 result content (coverage gap recorded as
+  `WRD-RES-UNINSPECTABLE`).
+- No network calls / no DNS resolution by checks, policy, or the proxy — exfil + SSRF
+  match on literal host strings only.
+- stdio transport only (HTTP/SSE deferred for both v0.1 and v0.2).
+- No default-blocking in v0.2 — shadow-default; deterministic blocking is opt-in
+  (default-on in v0.3), the fuzzy MONITOR tier is never default-block in v0.2.

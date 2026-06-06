@@ -68,6 +68,17 @@ def _diff_tools(baseline: list[ToolEntry], current: list[ToolEntry]) -> list[Dri
                 DriftItem("capability-removed", "medium", target, f"Tool '{name}' lost capability '{cap}'")
             )
 
+        # §11.4: a changed/added/removed inspection policy is medium-severity drift.
+        if b.inspection != c.inspection:
+            items.append(
+                DriftItem(
+                    "inspection-policy-modified",
+                    "medium",
+                    target,
+                    f"Tool '{name}' inspection policy changed (security-relevant relaxation/tightening)",
+                )
+            )
+
         # Description-only drift: only when schema + caps are unchanged (§6.2).
         if (
             b.description_hash != c.description_hash

@@ -141,7 +141,7 @@ This table is the contract. It is deliberately conservative. Each "does not" row
 | ID | Threat | Why v0.1 cannot defend (council finding) | Disposition |
 |----|--------|------------------------------------------|-------------|
 | **T-BEHAVE** | A clean-pinned tool exfiltrates data or takes hostile action *while fully honoring its declared schema* | **Architectural TOCTOU: definition ≠ behavior.** Hashing `(name, description, inputSchema)` gives **zero** behavioral guarantee. The declared surface and the runtime conduct are independent. | **Explicit v0.1 limitation.** Not a defended threat. Requires runtime mediation we do not build. |
-| **T-RESULT** | Tool **result** is poisoned to inject instructions into the agent (prompt injection via returned content) | v0.1 never inspects tool results — only definitions. This is the **dominant real-world MCP attack class.** | **OUT of scope. Named headline v0.2 gap.** Requires result inspection / a proxy. |
+| **T-RESULT** | Tool **result** is poisoned to inject instructions into the agent (prompt injection via returned content) | v0.1 never inspects tool results — only definitions. This is the **dominant real-world MCP attack class.** | **OUT of scope in v0.1. Named headline v0.2 gap → now ADDRESSED in v0.2** (deterministic block tier + fuzzy monitor tier, shadow-default). See `THREAT_MODEL_V2.md`, `RESULT_INSPECTION.md`, `GUARD_PROXY.md`. |
 | **T-SEMANTIC** | Semantic drift with an **identical hash** (e.g. description reworded to invert meaning while canonical bytes collide — or, more realistically, meaning changes that the operator considers benign-looking) | Hash equality is byte equality after canonicalization; it cannot reason about *meaning*. Any change that alters canonical bytes *is* caught; any change that does not is, by definition, invisible. | Accepted limitation. We do **not** add fuzzy/NLP description analysis (cut — see §6). |
 | **T-FINGERPRINT** | Adaptive server returns benign defs to the pinner (TS3) and hostile defs to the real client | mcp-warden is a *different client/session* than the production agent. A server that fingerprints clients can serve us a clean surface and the agent a dirty one. Per-client / per-session definition variance is real in MCP. | Accepted limitation. Partial mitigation: run `check` in the same environment as the agent where feasible. |
 | **T-TOCTOU-CALL** | Drift *between* `tools/list` and an actual `tools/call` in the same session | v0.1 verifies the *listed* surface; it does not sit between the agent and live calls. The set verified at list-time can differ from what is honored at call-time. | Accepted limitation. Runtime interception deferred. |
@@ -162,8 +162,10 @@ because of time, but because they are net-negative:
    deterministic, explainable static checks ship (see `CHECKS.md`).
 2. **Any claim of behavioral / runtime protection.** See T-BEHAVE, T-RESULT. Marketing or
    docs that imply mcp-warden stops a tool from "doing bad things" are a defect.
-3. **Tool-result inspection.** The real attack surface, deliberately deferred so v0.1
-   ships an honest, scoped guarantee rather than a leaky broad one.
+3. **Tool-result inspection.** The real attack surface, deliberately deferred *in v0.1* so
+   it ships an honest, scoped guarantee rather than a leaky broad one. **Delivered in v0.2**
+   (`THREAT_MODEL_V2.md`) as a deterministic block tier + a narrow fuzzy monitor tier,
+   shadow-default — the broad fuzzy injection cut (item 1) is **retained** there.
 
 ---
 
@@ -181,3 +183,7 @@ because of time, but because they are net-negative:
 - `WARDEN_LOCK_SCHEMA.md` — baseline format, canonicalization, hashing, drift definition.
 - `CHECKS.md` — the deterministic static-check catalog (IDs, rules, severities, SARIF).
 - `POLICY_MODEL.md` — argument-level policy shapes, constraints, lint + sample evaluation.
+- `THREAT_MODEL_V2.md` — **v0.2 addendum:** T-RESULT vectors, the defends/monitors/does-not
+  table, the runtime result-inspection scope (extends this doc; v0.1 here is unchanged).
+- `RESULT_INSPECTION.md` — **v0.2:** the `WRD-RES-*` result-inspection catalog.
+- `GUARD_PROXY.md` — **v0.2:** the `guard` proxy + `inspect` analyzer contract.

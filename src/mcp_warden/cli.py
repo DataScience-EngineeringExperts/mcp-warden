@@ -26,6 +26,7 @@ from rich.table import Table
 
 from .capture import CaptureError, capture_surface_sync
 from .checks import run_checks
+from .cli_guard import register as register_guard_commands
 from .drift import compute_drift
 from .emitters import build_sarif, findings_to_jsonl, sarif_to_json
 from .lockfile import (
@@ -50,6 +51,10 @@ app.add_typer(policy_app, name="policy")
 
 console = Console()
 err_console = Console(stderr=True)
+
+# v0.2 runtime commands (guard/inspect) live in cli_guard.py to keep this file
+# under the LOC budget; register them on the main app.
+register_guard_commands(app, console, err_console)
 
 
 def _split_server_cmd(server_cmd: list[str]) -> tuple[str, list[str]]:

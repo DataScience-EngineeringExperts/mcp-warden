@@ -76,12 +76,19 @@ class ServerIdentity(BaseModel):
 
 
 class ToolEntry(BaseModel):
-    """Hashed tool entry, sorted by name (WARDEN_LOCK_SCHEMA.md §5.1)."""
+    """Hashed tool entry, sorted by name (WARDEN_LOCK_SCHEMA.md §5.1, §11).
+
+    The optional ``inspection`` block (§11) is additive: when ``None`` it is
+    excluded from both the serialized lock and the canonicalized entry body, so
+    a tool with no inspection policy hashes BYTE-IDENTICALLY to a v0.1 entry
+    (existing locks need no re-pin — see §11.4).
+    """
 
     name: str
     description_hash: str
     input_schema_hash: str
     capabilities: list[str]
+    inspection: dict[str, Any] | None = None
     entry_digest: str
 
 

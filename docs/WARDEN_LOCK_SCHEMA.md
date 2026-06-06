@@ -1,9 +1,15 @@
-# mcp-warden — `warden.lock` Schema (v0.1)
+# mcp-warden — `warden.lock` Schema (v0.1 + v0.2 addendum §11)
 
-**Status:** v0.1 security contract. Implementation-ready.
+**Status:** v0.1 security contract + v0.2 per-tool inspection addendum (§11).
+Implementation-ready.
 **Purpose:** Define the on-disk baseline that `pin` writes and `check` verifies, the
 exact canonicalization + hashing so the two are bit-reproducible, and the precise
-definition of "drift."
+definition of "drift." **§11 (v0.2)** adds optional, deterministic per-tool inspection
+declarations consumed by `guard`/`inspect` (`RESULT_INSPECTION.md`, `GUARD_PROXY.md`).
+
+> **v0.1 is unchanged.** §1–§10 below are the v0.1 contract verbatim. §11 is a v0.2
+> **additive, optional** field block; absence preserves byte-identical v0.1 locks (see
+> §11.4 on digest impact).
 
 > Reproducibility is non-negotiable. If `pin` and `check` can produce different hashes
 > for the same server surface, the gate is worthless. Every algorithm below is fully
@@ -328,3 +334,117 @@ Rules:
 5. Sort: tools by `name`, resources by `uri`, prompts by `name` — *before* hashing.
 6. Absent `description`/null → hash `""`; absent `inputSchema`/null → hash `{}`.
 7. **Any** drift → non-zero exit. Severity affects reporting only.
+
+---
+
+## 11. Per-tool inspection policy (v0.2 addendum)
+
+**Consumed by:** `mcp-warden guard` / `mcp-warden inspect` (`GUARD_PROXY.md`,
+`RESULT_INSPECTION.md`). **Not used by** v0.1 `check` drift logic.
+
+These optional, fully **deterministic** declarations let a pinned tool make the
+result-inspection BLOCK-tier checks more precise and cut false positives. They are the
+*only* way to relax a deterministic result check, and they live in the committed,
+reviewed `warden.lock` — never set at runtime (see `THREAT_MODEL_V2.md` §4.3, T-LOCK).
+
+### 11.1 Field block (optional, per tool entry)
+
+A tool entry (§5.1) MAY carry an `inspection` object:
+
+```jsonc
+{
+  "name": "fetch_url",
+  "description_hash": "sha256:...",
+  "input_schema_hash": "sha256:...",
+  "capabilities": ["http-request"],
+  "inspection": {                              // §11 — OPTIONAL
+    "expected_output_charset": "text",         // "text" | "binary-ok" | "extended"
+    "may_return_urls": true,                   // bool
+    "secret_echo_applies": true                // bool
+  },
+  "entry_digest": "sha256:..."
+}
+```
+
+### 11.2 Field semantics + fail-safe defaults (when the object or a key is ABSENT)
+
+| Key | Type | Allowed values | Absent default (fail-safe) | Effect |
+|-----|------|----------------|----------------------------|--------|
+| `expected_output_charset` | string | `"text"`, `"extended"`, `"binary-ok"` | `"text"` | `WRD-RES-ANSI` allowed set. `"text"` = the strict allowlist (`RESULT_INSPECTION.md` §3.1). `"extended"` = also allow C1/`U+2028`/`U+2029` (still **not** ESC/C0). `"binary-ok"` = `WRD-RES-ANSI` is **disabled** for this tool (declare only for tools whose output is legitimately raw bytes). |
+| `may_return_urls` | bool | `true` / `false` | `false` | When `false`, `WRD-RES-URL` notes fire for any URL. When `true`, the `WRD-RES-URL` note is suppressed. **`WRD-RES-EXFIL-DOMAIN` always applies regardless** — a tool allowed to return URLs is still not allowed to return a *denylisted exfil* URL. |
+| `secret_echo_applies` | bool | `true` / `false` | `true` | When `true`, `WRD-RES-SECRET-ECHO` is BLOCK-tier for this tool. When `false`, it is **demoted to a MONITOR note** for this tool only (e.g. a credential-issuing tool whose job is to return a token to an authorized caller). |
+
+**Fail-safe principle:** absent ⇒ maximum protection. A tool only *weakens* a check by an
+explicit, reviewed lock declaration. There is no runtime override path.
+
+### 11.3 Validation (deterministic)
+
+- `expected_output_charset` MUST be one of the three literals; any other value is a
+  `pin`-time error (fail closed — the lock is not written). `guard`/`inspect` reading a lock
+  with an unknown value treat the tool as `"text"` (fail-safe) and emit a `low`
+  `WRD-RES-LOCK-INVALID` note.
+- `may_return_urls` / `secret_echo_applies` MUST be JSON booleans; non-bool is a `pin`-time
+  error.
+- An `inspection` object on a resource or prompt entry is ignored (these are not
+  `tools/call` results) and emits a `low` `WRD-RES-LOCK-INVALID` note.
+
+### 11.4 Digest impact (normative — preserves v0.1 reproducibility)
+
+- The `inspection` object **IS** part of the tool entry, therefore it **IS** included in
+  that tool's `entry_digest` (§5.3) and consequently in `overall_digest` (§6.1). Changing an
+  `inspection` value is therefore **drift** and is caught by `check` like any other entry
+  change — a relaxation cannot be slipped in without re-pin/re-approve. This is intentional:
+  relaxing a security check must be visible in the gate.
+- **Backward compatibility:** a tool entry with **no** `inspection` key hashes **exactly as
+  in v0.1** (the key is simply absent from the canonicalized object — `canon()` does not emit
+  absent keys). Existing v0.1 locks therefore produce **byte-identical** digests under a
+  v0.2 implementation. No re-pin is required to upgrade.
+- Drift classification: a changed/added/removed `inspection` value is reported as
+  **`Inspection-policy modified`**, severity **medium** (it is a security-relevant
+  relaxation/tightening but not a capability or schema change). It contributes to the
+  non-zero `check` exit like any drift.
+
+### 11.5 Worked example (illustrative)
+
+```jsonc
+"tools": [
+  {
+    "name": "issue_scoped_token",
+    "description_hash": "sha256:...",
+    "input_schema_hash": "sha256:...",
+    "capabilities": [],
+    "inspection": {
+      "expected_output_charset": "text",
+      "may_return_urls": false,
+      "secret_echo_applies": false        // returns a token by design → demote secret-echo to note
+    },
+    "entry_digest": "sha256:..."
+  },
+  {
+    "name": "screenshot_png",
+    "description_hash": "sha256:...",
+    "input_schema_hash": "sha256:...",
+    "capabilities": ["fs-read"],
+    "inspection": {
+      "expected_output_charset": "binary-ok",  // raw image bytes → WRD-RES-ANSI disabled
+      "may_return_urls": false,
+      "secret_echo_applies": true
+    },
+    "entry_digest": "sha256:..."
+  }
+]
+```
+
+### 11.6 §11 implementer must-not-deviate list
+
+1. `inspection` is **optional**; absent ⇒ fail-safe defaults (§11.2). Absence hashes
+   byte-identically to v0.1.
+2. `inspection` **is** part of `entry_digest` + `overall_digest`; a change is **drift**
+   (medium). Relaxations are never invisible to the gate.
+3. `expected_output_charset ∈ {"text","extended","binary-ok"}`; invalid → `pin` fails,
+   reader falls back to `"text"` (fail-safe) + `WRD-RES-LOCK-INVALID` note.
+4. `may_return_urls: true` suppresses **only** the `WRD-RES-URL` note; it never disables
+   `WRD-RES-EXFIL-DOMAIN`.
+5. `secret_echo_applies: false` demotes `WRD-RES-SECRET-ECHO` to a **note** for that tool
+   only — never globally.
+6. No runtime path sets these; they are lock-only, reviewed like any lock change (T-LOCK).

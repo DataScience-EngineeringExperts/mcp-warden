@@ -50,15 +50,60 @@ def _server_identity(surface: CapturedSurface) -> ServerIdentity:
     return ServerIdentity(command=surface.command, args=list(surface.args), command_digest=command_digest)
 
 
-def _tool_entry(tool: Any) -> ToolEntry:
-    """Build a hashed tool entry (§5.1/§5.3) from a captured tool."""
+#: The three valid expected_output_charset literals (WARDEN_LOCK_SCHEMA.md §11.2).
+_VALID_CHARSETS = ("text", "extended", "binary-ok")
+
+
+class LockValidationError(ValueError):
+    """Raised at pin time when a §11 inspection declaration is invalid (fail closed)."""
+
+
+def _validate_inspection(name: str, inspection: dict[str, Any] | None) -> None:
+    """Validate a §11 inspection block at pin time; raise on invalid (§11.3).
+
+    Args:
+        name: The tool name (for the error message).
+        inspection: The inspection object, or ``None``.
+
+    Raises:
+        LockValidationError: If a value violates §11.2 (fail closed — no lock
+            is written).
+    """
+    if inspection is None:
+        return
+    if not isinstance(inspection, dict):
+        raise LockValidationError(f"tool '{name}': inspection must be an object")
+    charset = inspection.get("expected_output_charset", "text")
+    if charset not in _VALID_CHARSETS:
+        raise LockValidationError(
+            f"tool '{name}': expected_output_charset must be one of {_VALID_CHARSETS}, got {charset!r}"
+        )
+    for key in ("may_return_urls", "secret_echo_applies"):
+        if key in inspection and not isinstance(inspection[key], bool):
+            raise LockValidationError(f"tool '{name}': {key} must be a JSON boolean")
+
+
+def _tool_entry(tool: Any, inspection: dict[str, Any] | None = None) -> ToolEntry:
+    """Build a hashed tool entry (§5.1/§5.3, §11) from a captured tool.
+
+    Args:
+        tool: A captured tool (``name``/``description``/``input_schema``).
+        inspection: Optional §11 inspection block. When ``None`` it is excluded
+            from the hashed body, so the digest is byte-identical to v0.1.
+
+    Returns:
+        The hashed :class:`ToolEntry`.
+    """
     schema = tool.input_schema if isinstance(tool.input_schema, dict) else None
-    body = {
+    body: dict[str, Any] = {
         "name": tool.name,
         "description_hash": hash_description(tool.description),
         "input_schema_hash": hash_input_schema(schema),
         "capabilities": derive_capabilities(tool.name, schema),
     }
+    if inspection is not None:
+        _validate_inspection(tool.name, inspection)
+        body["inspection"] = inspection
     entry_digest = hash_value(body)
     return ToolEntry(**body, entry_digest=entry_digest)
 
@@ -179,6 +224,12 @@ def lock_to_pretty_json(lock: WardenLock) -> str:
         The UTF-8 JSON text (ending in exactly one ``\\n``).
     """
     data = lock.model_dump(mode="json")
+    # §11.4: a tool with no inspection policy must serialize EXACTLY as in v0.1
+    # (the key is simply absent). Only drop the key when it is None — present
+    # inspection blocks are kept and are part of the digest.
+    for tool in data.get("tools", []):
+        if tool.get("inspection") is None:
+            tool.pop("inspection", None)
     text = json.dumps(data, indent=2, ensure_ascii=False, sort_keys=False)
     return text + "\n"
 

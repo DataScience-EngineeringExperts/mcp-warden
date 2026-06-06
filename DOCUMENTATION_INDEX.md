@@ -18,10 +18,13 @@ describe and visualize the implementation that satisfies that contract.
 
 | Doc | Defines |
 |-----|---------|
-| [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | Positioning, trust model (TOFU + `--approve`), assets/actors, the four threat classes (MCP-DRIFT / MCP-CAPSURF / MCP-SECRET / MCP-SUPPLY), explicit out-of-scope limits, deliberate cuts |
-| [`docs/WARDEN_LOCK_SCHEMA.md`](docs/WARDEN_LOCK_SCHEMA.md) | `warden.lock` format, RFC 8785 canonicalization + SHA-256 hashing, field/entry/overall digests, the normative drift definition + severities |
-| [`docs/CHECKS.md`](docs/CHECKS.md) | The deterministic `WRD-*` static-check catalog (capability/secret/supply/robustness), the shared tokenizer, severity→SARIF mapping, redaction rule, CUT list |
-| [`docs/POLICY_MODEL.md`](docs/POLICY_MODEL.md) | Policy schema, the four high-risk shapes, constraint vocabulary, fail-closed defaults, SSRF deny ranges, lint + single-sample eval semantics |
+| [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | **(v0.1)** Positioning, trust model (TOFU + `--approve`), assets/actors, the four threat classes (MCP-DRIFT / MCP-CAPSURF / MCP-SECRET / MCP-SUPPLY), explicit out-of-scope limits, deliberate cuts |
+| [`docs/THREAT_MODEL_V2.md`](docs/THREAT_MODEL_V2.md) | **(v0.2)** Addendum extending the v0.1 model: T-RESULT vectors, the defends (BLOCK) / monitors (fuzzy) / still-does-NOT-defend (T-BEHAVE) table, runtime trust-model notes, retained + added cuts, shadow-default positioning |
+| [`docs/WARDEN_LOCK_SCHEMA.md`](docs/WARDEN_LOCK_SCHEMA.md) | `warden.lock` format, RFC 8785 canonicalization + SHA-256 hashing, field/entry/overall digests, the normative drift definition + severities; **§11 (v0.2)** optional per-tool inspection policy (`expected_output_charset` / `may_return_urls` / `secret_echo_applies`, fail-safe defaults, digest impact) |
+| [`docs/CHECKS.md`](docs/CHECKS.md) | The deterministic `WRD-*` static-check catalog (capability/secret/supply/robustness), the shared tokenizer, severity→SARIF mapping, redaction rule, CUT list. **Reused by v0.2** `WRD-RES-SECRET-ECHO` (the `WRD-SEC-*` patterns + redaction) |
+| [`docs/POLICY_MODEL.md`](docs/POLICY_MODEL.md) | Policy schema, the four high-risk shapes, constraint vocabulary, fail-closed defaults, SSRF deny ranges, lint + single-sample eval semantics. **Enforced at runtime by v0.2 `guard`** on live `tools/call` requests |
+| [`docs/RESULT_INSPECTION.md`](docs/RESULT_INSPECTION.md) | **(v0.2)** The `WRD-RES-*` result-inspection catalog: deterministic/fuzzy tier partition, per-rule exact match definitions (ANSI allowlist, secret-echo via `WRD-SEC-*`, exfil seed denylist, injection seed phrase list), severities, SARIF mapping, redaction, fail-safe per-tool precision. Run identically by `guard` and `inspect` |
+| [`docs/GUARD_PROXY.md`](docs/GUARD_PROXY.md) | **(v0.2)** The `guard` transparent stdio proxy + `inspect` offline analyzer contract: frame-handling discipline, single-loop framing (Content-Length + newline), incremental scan, subprocess lifecycle, runtime arg-policy + `tools/list_changed` gate, shadow-default + `--block-*` flags + `--audit-only`, and the exact on-the-wire "block" behavior |
 
 ---
 
@@ -41,8 +44,17 @@ describe and visualize the implementation that satisfies that contract.
 | `src/mcp_warden/redact.py` | `first4 + "…" + (len=N)` secret redaction | CHECKS §8.2 |
 | `src/mcp_warden/emitters.py` | SARIF 2.1.0 + JSONL emitters (`ruleId` verbatim) | CHECKS §2 |
 | `src/mcp_warden/policy_model.py` | Policy load + lint + fail-closed schema | POLICY_MODEL §3, §4.1 |
-| `src/mcp_warden/policy_eval.py` | Single-sample eval (fs/shell/http-SSRF/sql) | POLICY_MODEL §2, §4.2, §5 |
-| `src/mcp_warden/cli.py` | `typer` CLI (`pin`/`check`/`policy`), exit codes | all |
+| `src/mcp_warden/policy_eval.py` | Single-sample eval + runtime arg eval (fs/shell/http-SSRF/sql) | POLICY_MODEL §2, §4.2, §5 |
+| `src/mcp_warden/result_inspection.py` | **(v0.2)** `WRD-RES-*` catalog public entry (`inspect_result`, `ResultFinding`, `InspectionPolicy`) — single source run by guard + inspect | RESULT_INSPECTION §1–§6, §8 |
+| `src/mcp_warden/res_catalog.py` | **(v0.2)** per-rule evaluators + content-block text extraction | RESULT_INSPECTION §1, §3–§5 |
+| `src/mcp_warden/res_rules.py` · `res_net.py` | **(v0.2)** deterministic primitives: ANSI codepoint scan + inject-phrase normalize (`res_rules`), exfil/URL host matching + seed denylists (`res_net`) | RESULT_INSPECTION §3.1, §3.3, §4.1, §5.1 |
+| `src/mcp_warden/guard.py` | **(v0.2)** proxy runner: subprocess lifecycle, own pgrp, signal forwarding, single-loop byte pumps | GUARD_PROXY §1, §2.3, §2.6 |
+| `src/mcp_warden/guard_loop.py` · `guard_result.py` | **(v0.2)** frame discipline: config/state + c2s arg-policy (`guard_loop`), s2c result inspection + on-wire block decision (`guard_result`) | GUARD_PROXY §2, §4, §7, §9 |
+| `src/mcp_warden/framing.py` | **(v0.2)** single-reader stdio framer (Content-Length + newline), original-bytes pass-through | GUARD_PROXY §2.4, §2.5 |
+| `src/mcp_warden/wire_block.py` | **(v0.2)** on-wire block synthesis: `-32001` error-response + redacted-content (`_meta.warden.modified`) | GUARD_PROXY §7 |
+| `src/mcp_warden/inspector.py` | **(v0.2)** offline JSONL analyzer over recorded sessions (same catalog) | GUARD_PROXY §3 |
+| `src/mcp_warden/emit_res.py` | **(v0.2)** SARIF 2.1.0 + JSONL emitters for `ResultFinding` (action/direction/tier) | GUARD_PROXY §10 |
+| `src/mcp_warden/cli.py` · `cli_guard.py` | `typer` CLI (`pin`/`check`/`policy`/`guard`/`inspect`), exit codes; `guard`/`inspect` bodies in `cli_guard` | all |
 
 ## Tests
 
@@ -56,4 +68,12 @@ describe and visualize the implementation that satisfies that contract.
 | `tests/test_policy.py` | Lint (incl. unknown-key error) + eval (allow/deny/SSRF/fail-closed) |
 | `tests/test_emitters.py` | SARIF shape + level mapping + JSONL records |
 | `tests/test_e2e_pin_check.py` | **Headline:** real stdio pin→mutate→check round-trip |
+| `tests/test_result_inspection.py` | **(v0.2)** `WRD-RES-*`: ANSI codepoint match (incl. extended/binary-ok), secret-echo reuse + redaction, exfil host/subdomain boundary + path-qualified, injection exact-phrase (no broad-regex FP), URL/uninspectable notes |
+| `tests/test_inspection_policy.py` | **(v0.2)** §11 per-tool policy fail-safe defaults, byte-identical-to-v0.1 digest when absent, inspection-policy drift, pin-time validation, reader fallback + LOCK-INVALID |
+| `tests/test_wire_block.py` | **(v0.2)** `-32001` error-response shape, block-mode mapping, ANSI strip-in-place `_meta.warden.modified`, secret redact-in-place |
+| `tests/test_framing.py` | **(v0.2)** newline + Content-Length framing, chunk-split reads, original-bytes pass-through, malformed-frame parse capture |
+| `tests/test_guard_posture.py` | **(v0.2)** fail-open (inspector exception/malformed → pass-through) vs fail-closed (policy deny → block), audit-only precedence |
+| `tests/test_guard_proxy.py` | **(v0.2) Headline:** real `tools/call` through `guard`: shadow detects-all/blocks-nothing, `--block-ansi`/`--block-exfil-domain` redact/error-replace, inject stays monitor, forced framing error survives |
+| `tests/test_inspect_parity.py` | **(v0.2)** guard↔inspect finding parity on the same recorded frames + inspect exit codes |
 | `tests/fixtures/clean_server.py` · `mutated_server.py` | Real MCP SDK stdio fixtures |
+| `tests/fixtures/poison_server.py` | **(v0.2)** result-poisoning fixture server (ANSI/secret-echo/exfil/inject/clean tools) |
