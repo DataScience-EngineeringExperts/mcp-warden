@@ -4,8 +4,9 @@ version = "0.3.0"
 description = "CI-first MCP supply-chain integrity gate: pin and verify the declared tool/resource/prompt surface of an MCP server, plus runtime tool-result inspection (guard/inspect)."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "Apache-2.0" }
-authors = [{ name = "Data Science & Engineering Experts, Inc." }]
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Ernest Provo", email = "ernest@thedataexperts.us" }]
 keywords = ["mcp", "supply-chain", "security", "ci", "integrity"]
 
 dependencies = [

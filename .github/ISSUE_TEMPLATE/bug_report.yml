@@ -1,0 +1,75 @@
+name: 🐛 Bug report
+description: Report a defect in mcp-warden (NOT a security vulnerability)
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ⚠️ **Do not report security vulnerabilities here.** If this is a way to
+        bypass a control mcp-warden claims to enforce (drift slips through, a real
+        secret is emitted unredacted, a poisoned result evades the block tier),
+        report it privately per [SECURITY.md](https://github.com/ernestprovo23/mcp-warden/blob/main/SECURITY.md).
+  - type: checkboxes
+    id: prechecks
+    attributes:
+      label: Pre-flight
+      options:
+        - label: This is a functional bug, not a security vulnerability.
+          required: true
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I can reproduce this on the latest release or `main`.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: mcp-warden version
+      description: Output of `mcp-warden --version`, or the commit SHA.
+      placeholder: "0.3.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: command
+    attributes:
+      label: Which command?
+      options:
+        - pin
+        - check
+        - policy
+        - guard
+        - inspect
+        - other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: >
+        Exact command(s) and flags, plus a minimal MCP server fixture, `warden.lock`,
+        policy file, or `trace.jsonl` that reproduces it. **Strip or fake any real
+        secrets first.**
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the full output / exit code. Redact anything sensitive.
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Python version, how you installed (uv / pip), and how you run tests.
+      placeholder: "macOS 14 / Python 3.11.8 / uv / .venv"
+    validations:
+      required: false

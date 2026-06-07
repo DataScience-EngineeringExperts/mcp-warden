@@ -1,0 +1,20 @@
+title = "mcp-warden gitleaks config"
+
+# Inherit the full upstream gitleaks ruleset — we only ADD allowlist scope below,
+# we never weaken real-secret detection.
+[extend]
+useDefault = true
+
+# mcp-warden is a secret-detection tool; its TEST SUITE intentionally embeds
+# synthetic, clearly-fake secret-shaped strings (a canonical jwt.io example JWT,
+# high-entropy random tokens, a sequential `sk-ABCDEFGHIJ...` placeholder, a fake
+# `ghp_` GitHub PAT shape) as detector test vectors for its own WRD-SEC /
+# WRD-RES-SECRET-ECHO rules. These are NOT real credentials. We allowlist the
+# `tests/` tree so scanners do not flag intentional test data. Detection across
+# everything else — notably all of `src/` — is fully unchanged. Verified clean:
+# a full-history scan with default rules found ONLY these synthetic test vectors.
+[allowlist]
+description = "Synthetic, intentionally-fake secret-shaped strings used as detector test vectors."
+paths = [
+    '''tests/.*''',
+]

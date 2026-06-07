@@ -1,0 +1,52 @@
+name: 💡 Feature / new check request
+description: Propose a feature, or a new WRD-* / WRD-RES-* detection rule
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        New checks are very welcome. mcp-warden blocks **only on deterministic
+        signals** (~0 false positives); heuristic/fuzzy detectors are accepted only
+        in the monitor (log-only) tier. Frame your proposal around a concrete threat.
+  - type: textarea
+    id: threat
+    attributes:
+      label: Threat / problem
+      description: What attack or failure does this address? Where does it appear (MCP surface, tool-result shape, CLI workflow)?
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What are you proposing?
+      options:
+        - New static check (WRD-* — pin/check time)
+        - New result-inspection rule (WRD-RES-* — guard/inspect time)
+        - CLI / workflow feature
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: tier
+    attributes:
+      label: For a new check — deterministic or fuzzy?
+      description: Deterministic = can block (near-zero false positives). Fuzzy = monitor/log-only.
+      options:
+        - Deterministic (block-capable)
+        - Fuzzy (monitor / log-only)
+        - N/A — not a check
+    validations:
+      required: false
+  - type: textarea
+    id: detection
+    attributes:
+      label: Proposed detection / behavior
+      description: How would it match deterministically? What severity? Any false-positive risk and how you'd anchor against it?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false

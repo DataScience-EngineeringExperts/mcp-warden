@@ -29,6 +29,20 @@ describe and visualize the implementation that satisfies that contract.
 
 ---
 
+## Community & contribution
+
+| Doc | Purpose |
+|-----|---------|
+| [`LICENSE`](LICENSE) | MIT license |
+| [`SECURITY.md`](SECURITY.md) | Private vulnerability-disclosure policy + supported versions (report via GitHub Security Advisories / email — never a public issue) |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Dev setup, the `.venv` test workflow, the determinism / byte-compatibility contract, how to propose a new check |
+| [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | Contributor Covenant 2.1 |
+| [`.github/ISSUE_TEMPLATE/`](.github/ISSUE_TEMPLATE/) | Bug report + feature/new-check request forms (security issues routed to `SECURITY.md`) |
+| [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) | PR checklist (tests green, specs in sync, determinism preserved, no secrets) |
+| [`.gitleaks.toml`](.gitleaks.toml) | Secret-scan config; CI runs gitleaks over full history on every push/PR |
+
+---
+
 ## Source layout
 
 | Module | Responsibility | Spec anchor |
