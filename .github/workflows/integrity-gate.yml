@@ -98,7 +98,7 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Upload drift SARIF artifact
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: mcp-warden-drift-sarif
           path: mutated-check.sarif
