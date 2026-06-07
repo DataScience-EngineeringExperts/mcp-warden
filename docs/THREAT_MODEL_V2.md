@@ -1,8 +1,15 @@
-# mcp-warden — Threat Model Addendum (v0.2)
+# mcp-warden — Threat Model Addendum (v0.2, posture updated in v0.3)
 
-**Status:** v0.2 security contract. Implementation-ready. **Extends — does not replace —**
-[`THREAT_MODEL.md`](THREAT_MODEL.md) (v0.1). Every v0.1 statement still holds; this doc adds
-the runtime result-inspection scope decided by the v0.2 adversarial council review.
+**Status:** v0.2 security contract, defaults updated in v0.3. Implementation-ready.
+**Extends — does not replace —** [`THREAT_MODEL.md`](THREAT_MODEL.md) (v0.1). Every v0.1
+statement still holds; this doc adds the runtime result-inspection scope decided by the v0.2
+adversarial council review, with the v0.3 default-posture change recorded in §3 (table headers)
+and §8 (the honest availability/UX-risk callout).
+
+> **v0.3 in one line.** The threats, vectors, and tier partition are **unchanged**. v0.3 flips
+> the **default** so the **deterministic** block tier (and the runtime gates) **block by
+> default** instead of shadow; the **fuzzy** monitor tier stays **opt-in**. §8 states the
+> availability/UX risk of default-blocking plainly and names the opt-out.
 
 > Read `THREAT_MODEL.md` first. The v0.1 trust model (TOFU + `--approve`), assets/actors,
 > the four definition-level threat classes, and the deliberate cuts are unchanged. This
@@ -11,10 +18,11 @@ the runtime result-inspection scope decided by the v0.2 adversarial council revi
 
 ---
 
-## 1. Positioning statement (v0.2)
+## 1. Positioning statement (v0.2 → v0.3)
 
-> **mcp-warden v0.2 adds runtime tool-result inspection. It ships shadow/detect-mode by
-> default. It is still NOT a full agent firewall.**
+> **mcp-warden v0.2 added runtime tool-result inspection (shadow-default). v0.3 promotes the
+> deterministic block tier to block-by-default; the fuzzy tier stays monitor-only / opt-in. It
+> is still NOT a full agent firewall.**
 
 v0.1 verified the **declared surface** (definitions). v0.2 adds a **transparent stdio
 proxy** (`guard`) and an **offline analyzer** (`inspect`) that inspect **tool-RESULT
@@ -22,15 +30,16 @@ content** — the dominant real-world MCP attack class that v0.1 named as the he
 
 What changes, honestly stated:
 
-- v0.2 **detects** (and, with explicit opt-in, **blocks**) a narrow set of **deterministic**
-  result violations: control/ANSI escapes, echoed known secrets, and configured exfil
-  domains.
-- v0.2 **monitors** (logs, never blocks by default) one **fuzzy** class: a narrow curated
-  exact-phrase prompt-injection denylist.
-- v0.2 ships **shadow-default**: it logs and emits findings but does not block, **except**
-  deterministic blocking available via explicit per-category opt-in (default-on in v0.3).
-- v0.2 still does **not** defend `T-BEHAVE` (a tool that does harm while honoring its schema
-  and returning clean-looking content), and does not correlate behavior across calls.
+- It **detects and blocks** a narrow set of **deterministic** result violations: control/ANSI
+  escapes, echoed known secrets, and configured exfil domains. **In v0.3 these block by
+  default** (council-established field FP ~0); v0.2 shipped them shadow + opt-in.
+- It **monitors** (logs, never blocks by default) one **fuzzy** class: a narrow curated
+  exact-phrase prompt-injection denylist. This stays **opt-in in v0.3** — no field FP data yet.
+- **Default posture:** v0.2 = shadow-default everywhere; **v0.3 = deterministic tier
+  default-block, fuzzy tier opt-in.** Every default-block category is opt-OUT-able and
+  `--audit-only` restores full shadow (§8, `GUARD_PROXY.md` §5).
+- It still does **not** defend `T-BEHAVE` (a tool that does harm while honoring its schema and
+  returning clean-looking content), and does not correlate behavior across calls.
 
 The credibility discipline from v0.1 stands: we make a **narrow, verifiable** claim and name
 the residual gaps plainly. Adding runtime inspection does not turn this into a behavioral
@@ -70,7 +79,7 @@ forbidden.
 
 This table is the v0.2 contract addition. It sits alongside `THREAT_MODEL.md` §5.
 
-### 3.1 Defends (BLOCK tier — deterministic; opt-in block, default-on in v0.3)
+### 3.1 Defends (BLOCK tier — deterministic; **block-by-default in v0.3**, opt-OUT per category)
 
 | ID | Threat (T-RESULT vector) | Control | Residual gap |
 |----|--------------------------|---------|--------------|
@@ -80,11 +89,11 @@ This table is the v0.2 contract addition. It sits alongside `THREAT_MODEL.md` §
 | DR4 | Mid-session tool-surface swap (runtime `MCP-DRIFT`) | `guard` `tools/list_changed` gate vs `warden.lock` (`--block-list-changed`) | Requires `--lock`; only catches a *list change*, not a silent per-call surface variance |
 | DR5 | Live dangerous-call argument (SSRF, shell, destructive SQL, path escape) | runtime enforcement of the v0.1 argument policy on live `tools/call` requests (`POLICY_MODEL.md`) | No DNS resolution at runtime (DNS-name hosts still note-only — v0.3) |
 
-### 3.2 Monitors (MONITOR tier — fuzzy; log-only by default, opt-in block, default-block deferred to v0.3)
+### 3.2 Monitors (MONITOR tier — fuzzy; log-only by default, **opt-in block only — NOT default-block in v0.3**)
 
 | ID | Threat (T-RESULT vector) | Control | Why monitor-only |
 |----|--------------------------|---------|------------------|
-| MR1 | Prompt-injection phrase in a result | `WRD-RES-INJECT-PHRASE`: narrow curated exact-phrase denylist, case-insensitive normalized substring | Inherently fuzzy: a phrase in a result is not reliably hostile (could be a legit doc about prompt injection). Blocking by default would train alert fatigue. Opt-in only; default-block deferred to v0.3. |
+| MR1 | Prompt-injection phrase in a result | `WRD-RES-INJECT-PHRASE`: narrow curated exact-phrase denylist, case-insensitive normalized substring | Inherently fuzzy: a phrase in a result is not reliably hostile (could be a legit doc about prompt injection). Blocking by default would train alert fatigue. **Opt-in only — v0.3 keeps it monitor-only** (no field FP data yet); not default-block. |
 
 ### 3.3 Still does NOT defend (out of scope in v0.2)
 
@@ -111,12 +120,18 @@ Everything on the server side of `guard`'s child pipe is **untrusted**, exactly 
 The client side (the agent/host that launched `guard`) is trusted to the same degree the
 host environment is.
 
-### 4.2 Shadow-default is a trust decision, not just a rollout convenience
+### 4.2 The default-posture decision (v0.2 shadow → v0.3 deterministic default-block)
 
-Shipping shadow-default means v0.2 **does not change session behavior** unless an operator
-opts into blocking. This bounds the new failure surface: a result-inspection bug in shadow
-mode can at worst mis-log; it cannot break a session. Blocking is the operator's explicit,
-auditable choice per category.
+v0.2 shipped **shadow-default**: it did not change session behavior unless an operator opted
+into blocking, which bounded the new failure surface (a result-inspection bug could at worst
+mis-log, not break a session). **v0.3 changes this for the deterministic tier only**, on the
+strength of the council's finding that its field false-positive rate is ~0 — so default-block
+trades a near-zero false-interruption risk for real default-on protection. The trust properties
+that make this acceptable: (a) only the **~0-FP deterministic** tier is default-on — the fuzzy
+tier, which has no FP data, is **not**; (b) every category is **opt-OUT-able** per §8 and
+`--audit-only` restores full shadow in one flag; (c) the **fail-open-on-framing-error** rule
+(`GUARD_PROXY.md` §9) is unchanged, so an *inspector defect* still cannot break a session — only
+a genuine *deterministic match* blocks. The honest availability/UX risk is stated in §8.
 
 ### 4.3 The §11 relax flags are attack surface on the lock
 
@@ -141,28 +156,99 @@ The v0.1 cuts (`THREAT_MODEL.md` §6) **all stand.** v0.2 adds these:
    territory; not built.
 4. **DNS resolution from the proxy.** No network from `guard`/`inspect`; exfil + SSRF match
    on literal host strings only (resolution-time SSRF is a v0.3 concern).
-5. **Default-blocking the MONITOR tier.** Deferred to v0.3. v0.2 ships shadow for fuzzy.
+5. **Default-blocking the MONITOR (fuzzy) tier.** **Still cut in v0.3.** No field
+   false-positive data exists for `WRD-RES-INJECT-PHRASE`, so it stays monitor-only / opt-in;
+   only the deterministic tier became default-block in v0.3.
 6. **HTTP/SSE transport.** stdio only (carried from v0.1).
 
 ---
 
-## 6. Honest one-line summary for downstream docs (v0.2)
+## 6. Honest one-line summary for downstream docs (v0.3)
 
-> "mcp-warden v0.2 adds a transparent stdio proxy (`guard`) and an offline analyzer
-> (`inspect`) that inspect tool *results* for control/ANSI escapes, echoed secrets, and
-> configured exfil domains (deterministic, blockable on opt-in) and monitor a narrow curated
-> prompt-injection phrase list (fuzzy, log-only). It ships shadow-default and fails open on
-> its own errors. It still does not defend behavioral attacks (`T-BEHAVE`) or novel
-> result vectors outside its deterministic lists, and is not a full agent firewall."
+> "mcp-warden's `guard` proxy and `inspect` analyzer inspect tool *results* for control/ANSI
+> escapes, echoed secrets, and configured exfil domains (deterministic — **block-by-default in
+> v0.3**, opt-OUT per category) and monitor a narrow curated prompt-injection phrase list
+> (fuzzy — **opt-in only, never default**). It fails open on its own framing/inspection errors
+> (an inspector defect can't break a session) and is reversible to shadow with `--audit-only`.
+> It still does not defend behavioral attacks (`T-BEHAVE`) or novel result vectors outside its
+> deterministic lists, and is not a full agent firewall."
 
 ---
 
-## 7. Related documents
+## 7. v0.3 proxy-hardening scope (cancellation/progress + lifecycle)
+
+v0.3 also specifies the proxy-hardening behavior v0.2 deferred — control-plane passthrough and
+subprocess-lifecycle edge cases — in [`GUARD_PROXY_V3.md`](GUARD_PROXY_V3.md). Its threat
+relevance:
+
+- **T-AVAIL (availability) is hardened, not weakened.** `notifications/cancelled` /
+  `notifications/progress` pass through untouched even mid-`tools/call` (never inspected,
+  blocked, buffered, or reordered), so a result block can never stall the client's ability to
+  cancel or observe progress. Server-crash, client-EOF, truncated-frame, and oversized-frame
+  cases each have a defined, non-hanging, orphan-free teardown; the oversized-frame case
+  **fails open** per the asymmetric-failure rule (`GUARD_PROXY.md` §9), so a huge frame still
+  cannot break a session or force a fail-closed block.
+- **No new trust surface.** These are framing/transport behaviors, not new inspection. They add
+  no decode parsers and resolve toward clean teardown, consistent with the v0.1/v0.2 "narrow,
+  verifiable" discipline.
+- **Windows is EXPLICITLY EXPERIMENTAL** (`GUARD_PROXY_V3.md` §3): no POSIX process groups, a
+  different signal model, no parity claim. The client-visible safety that is platform-agnostic
+  (pending-request error synthesis, fail-open framing) still holds; orphan-freedom is
+  best-effort and the degradation is logged, never hidden.
+
+---
+
+## 8. The v0.3 default-block posture change — honest availability/UX risk (normative)
+
+v0.3 is the **first mcp-warden release that actively blocks by default.** This section states
+the risk plainly, as the v0.1/v0.2 credibility discipline requires.
+
+**What changed.** The deterministic result tier (`WRD-RES-ANSI`, `WRD-RES-SECRET-ECHO`,
+`WRD-RES-EXFIL-DOMAIN`) and the runtime gates (`tools/list_changed` drift when `--lock` is
+supplied; argument-policy denials when `--policy` is supplied) now **block by default**. v0.2
+required an explicit `--block-*` opt-in; v0.3 does not.
+
+**The risk (stated honestly).**
+
+- **Availability / UX:** a default-block can interrupt a session that a shadow-mode build would
+  have left alone. A strip on `WRD-RES-ANSI`, an error-replacement on `WRD-RES-SECRET-ECHO` or
+  `WRD-RES-EXFIL-DOMAIN`, an error on an argument-policy deny, or a blocked rug-pulled
+  `tools/list` is now the **out-of-the-box** behavior, not an opt-in one. An operator who has
+  not reviewed which categories fire on their servers may see calls error or content get
+  redacted on first run.
+- **Bounded, not unbounded.** The exposure is bounded by three facts: (1) only the **~0-FP
+  deterministic** tier is default-on — the fuzzy `WRD-RES-INJECT-PHRASE`, the one rule with
+  genuine false-positive risk, is **NOT** default-block; (2) the **fail-open-on-framing-error**
+  rule is unchanged, so an inspector *defect* still cannot break a session — only a genuine
+  deterministic *match* blocks; (3) blocks are **well-formed JSON-RPC** (`GUARD_PROXY.md` §7),
+  so a blocked call surfaces as a normal error/redaction, never a hang or crash.
+
+**The opt-out (named precisely).**
+
+- **Per-category opt-OUT → `--no-block-<category>`** demotes that one category back to shadow
+  (still detects/logs/SARIF, forwards unmodified): `--no-block-ansi`, `--no-block-secret-echo`,
+  `--no-block-exfil-domain` (alias `--allow-exfil-domain`), `--no-block-list-changed`,
+  `--no-block-policy`.
+- **Whole-tier opt-OUT → `--no-block-deterministic`** shadows the entire deterministic tier +
+  both gates.
+- **Full shadow → `--audit-only`** (highest precedence) disables all blocking/mutation in one
+  flag, restoring exact v0.2 behavior for operators who want to observe before enforcing.
+
+The recommended rollout for a cautious operator is: run with `--audit-only` (or
+`--no-block-deterministic`) first, review the findings, then drop the opt-out to enforce. Full
+flag scheme + precedence: `GUARD_PROXY.md` §5 and `GUARD_PROXY_V3.md` §4.
+
+---
+
+## 9. Related documents
 
 - [`THREAT_MODEL.md`](THREAT_MODEL.md) — v0.1 base threat model (still authoritative).
-- [`RESULT_INSPECTION.md`](RESULT_INSPECTION.md) — the `WRD-RES-*` result-inspection catalog.
+- [`RESULT_INSPECTION.md`](RESULT_INSPECTION.md) — the `WRD-RES-*` result-inspection catalog
+  (catalog unchanged in v0.3; default posture updated).
 - [`GUARD_PROXY.md`](GUARD_PROXY.md) — the `guard` proxy + `inspect` analyzer contract,
-  including the exact on-the-wire "block" behavior.
+  including the exact on-the-wire "block" behavior and the v0.3 default posture (§5).
+- [`GUARD_PROXY_V3.md`](GUARD_PROXY_V3.md) — **v0.3:** proxy hardening (cancellation/progress
+  passthrough, lifecycle edge cases, Windows) + the full v0.3 block-flag scheme.
 - [`WARDEN_LOCK_SCHEMA.md`](WARDEN_LOCK_SCHEMA.md) §11 — per-tool inspection declarations.
 - [`CHECKS.md`](CHECKS.md) — reused `WRD-SEC-*` patterns + redaction rule.
 - [`POLICY_MODEL.md`](POLICY_MODEL.md) — the argument policy now enforced at runtime by `guard`.

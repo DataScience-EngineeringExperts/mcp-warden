@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "warden_version": "0.3.0",
+  "server": {
+    "command": "python",
+    "args": [
+      "tests/fixtures/listchange_server.py"
+    ],
+    "command_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "tools": [
+    {
+      "name": "read_file",
+      "description_hash": "sha256:66c8359ee4b07085ddc3ff6169eef8f15add705100f66c28ca384c0fff9963e1",
+      "input_schema_hash": "sha256:49430b90983ed64ed10b24073294a1559a487be5a32fe780b93f67c308184e13",
+      "capabilities": [
+        "fs-read"
+      ],
+      "entry_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+    }
+  ],
+  "resources": [],
+  "prompts": [],
+  "findings": [],
+  "overall_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "pin": {
+    "created_at": "2026-06-07T00:00:00Z",
+    "warden_version": "0.3.0",
+    "mcp_protocol_version": "2025-06-18",
+    "approved": true,
+    "approver": "ci-bot@example.invalid",
+    "approved_at": "2026-06-07T00:00:00Z",
+    "approved_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  }
+}

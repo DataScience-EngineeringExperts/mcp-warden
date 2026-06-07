@@ -183,7 +183,11 @@ because of time, but because they are net-negative:
 - `WARDEN_LOCK_SCHEMA.md` — baseline format, canonicalization, hashing, drift definition.
 - `CHECKS.md` — the deterministic static-check catalog (IDs, rules, severities, SARIF).
 - `POLICY_MODEL.md` — argument-level policy shapes, constraints, lint + sample evaluation.
-- `THREAT_MODEL_V2.md` — **v0.2 addendum:** T-RESULT vectors, the defends/monitors/does-not
-  table, the runtime result-inspection scope (extends this doc; v0.1 here is unchanged).
-- `RESULT_INSPECTION.md` — **v0.2:** the `WRD-RES-*` result-inspection catalog.
-- `GUARD_PROXY.md` — **v0.2:** the `guard` proxy + `inspect` analyzer contract.
+- `THREAT_MODEL_V2.md` — **v0.2 addendum (v0.3 posture):** T-RESULT vectors, the
+  defends/monitors/does-not table, the runtime result-inspection scope, and the v0.3
+  default-block posture change + honest availability/UX risk (extends this doc; v0.1 unchanged).
+- `RESULT_INSPECTION.md` — **v0.2:** the `WRD-RES-*` result-inspection catalog (v0.3: defaults
+  updated, catalog unchanged).
+- `GUARD_PROXY.md` — **v0.2/v0.3:** the `guard` proxy + `inspect` analyzer contract.
+- `GUARD_PROXY_V3.md` — **v0.3:** proxy hardening (cancellation/progress passthrough, subprocess
+  lifecycle, Windows) + the full v0.3 block-flag scheme.

@@ -7,13 +7,19 @@ when that surface drifts from an approved baseline.
 > mcp-warden is an **MCP supply-chain integrity gate, not a full agent firewall.**
 > v0.1 verifies that a server's *declared* surface has not changed since a human
 > approved it, and flags dangerous capability shapes and leaked secrets in that
-> surface. **v0.2 adds runtime tool-result inspection** (`guard` proxy + `inspect`
-> analyzer): it detects control/ANSI escapes, echoed secrets, and configured exfil
-> domains (deterministic, blockable on opt-in) and monitors a narrow curated
-> prompt-injection phrase list (fuzzy, log-only) — **shipping shadow-default**. It still
-> does **not** defend behavioral attacks (`T-BEHAVE`) or novel result vectors.
-> See [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) and
-> [`docs/THREAT_MODEL_V2.md`](docs/THREAT_MODEL_V2.md).
+> surface. **v0.2 added runtime tool-result inspection** (`guard` proxy + `inspect`
+> analyzer): control/ANSI escapes, echoed secrets, configured exfil domains
+> (deterministic) plus a curated prompt-injection phrase list (fuzzy, log-only).
+> **v0.3 is the first release that actively blocks by default**: the deterministic
+> tier (ANSI, secret-echo, exfil-domain, the `tools/list_changed` drift gate when
+> `--lock` is supplied, and argument-policy denials when `--policy` is supplied)
+> **blocks out of the box**, each individually opt-OUT-able via `--no-block-<category>`
+> (and `--audit-only` restores full shadow in one flag); the fuzzy injection tier
+> stays opt-in. v0.3 also hardens the proxy lifecycle (cancel/progress passthrough,
+> server-crash + client-disconnect teardown). It still does **not** defend behavioral
+> attacks (`T-BEHAVE`). See [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md),
+> [`docs/THREAT_MODEL_V2.md`](docs/THREAT_MODEL_V2.md), and
+> [`docs/GUARD_PROXY_V3.md`](docs/GUARD_PROXY_V3.md).
 
 ---
 
@@ -29,7 +35,7 @@ inputSchema)` metadata returned by `tools/list`, `resources/list`, and
 | **Dangerous capability surface** (`MCP-CAPSURF`) | Deterministic `WRD-CAP-*` static checks (shell/exec, fs-write, fs-read, http, sql) |
 | **Secret leakage in definitions** (`MCP-SECRET`) | `WRD-SEC-*` regex + entropy checks; snippets are always redacted |
 | **Unpinned supply-chain refs** (`MCP-SUPPLY`) | `WRD-SUP-*` flags unpinned `npx`/`uvx`/`pip`, `latest`, and `curl|sh` launches |
-| **Poisoned tool results** (`T-RESULT`, v0.2) | `guard`/`inspect` run the `WRD-RES-*` catalog on tool results: ANSI/control escapes, echoed secrets, exfil domains (deterministic BLOCK), curated injection phrases (fuzzy MONITOR) — shadow-default |
+| **Poisoned tool results** (`T-RESULT`, v0.2/v0.3) | `guard`/`inspect` run the `WRD-RES-*` catalog on tool results: ANSI/control escapes, echoed secrets, exfil domains (deterministic BLOCK — **default-on in v0.3**), curated injection phrases (fuzzy MONITOR, opt-in) |
 
 Reproducibility is the core guarantee: canonicalization is **RFC 8785 (JCS)** +
 **SHA-256** (`sha256:<hex>`), so `pin` and `check` agree byte-for-byte. The v0.2
@@ -148,34 +154,48 @@ reviews and approves the new surface.
 | `mcp-warden check <server-cmd...> [--lock F] [--sarif F] [--json]` | Re-capture + diff vs lock | **non-zero on drift**, 2 on error |
 | `mcp-warden policy lint <file> [--lock F]` | Lint a policy file (fail closed) | non-zero on lint error |
 | `mcp-warden policy eval <file> <sample.json> [--lock F]` | Evaluate one sample call | **non-zero on a deny verdict** (CI assertion) |
-| `mcp-warden guard <server-cmd...> [--lock F] [--policy F] [--block-* ...] [--audit-only] [--sarif F] [--record T]` | **(v0.2)** Transparent stdio proxy: inspects `tools/call` results + arguments at runtime. **Shadow-default** (logs, does not block unless a `--block-*` flag is set) | child's exit code; never breaks the session |
-| `mcp-warden inspect <trace.jsonl> [--lock F] [--sarif F]` | **(v0.2)** Offline analyzer over a recorded JSON-RPC session — same `WRD-RES-*` catalog as `guard` | non-zero on any BLOCK-tier finding; 2 on read error |
+| `mcp-warden guard <server-cmd...> [--lock F] [--policy F] [--no-block-* / --allow-exfil-domain] [--block-inject-phrase] [--audit-only] [--sarif F] [--record T]` | **(v0.3)** Transparent stdio proxy: inspects `tools/call` results + arguments at runtime. **Deterministic tier blocks by default**; opt out per-category with `--no-block-<category>` or fully with `--audit-only` | child's exit code; never breaks the session |
+| `mcp-warden inspect <trace.jsonl> [--lock F] [--sarif F]` | **(v0.2)** Offline analyzer over a recorded JSON-RPC session — same `WRD-RES-*` catalog as `guard` (always report-only) | non-zero on any BLOCK-tier finding; 2 on read error |
 
 `<server-cmd...>` is passed to the OS as an **argv array, never through a shell.**
 Set `WARDEN_LOG_LEVEL=INFO` for diagnostic logging.
 
-### Runtime result inspection (v0.2, shadow-default)
+### Runtime result inspection (v0.3 — blocks by default)
 
-`guard` sits transparently between an MCP client and server and inspects tool *results*:
+`guard` sits transparently between an MCP client and server and inspects tool *results*.
+**As of v0.3 the deterministic tier blocks out of the box** (council-established field
+false-positive rate ~0):
 
 ```bash
-# Shadow mode (default): detect + log, never block. Safe to roll out first.
-mcp-warden guard node ./build/index.js --lock warden.lock --sarif guard.sarif
+# Default: ANSI is stripped in place; echoed secrets + exfil domains are error-replaced;
+# a mid-session tools/list swap that diverges from warden.lock is blocked (needs --lock);
+# an argument-policy deny is blocked (needs --policy). The fuzzy injection tier stays log-only.
+mcp-warden guard node ./build/index.js --lock warden.lock --policy policy.yaml --sarif guard.sarif
 
-# Opt into deterministic blocking once you trust the findings:
-mcp-warden guard node ./build/index.js --lock warden.lock --block-deterministic
-#  blocks: ANSI/control escapes, echoed secrets, configured exfil domains, and
-#  a mid-session tools/list surface swap that diverges from warden.lock.
+# Observe-first rollout: --audit-only restores full v0.2 shadow in one flag (detect + log only).
+mcp-warden guard node ./build/index.js --lock warden.lock --audit-only
 
-# Re-analyze a recorded session offline with the identical rule catalog:
+# Opt a single category back to shadow (still detected/logged/SARIF, frame forwarded):
+mcp-warden guard node ./build/index.js --no-block-ansi --allow-exfil-domain
+# Or shadow the whole deterministic tier + both gates:
+mcp-warden guard node ./build/index.js --no-block-deterministic
+# Opt INTO the fuzzy injection tier (never default):
+mcp-warden guard node ./build/index.js --block-inject-phrase
+
+# Re-analyze a recorded session offline with the identical rule catalog (always report-only):
 mcp-warden inspect session.trace.jsonl --lock warden.lock --sarif inspect.sarif
 ```
 
-Result rules (`WRD-RES-*`): `WRD-RES-ANSI`, `WRD-RES-SECRET-ECHO`, `WRD-RES-EXFIL-DOMAIN`
-(deterministic BLOCK tier) and `WRD-RES-INJECT-PHRASE` (fuzzy MONITOR tier, log-only by
-default). `--audit-only` forces every detection to a warning. See
-[`docs/RESULT_INSPECTION.md`](docs/RESULT_INSPECTION.md) and
-[`docs/GUARD_PROXY.md`](docs/GUARD_PROXY.md).
+**Flag scheme:** opt-out is canonical `--no-block-<category>`
+(`ansi|secret-echo|exfil-domain|list-changed|policy`, plus `--no-block-deterministic` for the
+whole tier); `--allow-exfil-domain` is the sole affirmative alias. Precedence:
+`--audit-only` > `--no-block-*` > default-block / `--block-inject-phrase`. The v0.2
+`--block-*` enable flags are accepted but **inert no-ops** (one-line stderr deprecation note),
+so old scripts keep working. Reserved error codes: **`-32001`** (policy/result block),
+**`-32002`** (transport/lifecycle). See
+[`docs/RESULT_INSPECTION.md`](docs/RESULT_INSPECTION.md),
+[`docs/GUARD_PROXY.md`](docs/GUARD_PROXY.md), and
+[`docs/GUARD_PROXY_V3.md`](docs/GUARD_PROXY_V3.md).
 
 ---
 
@@ -196,9 +216,10 @@ empty `allow_paths` = deny-all. See [`docs/POLICY_MODEL.md`](docs/POLICY_MODEL.m
 
 ## Documentation
 
-See [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md). The four security-contract
-specs under `docs/` are the source of truth for every algorithm; the schemas in
-`warden.lock` and the SARIF output match them byte-for-byte.
+See [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md). The security-contract specs
+under `docs/` (including [`GUARD_PROXY_V3.md`](docs/GUARD_PROXY_V3.md) for the v0.3
+default-block + lifecycle contract) are the source of truth for every algorithm; the
+schemas in `warden.lock` and the SARIF output match them byte-for-byte.
 
 ## Tests
 

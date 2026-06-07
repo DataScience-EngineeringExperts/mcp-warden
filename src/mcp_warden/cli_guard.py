@@ -44,20 +44,50 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             raise typer.Exit(code=2)
         return server_cmd[0], list(server_cmd[1:])
 
+    def _warn_deprecated(err: Console, **flags: bool) -> None:
+        """Emit a one-line stderr deprecation note for each supplied v0.2 --block-* no-op.
+
+        In v0.3 the deterministic tier blocks by default, so the v0.2 enable flags
+        are inert (GUARD_PROXY_V3.md §4.5). They are accepted (old scripts keep
+        working) but each prints a single deprecation line and changes nothing.
+        """
+        _names = {
+            "block_ansi": "--block-ansi",
+            "block_secret_echo": "--block-secret-echo",
+            "block_exfil_domain": "--block-exfil-domain",
+            "block_list_changed": "--block-list-changed",
+            "block_policy": "--block-policy",
+            "block_deterministic": "--block-deterministic",
+        }
+        for key, supplied in flags.items():
+            if supplied:
+                err.print(
+                    f"[yellow]deprecated:[/yellow] {_names[key]} is a no-op in v0.3 "
+                    f"(its category blocks by default); see GUARD_PROXY_V3.md §4.5",
+                    highlight=False,
+                )
+
     @app.command()
     def guard(
         server_cmd: list[str] = typer.Argument(..., help="MCP server launch argv (e.g. node ./server.js)"),
-        lock: Optional[Path] = typer.Option(None, "--lock", help="Per-tool precision + tools/list_changed gate"),
-        policy_file: Optional[Path] = typer.Option(None, "--policy", help="Runtime argument policy (POLICY_MODEL.md)"),
+        lock: Optional[Path] = typer.Option(None, "--lock", help="Arms per-tool precision + tools/list_changed gate"),
+        policy_file: Optional[Path] = typer.Option(None, "--policy", help="Arms runtime argument policy (POLICY_MODEL.md)"),
         exfil_denylist: Optional[Path] = typer.Option(None, "--exfil-denylist", help="Org never-callback domains (merged)"),
         inject_phrases: Optional[Path] = typer.Option(None, "--inject-phrases", help="Org exact injection phrases (merged)"),
-        block_ansi: bool = typer.Option(False, "--block-ansi", help="Block WRD-RES-ANSI (redact in place)"),
-        block_secret_echo: bool = typer.Option(False, "--block-secret-echo", help="Block WRD-RES-SECRET-ECHO"),
-        block_exfil_domain: bool = typer.Option(False, "--block-exfil-domain", help="Block WRD-RES-EXFIL-DOMAIN"),
-        block_list_changed: bool = typer.Option(False, "--block-list-changed", help="Block divergent tools/list (needs --lock)"),
-        block_policy: bool = typer.Option(False, "--block-policy", help="Block argument-policy deny verdicts"),
-        block_inject_phrase: bool = typer.Option(False, "--block-inject-phrase", help="Block WRD-RES-INJECT-PHRASE (opt-in)"),
-        block_deterministic: bool = typer.Option(False, "--block-deterministic", help="Shorthand: ansi+secret-echo+exfil+list-changed"),
+        no_block_ansi: bool = typer.Option(False, "--no-block-ansi", help="Demote WRD-RES-ANSI to shadow"),
+        no_block_secret_echo: bool = typer.Option(False, "--no-block-secret-echo", help="Demote WRD-RES-SECRET-ECHO to shadow"),
+        no_block_exfil_domain: bool = typer.Option(False, "--no-block-exfil-domain", help="Demote WRD-RES-EXFIL-DOMAIN to shadow"),
+        allow_exfil_domain: bool = typer.Option(False, "--allow-exfil-domain", help="Alias of --no-block-exfil-domain"),
+        no_block_list_changed: bool = typer.Option(False, "--no-block-list-changed", help="Demote tools/list_changed gate to shadow"),
+        no_block_policy: bool = typer.Option(False, "--no-block-policy", help="Demote argument-policy deny to shadow"),
+        no_block_deterministic: bool = typer.Option(False, "--no-block-deterministic", help="Demote the WHOLE deterministic tier + both gates"),
+        block_inject_phrase: bool = typer.Option(False, "--block-inject-phrase", help="Opt-in block for WRD-RES-INJECT-PHRASE (fuzzy)"),
+        block_ansi: bool = typer.Option(False, "--block-ansi", help="DEPRECATED no-op (now default-on)", hidden=True),
+        block_secret_echo: bool = typer.Option(False, "--block-secret-echo", help="DEPRECATED no-op", hidden=True),
+        block_exfil_domain: bool = typer.Option(False, "--block-exfil-domain", help="DEPRECATED no-op", hidden=True),
+        block_list_changed: bool = typer.Option(False, "--block-list-changed", help="DEPRECATED no-op", hidden=True),
+        block_policy: bool = typer.Option(False, "--block-policy", help="DEPRECATED no-op", hidden=True),
+        block_deterministic: bool = typer.Option(False, "--block-deterministic", help="DEPRECATED no-op", hidden=True),
         redact_secret_echo: bool = typer.Option(False, "--redact-secret-echo", help="Redact secret echoes in place vs error-replace"),
         audit_only: bool = typer.Option(False, "--audit-only", help="Force warnings; disable ALL blocking (highest precedence)"),
         sarif: Optional[Path] = typer.Option(None, "--sarif", help="Write a SARIF report on shutdown"),
@@ -66,15 +96,28 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         max_frame_bytes: int = typer.Option(8 * 1024 * 1024, "--max-frame-bytes", help="Per-frame memory cap"),
         max_inflight: int = typer.Option(1024, "--max-inflight", help="Request-correlation map bound"),
     ) -> None:
-        """Run the transparent stdio guard proxy (shadow-default; opt-in blocking)."""
+        """Run the transparent stdio guard proxy (v0.3: deterministic tier blocks by default)."""
         command, args = _split(server_cmd)
-        cfg = GuardConfig(
-            block_ansi=block_ansi or block_deterministic,
-            block_secret_echo=block_secret_echo or block_deterministic,
-            block_exfil_domain=block_exfil_domain or block_deterministic,
-            block_list_changed=block_list_changed or block_deterministic,
+        _warn_deprecated(
+            err_console,
+            block_ansi=block_ansi,
+            block_secret_echo=block_secret_echo,
+            block_exfil_domain=block_exfil_domain,
+            block_list_changed=block_list_changed,
             block_policy=block_policy,
+            block_deterministic=block_deterministic,
+        )
+        # --no-block-deterministic demotes the whole tier + both gates (§4.2);
+        # --allow-exfil-domain is the sole affirmative alias of --no-block-exfil-domain.
+        cfg = GuardConfig(
+            no_block_ansi=no_block_ansi or no_block_deterministic,
+            no_block_secret_echo=no_block_secret_echo or no_block_deterministic,
+            no_block_exfil_domain=no_block_exfil_domain or allow_exfil_domain or no_block_deterministic,
+            no_block_list_changed=no_block_list_changed or no_block_deterministic,
+            no_block_policy=no_block_policy or no_block_deterministic,
             block_inject_phrase=block_inject_phrase,
+            armed_list_changed=lock is not None,
+            armed_policy=policy_file is not None,
             redact_secret_echo=redact_secret_echo,
             audit_only=audit_only,
             max_frame_bytes=max_frame_bytes,

@@ -48,17 +48,30 @@ def handle_s2c(state, frame: Frame, mode: str) -> bytes:
     Returns:
         The bytes to forward client-ward.
     """
+    from .guard_loop import PASSTHROUGH_METHODS
+
     if state.record is not None and frame.json is not None:
         state.record("s2c", frame.json)
     obj = frame.json
     if obj is None:
         state.emit(_frame_error_note("s2c", None, frame.parse_error or "unparseable frame"))
         return frame.raw
+    s2c_method = obj.get("method")
+    if s2c_method in PASSTHROUGH_METHODS:
+        # Cancellation/progress pass through untouched, even mid-tools/call (V3 §1).
+        return frame.raw
+    if s2c_method == "notifications/tools/list_changed":
+        # Arm a re-check of the NEXT tools/list response (§4.3); forward the
+        # notification itself unmodified.
+        state.list_changed_pending = True
+        return frame.raw
     rpc_id = obj.get("id")
     if rpc_id is None or "result" not in obj:
         return frame.raw  # notifications, errors, requests -> pass-through
     method = state.method_for(rpc_id)
     tool = state.tool_for(rpc_id)
+    if method == "tools/list":
+        return _handle_list_response(state, frame, mode, rpc_id, obj)
     if method != "tools/call":
         return frame.raw  # only inspect tools/call results (§4.4)
 
@@ -76,6 +89,52 @@ def handle_s2c(state, frame: Frame, mode: str) -> bytes:
         state.emit(_frame_error_note("s2c", rpc_id, f"inspect error: {exc}"))
         return frame.raw
     return _apply_result_findings(state, frame, mode, rpc_id, tool, result, findings, pol)
+
+
+def _handle_list_response(state, frame: Frame, mode: str, rpc_id: Any, obj: dict[str, Any]) -> bytes:
+    """Gate a ``tools/list`` response against the lock when armed (§4.3, §7.3).
+
+    Only runs the drift check when a prior ``notifications/tools/list_changed``
+    armed it AND a lock is loaded. A divergence blocks by default (error-replace)
+    unless ``--no-block-list-changed`` demotes it to shadow. Any error fails open.
+    """
+    if not state.list_changed_pending or state.lock is None:
+        return frame.raw  # not armed (no list_changed seen) -> pass-through
+    state.list_changed_pending = False  # consume the arming
+    result = obj.get("result")
+    if not isinstance(result, dict):
+        return frame.raw
+    try:
+        from .guard_list_gate import diverges_from_lock
+
+        diverged, reason = diverges_from_lock(result, state.lock)
+    except Exception as exc:  # gate error -> fail-open pass-through (§9)
+        state.emit(_frame_error_note("s2c", rpc_id, f"list-gate error: {exc}"))
+        return frame.raw
+    if not diverged:
+        return frame.raw
+    enabled = state.config.list_changed_enabled()
+    _stamp_list_finding(state, rpc_id, reason, "blocked" if enabled else "shadowed")
+    if not enabled:
+        return frame.raw  # shadow: log the drift, forward the rug-pulled list
+    err = wire_block.error_response(rpc_id, stage="list_changed", rule="MCP-DRIFT", tool="", reason=reason)
+    return serialize_frame(err, mode)
+
+
+def _stamp_list_finding(state, rpc_id: Any, reason: str, action: str) -> None:
+    """Emit a BLOCK-tier finding for a tools/list_changed divergence."""
+    state.emit(
+        ResultFinding(
+            rule_id="MCP-DRIFT",
+            severity="high",
+            tier=TIER_BLOCK,
+            message=reason,
+            action=action,
+            direction="s2c",
+            rpc_id=rpc_id,
+            tool="",
+        )
+    )
 
 
 def _tool_name_from_result(obj: dict[str, Any]) -> str:

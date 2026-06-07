@@ -28,11 +28,42 @@ from .result_inspection import InspectionPolicy, ResultFinding
 
 logger = logging.getLogger("mcp_warden.wire_block")
 
-#: mcp-warden reserved JSON-RPC error code (§7.4).
+#: mcp-warden reserved JSON-RPC error code for policy/result blocks (§7.4).
 WARDEN_ERROR_CODE = -32001
+#: mcp-warden reserved JSON-RPC error code for transport/lifecycle synthetic
+#: errors — server-exit, truncation-at-EOF teardown (GUARD_PROXY_V3.md §2.6).
+WARDEN_TRANSPORT_ERROR_CODE = -32002
 
 MODE_ERROR = "error"
 MODE_REDACT = "redact"
+
+
+def transport_error(rpc_id: Any, *, reason: str, stage: str = "lifecycle", message: str | None = None) -> dict[str, Any]:
+    """Build a warden transport/lifecycle error response (GUARD_PROXY_V3.md §2.1/§2.6).
+
+    Used to resolve a client's pending promise when the child server exits or a
+    frame is truncated/abandoned mid-call, so the client never hangs. Distinct
+    from :func:`error_response` (``-32001`` policy/result block) by the reserved
+    ``-32002`` code; both carry ``data.warden: true``.
+
+    Args:
+        rpc_id: The id of the pending/abandoned request.
+        reason: A secret-free, redacted explanation (e.g. child-exit summary).
+        stage: The lifecycle stage (default ``"lifecycle"``).
+        message: Optional top-level message; a default is used when ``None``.
+
+    Returns:
+        A complete JSON-RPC error object with code ``-32002``.
+    """
+    return {
+        "jsonrpc": "2.0",
+        "id": rpc_id,
+        "error": {
+            "code": WARDEN_TRANSPORT_ERROR_CODE,
+            "message": message or "mcp-warden: server exited before responding",
+            "data": {"warden": True, "stage": stage, "reason": reason},
+        },
+    }
 
 
 def block_mode_for(rule_id: str, *, redact_secret_echo: bool) -> str:

@@ -3,10 +3,12 @@
 Where mcp-warden sits, what it talks to, and where its outputs go. The **v0.1** path
 (`pin`/`check`/`policy`) is a **read-only, definition-only** gate: it spawns the target
 MCP server over stdio, captures the *declared* surface, and writes a baseline + machine
-reports — no proxy, no runtime interception. The **v0.2** path adds a transparent stdio
+reports — no proxy, no runtime interception. The **v0.2** path added a transparent stdio
 **proxy** (`guard`) and an **offline analyzer** (`inspect`) that inspect tool *results*
-at runtime; see C3 below. `guard` ships **shadow-default** (detect + log, no blocking
-unless explicitly opted in).
+at runtime; see C3 below. **v0.3** promotes the deterministic tier to **block by default**
+(opt-OUT per category via `--no-block-<category>`; `--audit-only` restores full shadow) and
+hardens the proxy lifecycle (cancel/progress passthrough, server-crash + client-disconnect
+teardown, reserved transport code `-32002`); see `docs/GUARD_PROXY_V3.md`.
 
 > `conclave` (the 4-model adversarial council referenced in `docs/THREAT_MODEL.md`)
 > is a **dev-time design reviewer** that shaped this contract. It is **NOT** a
@@ -94,7 +96,7 @@ sequenceDiagram
 flowchart LR
     subgraph live["Live session (v0.2 guard)"]
         client["MCP client\n(agent / host)"]
-        guard["mcp-warden guard\n(transparent stdio proxy)\nshadow-default"]
+        guard["mcp-warden guard\n(transparent stdio proxy)\nv0.3: deterministic tier\nblocks by default"]
         server2["Target MCP server\n(child, argv array,\nNEVER via a shell)"]
         client <-- "c2s frames" --> guard
         guard <-- "s2c frames" --> server2
@@ -124,10 +126,15 @@ flowchart LR
   (+ the `tools/list_changed` gate vs the lock). `initialize`/capabilities are never
   rewritten; enforcement begins only at the first `tools/call` (`GUARD_PROXY.md` §2).
 - A framing/inspection **error fails open** — the frame passes through and the session is
-  never killed (`GUARD_PROXY.md` §9).
-- "Block" on the wire is a **well-formed JSON-RPC frame**: an error response for blocked
-  requests/exfil/secret-echo results, or a redacted-content result for ANSI stripping
+  never killed (`GUARD_PROXY.md` §9). Oversized frames (> `--max-frame-bytes`) and truncated
+  frames at EOF also fail open (`GUARD_PROXY_V3.md` §2.3–§2.4).
+- "Block" on the wire is a **well-formed JSON-RPC frame**: an error response (`-32001`) for
+  blocked requests/exfil/secret-echo results, or a redacted-content result for ANSI stripping
   (`GUARD_PROXY.md` §7).
+- **v0.3 lifecycle:** `notifications/cancelled` + `notifications/progress` pass through
+  untouched even mid-`tools/call`; a server crash mid-call synthesizes a `-32002` transport
+  error for every pending id (client never hangs); a client disconnect reaps the child via its
+  process group (no orphan) (`GUARD_PROXY_V3.md` §1–§2).
 
 ---
 
@@ -151,6 +158,9 @@ flowchart LR
   `WRD-RES-UNINSPECTABLE`).
 - No network calls / no DNS resolution by checks, policy, or the proxy — exfil + SSRF
   match on literal host strings only.
-- stdio transport only (HTTP/SSE deferred for both v0.1 and v0.2).
-- No default-blocking in v0.2 — shadow-default; deterministic blocking is opt-in
-  (default-on in v0.3), the fuzzy MONITOR tier is never default-block in v0.2.
+- stdio transport only (HTTP/SSE deferred for all of v0.1/v0.2/v0.3).
+- The fuzzy `WRD-RES-INJECT-PHRASE` MONITOR tier is **never default-block**, even in v0.3
+  (opt-in only via `--block-inject-phrase`).
+- Windows lifecycle guarantees are **experimental** in v0.3 — job-object best-effort teardown,
+  no orphan-freedom claim (the `-32002` pending-id synthesis still runs); see
+  `docs/GUARD_PROXY_V3.md` §3.

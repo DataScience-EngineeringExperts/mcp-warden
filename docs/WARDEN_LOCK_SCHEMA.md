@@ -340,10 +340,13 @@ Rules:
 ## 11. Per-tool inspection policy (v0.2 addendum)
 
 **Consumed by:** `mcp-warden guard` / `mcp-warden inspect` (`GUARD_PROXY.md`,
-`RESULT_INSPECTION.md`). **Not used by** v0.1 `check` drift logic.
+`RESULT_INSPECTION.md`; v0.3 default posture in `GUARD_PROXY.md` §5 / `GUARD_PROXY_V3.md` §4).
+**Not used by** v0.1 `check` drift logic.
 
 These optional, fully **deterministic** declarations let a pinned tool make the
-result-inspection BLOCK-tier checks more precise and cut false positives. They are the
+result-inspection BLOCK-tier checks more precise and cut false positives. **In v0.3 the BLOCK
+tier is default-on**, so these per-tool relaxations directly affect what blocks out of the box —
+making them, more than ever, security-relevant lock edits that MUST be reviewed (T-LOCK). They are the
 *only* way to relax a deterministic result check, and they live in the committed,
 reviewed `warden.lock` — never set at runtime (see `THREAT_MODEL_V2.md` §4.3, T-LOCK).
 

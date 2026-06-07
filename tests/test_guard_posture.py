@@ -32,7 +32,9 @@ def _state(config: GuardConfig, **kw) -> tuple[GuardState, list]:
 
 
 def test_inspector_exception_fails_open_passthrough(monkeypatch):
-    state, sink = _state(GuardConfig(block_ansi=True, block_exfil_domain=True))
+    # v0.3: ansi/exfil block by default (no flags); an inspector exception must
+    # still fail OPEN (pass through), proving fail-open beats default-block.
+    state, sink = _state(GuardConfig())
     state.remember_request(2, "tools/call", "ansi_tool")
 
     def _boom(*a, **k):
@@ -58,13 +60,14 @@ def test_malformed_frame_fails_open_passthrough():
     assert any(f.rule_id == "WRD-RES-FRAME-ERROR" for f in sink)
 
 
-# --- fail-CLOSED: a policy deny blocks when --block-policy is set -------------
+# --- fail-CLOSED: a policy deny blocks by default when --policy is supplied ----
 
 
 def test_policy_deny_fails_closed_blocks_request():
     # deny_private SSRF default denies link-local; http_request shape via url arg.
+    # v0.3: a deny blocks by default once the policy is armed (armed_policy=True).
     policy = Policy(version=1, defaults={"http_request": {"deny_private": True}})
-    state, sink = _state(GuardConfig(block_policy=True), policy=policy)
+    state, sink = _state(GuardConfig(armed_policy=True), policy=policy)
 
     req = {
         "jsonrpc": "2.0",
@@ -83,9 +86,10 @@ def test_policy_deny_fails_closed_blocks_request():
     assert any(f.action == "blocked" for f in sink)
 
 
-def test_policy_deny_shadow_passes_through_without_block_flag():
+def test_policy_deny_shadow_passes_through_with_no_block_policy():
+    # v0.3: --no-block-policy demotes a deny to shadow (armed but opted out).
     policy = Policy(version=1, defaults={"http_request": {"deny_private": True}})
-    state, sink = _state(GuardConfig(block_policy=False), policy=policy)
+    state, sink = _state(GuardConfig(armed_policy=True, no_block_policy=True), policy=policy)
     req = {
         "jsonrpc": "2.0",
         "id": 9,
@@ -98,11 +102,13 @@ def test_policy_deny_shadow_passes_through_without_block_flag():
     assert any(f.action == "shadowed" for f in sink)
 
 
-# --- audit-only precedence: disables blocking even with --block-* ------------
+# --- audit-only precedence: disables blocking even over default-on ------------
 
 
 def test_audit_only_disables_blocking():
-    cfg = GuardConfig(block_ansi=True, block_exfil_domain=True, audit_only=True)
+    # v0.3: ansi/exfil block by default; audit-only (highest precedence) still
+    # disables all blocking/mutation.
+    cfg = GuardConfig(audit_only=True)
     assert cfg.category_enabled("WRD-RES-ANSI") is False
     assert cfg.category_enabled("WRD-RES-EXFIL-DOMAIN") is False
 

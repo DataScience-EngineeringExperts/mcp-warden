@@ -1,9 +1,17 @@
-# mcp-warden — Result Inspection Catalog (v0.2)
+# mcp-warden — Result Inspection Catalog (v0.2, posture updated in v0.3)
 
-**Status:** v0.2 security contract. Implementation-ready.
+**Status:** v0.2 security contract, catalog unchanged in v0.3. Implementation-ready.
 **Principle:** Every rule is **deterministic and explainable** OR **explicitly fuzzy and
 monitor-only.** There is no third category. Each rule is partitioned into exactly one of
 two tiers and that tier governs whether it MAY ever block.
+
+> **v0.3 posture change (the catalog itself is unchanged).** The tier partition, the rules,
+> their match definitions, and their severities are **identical** to v0.2. What changed in
+> v0.3 is the **default**: the **BLOCK (deterministic) tier now blocks by default**
+> (`GUARD_PROXY.md` §5, `GUARD_PROXY_V3.md` §4), where v0.2 shipped shadow-default. The
+> **MONITOR (fuzzy) tier — `WRD-RES-INJECT-PHRASE` — stays monitor-only / opt-in** (no field
+> false-positive data exists for it yet). Every "deferred to v0.3" note below now resolves to:
+> *deterministic = default-block; fuzzy = still opt-in, NOT default-block.*
 
 > **Single catalog, two runners.** The rules below are defined **once** and applied by
 > **both** entrypoints identically:
@@ -55,8 +63,8 @@ This partition is normative and MUST NOT be blurred. A rule lives in exactly one
 
 | Tier | Property | May block? |
 |------|----------|------------|
-| **BLOCK (deterministic)** | ~0 false positives. The match is a byte/codepoint fact or a known-pattern fact, not an inference about intent. | **Yes**, when the operator enables blocking for its category (default **shadow** — see §5). |
-| **MONITOR (fuzzy)** | Inherently high false-positive. The match is an inference ("this *looks like* an instruction"). | **Never blocks by default.** Opt-in block only; default-block is **deferred to v0.3**. |
+| **BLOCK (deterministic)** | ~0 false positives. The match is a byte/codepoint fact or a known-pattern fact, not an inference about intent. | **Yes — blocks by DEFAULT in v0.3** (council-established field FP ~0); opt-OUT per category via `--no-block-*` (`GUARD_PROXY.md` §5). v0.2 was shadow-default. |
+| **MONITOR (fuzzy)** | Inherently high false-positive. The match is an inference ("this *looks like* an instruction"). | **Never blocks by default**, in v0.2 **or** v0.3. Opt-in block only (`--block-inject-phrase`); default-block is **NOT** adopted in v0.3 (no field FP data yet). |
 
 > **Why the partition exists.** The v0.1 council CUT broad fuzzy "injection-y language"
 > scanning because it trains operators to ignore warnings (`CHECKS.md` §6,
@@ -191,10 +199,12 @@ is scanned for **host literals** belonging to the **exfil denylist**. Matching i
 
 ## 4. MONITOR tier (fuzzy) — rules
 
-> **These NEVER block by default in v0.2.** They log + emit findings only. Default-block is
-> **deferred to v0.3.** They MAY be promoted to blocking only via an explicit per-category
-> opt-in flag (`GUARD_PROXY.md` §8). `--audit-only` forces them (and everything) to
-> warnings.
+> **These NEVER block by default — in v0.2 or v0.3.** They log + emit findings only. v0.3
+> **deliberately does NOT** promote the fuzzy tier to default-block: no field false-positive
+> data exists for it yet, so default-blocking it would risk the alert-fatigue / availability
+> problem the partition exists to avoid. They MAY be promoted to blocking only via the explicit
+> opt-in flag `--block-inject-phrase` (`GUARD_PROXY.md` §5, `GUARD_PROXY_V3.md` §4.3).
+> `--audit-only` forces them (and everything) to warnings.
 
 ### 4.1 `WRD-RES-INJECT-PHRASE` — curated exact-phrase prompt-injection denylist
 
@@ -248,7 +258,8 @@ send the following to
 - **Tier:** MONITOR-fuzzy. **Severity:** `medium` (so SARIF level is `warning`, never
   `error`, reflecting its monitor status).
 - **Default behavior:** log + SARIF/JSONL only. **Does not block** unless
-  `--block-inject-phrase` is explicitly set (opt-in; default-on deferred to v0.3).
+  `--block-inject-phrase` is explicitly set (opt-in in v0.2 **and** v0.3; v0.3 does **not**
+  make it default-block).
 - **SARIF:** `ruleId: WRD-RES-INJECT-PHRASE`, `level: warning`.
 
 ---
@@ -311,21 +322,25 @@ artifact. There is no way to relax a check at runtime without a lock edit.
 | Broad/fuzzy injection regex, NLP intent classification | The v0.1 CUT stands. Only the narrow exact-phrase denylist ships (monitor-only). |
 | DNS resolution of result-borne hosts | No network from the inspector. Exfil match is on the **literal host string**, not a resolved IP. (Mirrors `POLICY_MODEL.md` §2.3 no-DNS rule.) |
 | Cross-call / conversational correlation ("this result + that later call = exfil chain") | Stateful behavioral reasoning = `T-BEHAVE`, out of scope (`THREAT_MODEL_V2.md`). |
-| Blocking by default for the MONITOR tier | Deferred to v0.3. v0.2 ships shadow-default for fuzzy. |
+| Blocking by default for the MONITOR (fuzzy) tier | **Still NOT adopted in v0.3.** No field false-positive data exists for `WRD-RES-INJECT-PHRASE`, so it remains monitor-only / opt-in. (Only the **deterministic** tier became default-block in v0.3.) |
 
 ---
 
 ## 8. Full `WRD-RES-*` rule list (the catalog at a glance)
 
-| Rule ID | Tier | Severity | SARIF level | May block (with opt-in)? | Default-block in v0.2? |
-|---------|------|----------|-------------|--------------------------|------------------------|
-| `WRD-RES-ANSI` | BLOCK-deterministic | high | error | yes (`--block-ansi`) | no (shadow) — opt-in; **default-on in v0.3** |
-| `WRD-RES-SECRET-ECHO` | BLOCK-deterministic | critical/high (mirrors `WRD-SEC-*`) | error | yes (`--block-secret-echo`) | no (shadow) — opt-in; **default-on in v0.3** |
-| `WRD-RES-EXFIL-DOMAIN` | BLOCK-deterministic | high | error | yes (`--block-exfil-domain`) | no (shadow) — opt-in; **default-on in v0.3** |
-| `WRD-RES-INJECT-PHRASE` | MONITOR-fuzzy | medium | warning | yes (`--block-inject-phrase`) | **no — monitor-only; default-block deferred to v0.3** |
-| `WRD-RES-URL` | MONITOR (note) | low | note | **never** | no |
-| `WRD-RES-UNINSPECTABLE` | MONITOR (note) | low | note | **never** | no |
-| `WRD-RES-FRAME-ERROR` | MONITOR (note) | low | note | **never (pass-through)** | no |
+| Rule ID | Tier | Severity | SARIF level | Default-block in v0.3? | Opt-out / opt-in flag |
+|---------|------|----------|-------------|------------------------|------------------------|
+| `WRD-RES-ANSI` | BLOCK-deterministic | high | error | **YES (default-on)** | opt-OUT `--no-block-ansi` |
+| `WRD-RES-SECRET-ECHO` | BLOCK-deterministic | critical/high (mirrors `WRD-SEC-*`) | error | **YES (default-on)** | opt-OUT `--no-block-secret-echo` |
+| `WRD-RES-EXFIL-DOMAIN` | BLOCK-deterministic | high | error | **YES (default-on)** | opt-OUT `--no-block-exfil-domain` / `--allow-exfil-domain` |
+| `WRD-RES-INJECT-PHRASE` | MONITOR-fuzzy | medium | warning | **NO — monitor-only / opt-in** | opt-IN `--block-inject-phrase` |
+| `WRD-RES-URL` | MONITOR (note) | low | note | no (never blocks) | — |
+| `WRD-RES-UNINSPECTABLE` | MONITOR (note) | low | note | no (never blocks) | — |
+| `WRD-RES-FRAME-ERROR` | MONITOR (note) | low | note | no (pass-through, fail-open) | — |
+
+> The `tools/list_changed` drift gate and argument-policy denials (defined in `GUARD_PROXY.md`,
+> not this catalog) are likewise **default-block in v0.3** when `--lock` / `--policy` are
+> supplied, opt-OUT via `--no-block-list-changed` / `--no-block-policy`.
 
 ---
 
@@ -344,9 +359,11 @@ artifact. There is no way to relax a check at runtime without a lock edit.
    like a URL"** and never regex. The seed list + org list are literal domains.
 6. **`WRD-RES-INJECT-PHRASE` is narrow exact-phrase, case-insensitive, whitespace-normalized
    substring only. Broad regex is FORBIDDEN** (the v0.1 CUT stands).
-7. **Shadow-default:** in v0.2 nothing blocks unless a per-category `--block-*` flag is set;
-   even then, the MONITOR tier defaults off. `--audit-only` forces everything to warnings
-   (no blocking at all).
+7. **Default posture (v0.3):** the **BLOCK (deterministic) tier blocks by default**; each
+   category is opt-OUT-able via `--no-block-*` (`GUARD_PROXY.md` §5). The **MONITOR (fuzzy)
+   tier never default-blocks** in v0.2 or v0.3 — it is opt-in via `--block-inject-phrase` only.
+   `--audit-only` forces everything to warnings (no blocking at all). (v0.2 was shadow-default
+   for all tiers.)
 8. **Fail-safe per-tool defaults:** absent declaration → maximum protection (§6).
 9. **Inspection/framing errors PASS THROUGH** (`WRD-RES-FRAME-ERROR`, never block, never
    kill the session).

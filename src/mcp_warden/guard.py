@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import logging
 import os
-import signal
 import subprocess
 import sys
 from typing import Any, Callable
@@ -21,17 +20,27 @@ from typing import Any, Callable
 import anyio
 from anyio.abc import Process
 
-from .framing import FrameReader
+from .framing import MODE_NEWLINE, FrameReader
+from .guard_io import wrap_recv, wrap_send
+from .guard_lifecycle import exit_code_for_child, forward_signals, synthesize_pending_errors, teardown_child
 from .guard_loop import GuardConfig, GuardState, handle_c2s, handle_s2c
 
 logger = logging.getLogger("mcp_warden.guard")
 
 GUARD_FATAL_EXIT = 2
+GUARD_TRANSPORT_EXIT = 2  # client-disconnect transport exit (v0.1 IO-error code)
 
-#: Signals forwarded to the child process group (§2.6). POSIX only.
-_FORWARD_SIGNALS = (
-    [signal.SIGINT, signal.SIGTERM, signal.SIGHUP] if hasattr(signal, "SIGHUP") else [signal.SIGINT, signal.SIGTERM]
-)
+
+class _Channels:
+    """Shared, single-loop-owned signals between the pumps and the teardown path."""
+
+    def __init__(self) -> None:
+        #: Client-facing framing mode observed on s2c (for synthesizing -32002).
+        self.client_mode: str = MODE_NEWLINE
+        #: True once the client closed its end (EOF on guard stdin) -> §2.2 teardown.
+        self.client_eof: bool = False
+        #: True once a broken-pipe was seen on client stdout (clean teardown).
+        self.client_pipe_broken: bool = False
 
 
 async def _pump_client_to_server(
@@ -39,21 +48,29 @@ async def _pump_client_to_server(
     reader: FrameReader,
     server_stdin,
     client_stdout,
+    chan: "_Channels",
 ) -> None:
-    """Read client frames, enforce request policy, forward to server stdin (§4.1)."""
+    """Read client frames, enforce request policy, forward to server stdin (§4.1).
+
+    On client EOF (stdin closed) sets ``chan.client_eof`` so the main loop runs
+    the §2.2 process-group teardown. A truncated/partial frame at EOF is
+    discarded with a ``WRD-RES-FRAME-ERROR`` note (fail-open, §2.3) — never hung.
+    """
     try:
         while True:
             frame = await reader.read_frame()
             if frame is None:
+                chan.client_eof = True
                 break
+            _note_truncation(state, "c2s", frame)
             if len(frame.raw) > state.config.max_frame_bytes:
-                # Over-cap: pass through unmodified with a frame-error note (§2.5).
+                # Over-cap: pass through unmodified with a frame-error note (§2.4).
                 from .guard_loop import _frame_error_note
 
                 state.emit(_frame_error_note("c2s", None, "frame exceeds max-frame-bytes (passed through)"))
                 out = frame.raw
             else:
-                out = handle_c2s(state, frame, reader.mode or "newline")
+                out = handle_c2s(state, frame, reader.mode or MODE_NEWLINE)
             if state.pending_client_error is not None:
                 # A request was withheld; send the synthesized error back to client.
                 await client_stdout.send(state.pending_client_error)
@@ -62,7 +79,8 @@ async def _pump_client_to_server(
             if out:
                 await server_stdin.send(out)
     except anyio.BrokenResourceError:
-        logger.debug("client->server pump: stream closed")
+        # The server pipe broke (child gone). Treat as EOF on this direction.
+        logger.debug("client->server pump: server stream closed")
     finally:
         try:
             await server_stdin.aclose()
@@ -74,24 +92,45 @@ async def _pump_server_to_client(
     state: GuardState,
     reader: FrameReader,
     client_stdout,
+    chan: "_Channels",
 ) -> None:
-    """Read server frames, inspect tools/call results, forward to client (§4.2)."""
+    """Read server frames, inspect tools/call results, forward to client (§4.2).
+
+    Records the client-facing framing mode for later ``-32002`` synthesis. A
+    broken pipe on client stdout is a CLEAN teardown (client gone), not a crash:
+    no traceback (§2.2.3).
+    """
     try:
         while True:
             frame = await reader.read_frame()
             if frame is None:
                 break
+            chan.client_mode = reader.mode or MODE_NEWLINE
+            _note_truncation(state, "s2c", frame)
             if len(frame.raw) > state.config.max_frame_bytes:
                 from .guard_loop import _frame_error_note
 
                 state.emit(_frame_error_note("s2c", None, "frame exceeds max-frame-bytes (passed through)"))
                 out = frame.raw
             else:
-                out = handle_s2c(state, frame, reader.mode or "newline")
+                out = handle_s2c(state, frame, reader.mode or MODE_NEWLINE)
             if out:
-                await client_stdout.send(out)
+                try:
+                    await client_stdout.send(out)
+                except anyio.BrokenResourceError:
+                    chan.client_pipe_broken = True
+                    logger.debug("server->client pump: client stdout closed (clean teardown)")
+                    break
     except anyio.BrokenResourceError:
         logger.debug("server->client pump: stream closed")
+
+
+def _note_truncation(state: GuardState, direction: str, frame) -> None:
+    """Emit a WRD-RES-FRAME-ERROR note for a truncated frame at EOF (§2.3, fail-open)."""
+    if frame.json is None and frame.parse_error and "truncated" in frame.parse_error:
+        from .guard_loop import _frame_error_note
+
+        state.emit(_frame_error_note(direction, None, frame.parse_error))
 
 
 async def _pump_stderr(server_stderr, client_stderr) -> None:
@@ -104,13 +143,14 @@ async def _pump_stderr(server_stderr, client_stderr) -> None:
 
 
 def _install_signal_forwarding(tg: anyio.abc.TaskGroup, proc: Process) -> None:
-    """Forward guard signals to the child's process group (§2.6, POSIX)."""
+    """Forward guard signals to the child's process group (§2.6, POSIX-only)."""
+    sigs = list(forward_signals())
+    if not sigs:
+        return  # Windows or no signal model: nothing to forward here
 
     async def _watch() -> None:
-        if not hasattr(signal, "SIGINT"):
-            return
-        with anyio.open_signal_receiver(*_FORWARD_SIGNALS) as sigs:
-            async for signum in sigs:
+        with anyio.open_signal_receiver(*sigs) as receiver:
+            async for signum in receiver:
                 logger.info("guard received signal %s; forwarding to child pgrp", signum)
                 _signal_child(proc, signum)
 
@@ -121,7 +161,7 @@ def _install_signal_forwarding(tg: anyio.abc.TaskGroup, proc: Process) -> None:
 
 
 def _signal_child(proc: Process, signum: int) -> None:
-    """Send a signal to the child's process group (best-effort)."""
+    """Send a signal to the child's process group (best-effort, POSIX)."""
     pid = proc.pid
     try:
         if os.name == "posix":
@@ -153,9 +193,9 @@ async def run_guard_async(
     Returns:
         The child's exit code (or :data:`GUARD_FATAL_EXIT` on guard fatal error).
     """
-    client_in = stdin if stdin is not None else _wrap_recv(sys.stdin.buffer)
-    client_out = stdout if stdout is not None else _wrap_send(sys.stdout.buffer)
-    client_err = stderr if stderr is not None else _wrap_send(sys.stderr.buffer)
+    client_in = stdin if stdin is not None else wrap_recv(sys.stdin.buffer)
+    client_out = stdout if stdout is not None else wrap_send(sys.stdout.buffer)
+    client_err = stderr if stderr is not None else wrap_send(sys.stderr.buffer)
 
     posix_kwargs: dict[str, Any] = {}
     if os.name == "posix":
@@ -178,58 +218,45 @@ async def run_guard_async(
 
     c2s_reader = FrameReader(client_in.receive, state.config.max_frame_bytes)
     s2c_reader = FrameReader(proc.stdout.receive, state.config.max_frame_bytes)
+    chan = _Channels()
 
-    async with anyio.create_task_group() as tg:
-        _install_signal_forwarding(tg, proc)
-        tg.start_soon(_pump_client_to_server, state, c2s_reader, proc.stdin, client_out)
-        tg.start_soon(_pump_server_to_client, state, s2c_reader, client_out)
-        if proc.stderr is not None:
-            tg.start_soon(_pump_stderr, proc.stderr, client_err)
+    async def _watch_child(tg: anyio.abc.TaskGroup) -> None:
+        """Await child exit; cancel the loop so teardown can run (§2.1)."""
         await proc.wait()
         tg.cancel_scope.cancel()
 
-    code = proc.returncode if proc.returncode is not None else 0
+    async def _watch_client_eof(tg: anyio.abc.TaskGroup) -> None:
+        """Poll for client EOF; cancel the loop so the §2.2 teardown can run."""
+        while not chan.client_eof and not chan.client_pipe_broken:
+            await anyio.sleep(0.02)
+            if proc.returncode is not None:
+                return  # child already exiting; _watch_child owns the cancel
+        tg.cancel_scope.cancel()
+
+    async with anyio.create_task_group() as tg:
+        _install_signal_forwarding(tg, proc)
+        tg.start_soon(_pump_client_to_server, state, c2s_reader, proc.stdin, client_out, chan)
+        tg.start_soon(_pump_server_to_client, state, s2c_reader, client_out, chan)
+        if proc.stderr is not None:
+            tg.start_soon(_pump_stderr, proc.stderr, client_err)
+        tg.start_soon(_watch_child, tg)
+        tg.start_soon(_watch_client_eof, tg)
+
+    # Decide the teardown path: client gone first vs child exited first (§2.1/§2.2).
+    client_gone = (chan.client_eof or chan.client_pipe_broken) and proc.returncode is None
+    if client_gone:
+        # §2.2: no synthetic responses are owed to a gone client; reap the child.
+        await teardown_child(proc, on_note=state.emit)
+        code = exit_code_for_child(proc.returncode) if proc.returncode is not None else GUARD_TRANSPORT_EXIT
+        logger.info("guard: client disconnected; child reaped, exit code %s", code)
+        return code
+
+    # §2.1: child exited (possibly mid-call). Synthesize -32002 for every pending
+    # id BEFORE the client pipes close, then exit with the child's status.
+    await synthesize_pending_errors(state, client_out, chan.client_mode, proc.returncode)
+    code = exit_code_for_child(proc.returncode)
     logger.info("guard: child exited with code %s", code)
     return code
-
-
-def _wrap_recv(binary_io):
-    """Adapt a blocking binary stdin to an async receive() over a thread.
-
-    Uses ``os.read`` on the underlying fd so a small line returns immediately
-    (a buffered ``read(n)`` would block for the full ``n`` bytes and stall the
-    incremental framer). Falls back to ``read(65536)`` if no fileno is available.
-    """
-    fileno = None
-    try:
-        fileno = binary_io.fileno()
-    except (OSError, AttributeError, ValueError):
-        fileno = None
-
-    class _Recv:
-        async def receive(self) -> bytes:
-            if fileno is not None:
-                return await anyio.to_thread.run_sync(lambda: os.read(fileno, 65536))
-            return await anyio.to_thread.run_sync(lambda: binary_io.read(65536))
-
-    return _Recv()
-
-
-def _wrap_send(binary_io):
-    """Adapt a blocking binary stdout/stderr to an async send()."""
-
-    class _Send:
-        async def send(self, data: bytes) -> None:
-            def _write() -> None:
-                binary_io.write(data)
-                binary_io.flush()
-
-            await anyio.to_thread.run_sync(_write)
-
-        async def aclose(self) -> None:
-            return None
-
-    return _Send()
 
 
 def run_guard(

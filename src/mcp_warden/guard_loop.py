@@ -29,31 +29,74 @@ from .result_inspection import TIER_BLOCK, ResultFinding
 logger = logging.getLogger("mcp_warden.guard")
 
 
+#: Methods that MUST pass through untouched even mid-``tools/call`` (V3 §1):
+#: never inspected, blocked, buffered, or reordered, in either direction.
+PASSTHROUGH_METHODS = frozenset({"notifications/cancelled", "notifications/progress"})
+
+
 @dataclass
 class GuardConfig:
-    """Runtime configuration for ``guard`` (GUARD_PROXY.md §5, §8)."""
+    """Runtime configuration for ``guard`` (GUARD_PROXY.md §5, GUARD_PROXY_V3.md §4).
 
-    block_ansi: bool = False
-    block_secret_echo: bool = False
-    block_exfil_domain: bool = False
-    block_list_changed: bool = False
-    block_policy: bool = False
+    v0.3 posture: the deterministic tier blocks **by default**. Blocking is
+    expressed as per-category opt-OUTs (``no_block_*``), not enable flags. The
+    ``tools/list_changed`` gate and argument policy are armed simply by supplying
+    ``--lock`` / ``--policy`` (``armed_list_changed`` / ``armed_policy``). The
+    fuzzy ``WRD-RES-INJECT-PHRASE`` tier NEVER default-blocks — opt-in only via
+    ``block_inject_phrase``. ``audit_only`` is highest precedence and disables all
+    blocking/mutation (restores full v0.2-style shadow). Precedence (§4.6):
+    ``audit_only`` > ``no_block_*`` > default-block / ``block_inject_phrase``.
+    """
+
+    no_block_ansi: bool = False
+    no_block_secret_echo: bool = False
+    no_block_exfil_domain: bool = False
+    no_block_list_changed: bool = False
+    no_block_policy: bool = False
     block_inject_phrase: bool = False
+    armed_list_changed: bool = False  # True iff --lock supplied
+    armed_policy: bool = False  # True iff --policy supplied
     redact_secret_echo: bool = False
     audit_only: bool = False
     max_frame_bytes: int = 8 * 1024 * 1024
     max_inflight: int = 1024
 
+    #: Maps each default-on deterministic result rule to its opt-out field name.
+    _DET_OPTOUT = {
+        "WRD-RES-ANSI": "no_block_ansi",
+        "WRD-RES-SECRET-ECHO": "no_block_secret_echo",
+        "WRD-RES-EXFIL-DOMAIN": "no_block_exfil_domain",
+    }
+
     def category_enabled(self, rule_id: str) -> bool:
-        """Whether blocking is enabled for a result rule (audit-only overrides)."""
+        """Whether blocking is active for a result rule under the v0.3 posture.
+
+        Deterministic rules block by default unless their ``no_block_*`` opt-out
+        is set; the fuzzy ``WRD-RES-INJECT-PHRASE`` blocks only with the explicit
+        opt-in. ``audit_only`` overrides everything (nothing blocks).
+
+        Args:
+            rule_id: The ``WRD-RES-*`` rule id.
+
+        Returns:
+            True iff a match in this category should block on the wire.
+        """
         if self.audit_only:
             return False
-        return {
-            "WRD-RES-ANSI": self.block_ansi,
-            "WRD-RES-SECRET-ECHO": self.block_secret_echo,
-            "WRD-RES-EXFIL-DOMAIN": self.block_exfil_domain,
-            "WRD-RES-INJECT-PHRASE": self.block_inject_phrase,
-        }.get(rule_id, False)
+        if rule_id == "WRD-RES-INJECT-PHRASE":
+            return self.block_inject_phrase
+        optout = self._DET_OPTOUT.get(rule_id)
+        if optout is None:
+            return False
+        return not getattr(self, optout)
+
+    def list_changed_enabled(self) -> bool:
+        """Whether the ``tools/list_changed`` drift gate blocks (armed + not opted-out)."""
+        return self.armed_list_changed and not self.no_block_list_changed and not self.audit_only
+
+    def policy_block_enabled(self) -> bool:
+        """Whether an argument-policy deny blocks (armed + not opted-out)."""
+        return self.armed_policy and not self.no_block_policy and not self.audit_only
 
 
 @dataclass
@@ -73,6 +116,9 @@ class GuardState:
     inflight_tool: "OrderedDict[Any, str]" = field(default_factory=OrderedDict)
     #: Set by handle_c2s when a request is withheld: error bytes to send to the CLIENT.
     pending_client_error: bytes | None = None
+    #: True once a notifications/tools/list_changed was seen; the next tools/list
+    #: response is re-checked against the lock (§4.3). Reset after the check runs.
+    list_changed_pending: bool = False
 
     def remember_request(self, rpc_id: Any, method: str, tool: str = "") -> None:
         """Record an in-flight request id->method (+tool), bounded LRU (§4.4)."""
@@ -124,6 +170,11 @@ def handle_c2s(state: GuardState, frame: Frame, mode: str) -> bytes:
         state.emit(_frame_error_note("c2s", None, frame.parse_error or "unparseable frame"))
         return frame.raw
     method = obj.get("method")
+    if method in PASSTHROUGH_METHODS:
+        # Cancellation/progress are control-plane: never inspected/blocked/buffered/
+        # reordered, even mid-tools/call (GUARD_PROXY_V3.md §1). Forward original bytes
+        # immediately; never withhold (do not touch pending_client_error).
+        return frame.raw
     rpc_id = obj.get("id")
     if method is not None and rpc_id is not None:
         tool_name = ""
@@ -146,7 +197,7 @@ def handle_c2s(state: GuardState, frame: Frame, mode: str) -> bytes:
     if not overall_denied(verdicts):
         return frame.raw
     deny = next(v for v in verdicts if v.verdict == "deny")
-    enabled = state.config.block_policy and not state.config.audit_only
+    enabled = state.config.policy_block_enabled()
     state.emit(
         ResultFinding(
             rule_id=deny.constraint,

@@ -98,10 +98,15 @@ def _findings(json_path: Path) -> list[dict]:
     return [json.loads(ln) for ln in json_path.read_text().splitlines() if ln.strip()]
 
 
-def test_acceptance_shadow_default_detects_all_blocks_nothing(tmp_path):
-    """(a) shadow-default: all four findings logged; nothing blocked/modified."""
+def test_acceptance_audit_only_restores_shadow(tmp_path):
+    """(a) v0.3: --audit-only restores full v0.2 shadow — detect all, block nothing.
+
+    In v0.3 the deterministic tier blocks by DEFAULT, so the v0.2 "no flags =
+    shadow" posture is now reached with the single --audit-only flag (the
+    documented observe-first restore; GUARD_PROXY.md §5.3).
+    """
     sink = tmp_path / "findings.jsonl"
-    client = GuardClient("--json", str(sink))
+    client = GuardClient("--audit-only", "--json", str(sink))
     try:
         init = client.initialize()
         assert "result" in init  # initialize forwarded untouched
@@ -124,31 +129,60 @@ def test_acceptance_shadow_default_detects_all_blocks_nothing(tmp_path):
 
     rules = {f["rule_id"] for f in _findings(sink)}
     assert {"WRD-RES-ANSI", "WRD-RES-SECRET-ECHO", "WRD-RES-EXFIL-DOMAIN", "WRD-RES-INJECT-PHRASE"} <= rules
-    # Nothing was blocked or modified in shadow mode.
+    # Nothing was blocked or modified under --audit-only.
     actions = {f["action"] for f in _findings(sink) if f["tier"] != "note"}
     assert actions <= {"shadowed"}
     assert code == 0
 
 
-def test_acceptance_block_ansi_and_exfil(tmp_path):
-    """(b) --block-ansi redacts in place; --block-exfil-domain error-replaces. (c) inject stays monitor."""
+def test_acceptance_v3_default_blocks_deterministic_tier(tmp_path):
+    """(a') v0.3 default posture (NO flags): the deterministic tier blocks out of the box."""
+    sink = tmp_path / "findings.jsonl"
+    client = GuardClient("--json", str(sink))
+    try:
+        client.initialize()
+        ansi = client.call_and_get(2, "ansi_tool")
+        secret = client.call_and_get(3, "secret_tool")
+        exfil = client.call_and_get(4, "exfil_tool")
+        inject = client.call_and_get(5, "inject_tool")
+    finally:
+        code = client.close()
+
+    # ANSI -> redacted-content in place (control chars stripped, marked modified).
+    assert "result" in ansi and ansi["result"]["_meta"]["warden"]["modified"] is True
+    assert "\x1b" not in ansi["result"]["content"][0]["text"]
+    # SECRET-ECHO -> error-replacement (-32001) by default.
+    assert secret["error"]["code"] == -32001 and secret["error"]["data"]["rule"] == "WRD-RES-SECRET-ECHO"
+    # EXFIL-DOMAIN -> error-replacement (-32001) by default.
+    assert exfil["error"]["code"] == -32001 and exfil["error"]["data"]["rule"] == "WRD-RES-EXFIL-DOMAIN"
+    # INJECT-PHRASE (fuzzy) -> NEVER default-blocks: passes through.
+    assert "result" in inject and "error" not in inject
+    fr = [f for f in _findings(sink) if f["rule_id"] == "WRD-RES-INJECT-PHRASE"]
+    assert fr and fr[0]["action"] == "shadowed"
+    assert code == 0
+
+
+def test_acceptance_deprecated_block_flags_are_noops(tmp_path):
+    """(b) v0.2 --block-ansi/--block-exfil-domain are inert no-ops; the categories
+    block by DEFAULT anyway (ANSI redacts in place, exfil error-replaces), and the
+    deprecation note is printed to stderr. (c) inject stays monitor-only."""
     client = GuardClient("--block-ansi", "--block-exfil-domain")
     try:
         client.initialize()
         ansi = client.call_and_get(2, "ansi_tool")
         exfil = client.call_and_get(3, "exfil_tool")
-        secret = client.call_and_get(4, "secret_tool")
         inject = client.call_and_get(5, "inject_tool")
     finally:
         code = client.close()
+        stderr = client.proc.stderr.read().decode()
 
-    # ANSI -> redacted-content in place.
+    # ANSI -> redacted-content in place (default-on, deprecated flag is a no-op).
     assert "result" in ansi
     meta = ansi["result"]["_meta"]["warden"]
     assert meta["modified"] is True and "WRD-RES-ANSI" in meta["rules"]
     assert "\x1b" not in ansi["result"]["content"][0]["text"]
 
-    # EXFIL -> error-replacement (-32001).
+    # EXFIL -> error-replacement (-32001), default-on.
     assert "error" in exfil
     assert exfil["error"]["code"] == -32001
     assert exfil["error"]["data"]["warden"] is True
@@ -156,9 +190,10 @@ def test_acceptance_block_ansi_and_exfil(tmp_path):
     assert exfil["error"]["data"]["rule"] == "WRD-RES-EXFIL-DOMAIN"
     assert exfil["error"]["data"]["tool"] == "exfil_tool"
 
-    # SECRET-ECHO + INJECT-PHRASE not blocked here -> pass through (c: inject monitor-only).
-    assert "result" in secret and "error" not in secret
+    # INJECT-PHRASE (fuzzy) never blocks -> pass through (c: inject monitor-only).
     assert "result" in inject and "error" not in inject
+    # The deprecated --block-* flags each emit a one-line stderr deprecation note.
+    assert "deprecated" in stderr.lower() and "--block-ansi" in stderr
     assert code == 0
 
 
