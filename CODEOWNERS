@@ -1,0 +1,12 @@
+# Code owners for mcp-warden.
+# These owners are requested for review on every pull request.
+# https://docs.github.com/en/repositories/managing-your-repos-settings-and-customizing-your-repository/about-code-owners
+
+# Default owner for everything in the repo.
+*       @ernestprovo23
+
+# The security contract is the source of truth — changes here get extra scrutiny.
+/docs/  @ernestprovo23
+
+# Determinism-critical core: hashing, lockfile, check/result catalogs.
+/src/   @ernestprovo23

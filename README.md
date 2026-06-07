@@ -1,5 +1,9 @@
 # mcp-warden
 
+[![CI](https://github.com/ernestprovo23/mcp-warden/actions/workflows/integrity-gate.yml/badge.svg)](https://github.com/ernestprovo23/mcp-warden/actions/workflows/integrity-gate.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+
 **CI-first MCP supply-chain integrity gate.** Pin the *declared* tool / resource /
 prompt surface of an [MCP](https://modelcontextprotocol.io) server, then fail CI
 when that surface drifts from an approved baseline.
@@ -92,7 +96,7 @@ the `WRD-*` / `WRD-DRIFT-*` check ID) uploads straight to GitHub code scanning.
     .venv/bin/mcp-warden check node ./build/index.js --sarif warden.sarif
 - name: Upload SARIF
   if: always()
-  uses: github/codeql-action/upload-sarif@v3
+  uses: github/codeql-action/upload-sarif@v4
   with:
     sarif_file: warden.sarif
 ```
@@ -128,7 +132,7 @@ git add warden.lock && git commit -m "chore: pin MCP surface baseline"
 
 - name: Upload SARIF
   if: always()
-  uses: actions/upload-artifact@v4
+  uses: actions/upload-artifact@v6
   with:
     name: mcp-warden-sarif
     path: warden.sarif
@@ -231,6 +235,15 @@ The headline test is a real stdio round-trip: spawn the clean fixture → `pin` 
 re-run `check` against the mutated fixture → assert non-zero exit + the expected
 drift + SARIF finding.
 
+## Contributing & security
+
+Contributions are welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md) for the dev
+setup, the determinism contract, and how to propose new checks. By participating
+you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+This is a security tool: **do not report vulnerabilities in public issues.** Follow
+the responsible-disclosure process in [`SECURITY.md`](SECURITY.md).
+
 ## License
 
-Apache-2.0.
+MIT — see [`LICENSE`](LICENSE). Copyright (c) 2026 Ernest Provo.

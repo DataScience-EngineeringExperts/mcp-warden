@@ -15,11 +15,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # All actions pinned to a major version that ships the Node 24 runtime
+      # (checkout v5 / setup-python v6 / upload-artifact v6) to clear the
+      # Node 20 deprecation warning. Bump majors deliberately, never float @main.
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -52,10 +55,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -95,8 +98,35 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Upload drift SARIF artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: mcp-warden-drift-sarif
           path: mutated-check.sarif
           if-no-files-found: warn
+
+  # --------------------------------------------------------------------------
+  # Job 3: secret scan (gitleaks, full git history)
+  #
+  # mcp-warden is itself a security tool, so it scans its own history on every
+  # push/PR. Synthetic detector test vectors under tests/ are allowlisted in
+  # .gitleaks.toml; all of src/ is fully scanned. A real leak fails CI.
+  # --------------------------------------------------------------------------
+  secret-scan:
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        run: |
+          curl -sSLf \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: Scan full git history
+        run: gitleaks git . --config .gitleaks.toml --redact --no-banner
