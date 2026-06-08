@@ -10,10 +10,10 @@ authors = [{ name = "Ernest Provo", email = "ernest@thedataexperts.us" }]
 keywords = ["mcp", "supply-chain", "security", "ci", "integrity"]
 
 dependencies = [
-    "mcp>=1.0.0",
+    "mcp>=1.27.2",
     "rfc8785>=0.1.4",
     "pydantic>=2.0.0",
-    "typer>=0.12.0",
+    "typer>=0.26.7",
     "rich>=15.0.0",
     "pyyaml>=6.0.3",
     "anyio>=4.0.0",

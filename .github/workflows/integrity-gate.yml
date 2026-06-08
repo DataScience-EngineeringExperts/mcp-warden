@@ -16,7 +16,7 @@ jobs:
 
     steps:
       # All actions pinned to a major version that ships the Node 24 runtime
-      # (checkout v5 / setup-python v6 / upload-artifact v6) to clear the
+      # (checkout v6 / setup-python v6 / upload-artifact v7) to clear the
       # Node 20 deprecation warning. Bump majors deliberately, never float @main.
       - name: Checkout
         uses: actions/checkout@v6
@@ -98,7 +98,7 @@ jobs:
       # -----------------------------------------------------------------------
       - name: Upload drift SARIF artifact
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: mcp-warden-drift-sarif
           path: mutated-check.sarif
