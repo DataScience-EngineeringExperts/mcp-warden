@@ -88,6 +88,11 @@ sequenceDiagram
     end
 ```
 
+> `compute_drift` structurally classifies tool `inputSchema` changes via the normalized
+> `schema_skeleton` stored in the lock (`schema_version` 2): each security-relevant mutation
+> is a per-fact `WRD-DRIFT-SCHEMA-*` item (`docs/WARDEN_LOCK_SCHEMA.md` §6.2). v1 locks fall
+> back to a single high-severity `schema-modified` until re-pinned.
+
 ---
 
 ## C3 — `guard` runtime proxy + `inspect` offline analyzer (v0.2)

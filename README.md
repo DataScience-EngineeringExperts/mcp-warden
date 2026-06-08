@@ -35,7 +35,7 @@ inputSchema)` metadata returned by `tools/list`, `resources/list`, and
 
 | Threat class | Control |
 |--------------|---------|
-| **Definition drift / rug-pull** (`MCP-DRIFT`) | `check` re-captures and hash-diffs the surface vs `warden.lock`; any drift fails CI |
+| **Definition drift / rug-pull** (`MCP-DRIFT`) | `check` re-captures and diffs the surface vs `warden.lock`; tool `inputSchema` changes are **structurally classified** (required dropped, enum widened/removed, type broadened, constraint relaxed, `additionalProperties` opened → `WRD-DRIFT-SCHEMA-*`) rather than flagged as one opaque change; any drift fails CI |
 | **Dangerous capability surface** (`MCP-CAPSURF`) | Deterministic `WRD-CAP-*` static checks (shell/exec, fs-write, fs-read, http, sql) |
 | **Secret leakage in definitions** (`MCP-SECRET`) | `WRD-SEC-*` regex + entropy checks; snippets are always redacted |
 | **Unpinned supply-chain refs** (`MCP-SUPPLY`) | `WRD-SUP-*` flags unpinned `npx`/`uvx`/`pip`, `latest`, and `curl|sh` launches |
@@ -84,9 +84,14 @@ and a **mutated** (rug-pulled) one. The end-to-end flow:
 #  -> prints DRIFT DETECTED, writes SARIF, EXITS NON-ZERO (fails the build)
 ```
 
-`check` exits **non-zero on any drift** (added/removed/modified tool, schema or
-capability change, server-identity change). The SARIF report (`ruleId` ==
-the `WRD-*` / `WRD-DRIFT-*` check ID) uploads straight to GitHub code scanning.
+`check` exits **non-zero on any drift** (added/removed/modified tool, capability
+change, server-identity change). Tool `inputSchema` changes are **structurally
+diffed**: each security-relevant mutation is reported per-fact and deterministically
+classified by severity (`docs/WARDEN_LOCK_SCHEMA.md` §6.2). A normalized schema
+skeleton is stored in the lock (`schema_version` 2); pre-skeleton (v1) locks fall
+back to a single high-severity `schema-modified` until re-pinned. The SARIF report
+(`ruleId` == the `WRD-*` / `WRD-DRIFT-*` check ID) uploads straight to GitHub code
+scanning.
 
 ### Typical GitHub Actions step
 

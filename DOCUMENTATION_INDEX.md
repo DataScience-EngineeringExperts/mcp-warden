@@ -20,7 +20,7 @@ describe and visualize the implementation that satisfies that contract.
 |-----|---------|
 | [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | **(v0.1)** Positioning, trust model (TOFU + `--approve`), assets/actors, the four threat classes (MCP-DRIFT / MCP-CAPSURF / MCP-SECRET / MCP-SUPPLY), explicit out-of-scope limits, deliberate cuts |
 | [`docs/THREAT_MODEL_V2.md`](docs/THREAT_MODEL_V2.md) | **(v0.2)** Addendum extending the v0.1 model: T-RESULT vectors, the defends (BLOCK) / monitors (fuzzy) / still-does-NOT-defend (T-BEHAVE) table, runtime trust-model notes, retained + added cuts, shadow-default positioning |
-| [`docs/WARDEN_LOCK_SCHEMA.md`](docs/WARDEN_LOCK_SCHEMA.md) | `warden.lock` format, RFC 8785 canonicalization + SHA-256 hashing, field/entry/overall digests, the normative drift definition + severities; **§11 (v0.2)** optional per-tool inspection policy (`expected_output_charset` / `may_return_urls` / `secret_echo_applies`, fail-safe defaults, digest impact) |
+| [`docs/WARDEN_LOCK_SCHEMA.md`](docs/WARDEN_LOCK_SCHEMA.md) | `warden.lock` format, RFC 8785 canonicalization + SHA-256 hashing, field/entry/overall digests, the normative drift definition + severities; **§5.1/§6.2 structural schema diff** (normalized per-tool `schema_skeleton`, `schema_version` 2, granular `WRD-DRIFT-SCHEMA-*` taxonomy + severities, v1 fallback); **§11 (v0.2)** optional per-tool inspection policy (`expected_output_charset` / `may_return_urls` / `secret_echo_applies`, fail-safe defaults, digest impact) |
 | [`docs/CHECKS.md`](docs/CHECKS.md) | The deterministic `WRD-*` static-check catalog (capability/secret/supply/robustness), the shared tokenizer, severity→SARIF mapping, redaction rule, CUT list. **Reused by v0.2** `WRD-RES-SECRET-ECHO` (the `WRD-SEC-*` patterns + redaction) |
 | [`docs/POLICY_MODEL.md`](docs/POLICY_MODEL.md) | Policy schema, the four high-risk shapes, constraint vocabulary, fail-closed defaults, SSRF deny ranges, lint + single-sample eval semantics. **Enforced at runtime by v0.2 `guard`** on live `tools/call` requests |
 | [`docs/RESULT_INSPECTION.md`](docs/RESULT_INSPECTION.md) | **(v0.2)** The `WRD-RES-*` result-inspection catalog: deterministic/fuzzy tier partition, per-rule exact match definitions (ANSI allowlist, secret-echo via `WRD-SEC-*`, exfil seed denylist, injection seed phrase list), severities, SARIF mapping, redaction, fail-safe per-tool precision. Run identically by `guard` and `inspect` |
@@ -53,6 +53,7 @@ describe and visualize the implementation that satisfies that contract.
 | `src/mcp_warden/models.py` | Pydantic models for captured surface + lock | WARDEN_LOCK_SCHEMA §2–§8 |
 | `src/mcp_warden/lockfile.py` | Lock builder + reader/writer + overall digest | WARDEN_LOCK_SCHEMA §5–§6, §9 |
 | `src/mcp_warden/drift.py` | Per-class drift/diff engine + severities | WARDEN_LOCK_SCHEMA §6.2 |
+| `src/mcp_warden/schema_diff.py` | Deterministic structural `inputSchema` skeleton extractor + per-fact diff classifier (`WRD-DRIFT-SCHEMA-*`; `$ref`/cyclic/malformed-safe) | WARDEN_LOCK_SCHEMA §5.1, §6.2 |
 | `src/mcp_warden/checks.py` | Static-check orchestrator (deterministic sort) | CHECKS §4–§5 |
 | `src/mcp_warden/checks_secret.py` | `WRD-SEC-*` vendor + entropy + redaction | CHECKS §4.2 |
 | `src/mcp_warden/checks_supply.py` | `WRD-SUP-*` launch-command checks | CHECKS §4.3 |
@@ -82,6 +83,7 @@ describe and visualize the implementation that satisfies that contract.
 | `tests/test_tokenizer.py` | Segment-exact tokenization + capability derivation |
 | `tests/test_checks.py` | Capability/secret/supply/robustness checks + redaction |
 | `tests/test_drift.py` | Drift per class (added/removed/modified/server-identity/unapproved) |
+| `tests/test_schema_diff.py` | Structural skeleton extraction (purity, `$ref`/cyclic/malformed safety) + per-fact diff taxonomy (required/enum/type/constraint/`additionalProperties`) + v1 fallback |
 | `tests/test_lockfile.py` | Lock build/write/read, digest exclusions, hashes-not-raw |
 | `tests/test_policy.py` | Lint (incl. unknown-key error) + eval (allow/deny/SSRF/fail-closed) |
 | `tests/test_emitters.py` | SARIF shape + level mapping + JSONL records |
