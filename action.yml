@@ -209,10 +209,16 @@ runs:
     # Runs AFTER check and BEFORE the final exit so drift findings are
     # visible in code scanning even when the step exits 1.
     #
+    # continue-on-error: true — SARIF upload failures (e.g. code-scanning
+    # rejects the format, missing GHAS, wrong permissions) must NOT abort
+    # the gate or mask the actual check result. The exit-code propagation
+    # step still always fires; the gate verdict is preserved regardless.
+    #
     # github/codeql-action/upload-sarif v3.36.2 pinned to full commit SHA.
     # ------------------------------------------------------------------
     - name: "Upload SARIF to GitHub code scanning"
       if: inputs.upload-sarif == 'true' && steps.sarif-path.outputs.exists == 'true'
+      continue-on-error: true
       uses: github/codeql-action/upload-sarif@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.36.2
       with:
         sarif_file: ${{ steps.sarif-path.outputs.sarif }}
