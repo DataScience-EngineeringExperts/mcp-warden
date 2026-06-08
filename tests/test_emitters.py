@@ -34,6 +34,12 @@ def test_sarif_shape_and_ruleid_verbatim():
     assert result["level"] == "error"
     # rule registered in driver.rules
     assert any(r["id"] == "WRD-CAP-SHELL" for r in run["tool"]["driver"]["rules"])
+    # physicalLocation must be present so GitHub Code Scanning accepts the SARIF
+    loc = result["locations"][0]
+    assert "physicalLocation" in loc, "Each location must have physicalLocation for GitHub Code Scanning"
+    assert loc["physicalLocation"]["artifactLocation"]["uri"] == "warden.lock"
+    # logicalLocations must still be present alongside physicalLocation
+    assert "logicalLocations" in loc
 
 
 def test_sarif_includes_drift_results():
@@ -42,6 +48,9 @@ def test_sarif_includes_drift_results():
     result = sarif["runs"][0]["results"][0]
     assert result["ruleId"] == "WRD-DRIFT-TOOL-ADDED"
     assert result["level"] == "error"
+    # physicalLocation must be present on drift results too
+    loc = result["locations"][0]
+    assert loc["physicalLocation"]["artifactLocation"]["uri"] == "warden.lock"
 
 
 def test_sarif_is_valid_json():
@@ -100,3 +109,36 @@ def test_jsonl_snippet_redacted_preserved():
     out = findings_to_jsonl(findings)
     rec = json.loads(out.strip())
     assert rec["snippet"] == "sk-a…(len=51)"
+
+
+def test_every_result_location_has_physical_location_uri():
+    """Invariant: every runs[].results[].locations[] must have physicalLocation.artifactLocation.uri.
+
+    GitHub Code Scanning hard-rejects SARIF results lacking physicalLocation.
+    This invariant guards against regressions in either _result_from_finding or
+    _result_from_drift.
+    """
+    findings = [
+        Finding(rule_id="WRD-CAP-SHELL", severity="critical", target="tools/run", message="m", snippet="x"),
+        Finding(rule_id="WRD-SEC-OPENAI", severity="high", target="tools/t", message="m2", snippet="y"),
+    ]
+    drift = [
+        DriftItem("tool-added", "high", "tools/evil", "added"),
+        DriftItem("schema-constraint-relaxed", "medium", "tools/read_file", "relaxed", detail="maxLength 64→4096"),
+    ]
+    sarif = build_sarif(findings, drift)
+    assert sarif["version"] == "2.1.0"
+    for run_idx, run in enumerate(sarif["runs"]):
+        for res_idx, result in enumerate(run["results"]):
+            for loc_idx, loc in enumerate(result["locations"]):
+                uri = (
+                    loc.get("physicalLocation", {})
+                    .get("artifactLocation", {})
+                    .get("uri", "")
+                )
+                assert uri, (
+                    f"runs[{run_idx}].results[{res_idx}].locations[{loc_idx}] "
+                    f"is missing physicalLocation.artifactLocation.uri — "
+                    f"GitHub Code Scanning will reject this SARIF result "
+                    f"(ruleId={result.get('ruleId')!r})"
+                )

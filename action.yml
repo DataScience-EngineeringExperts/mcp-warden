@@ -18,8 +18,10 @@ inputs:
   server-cmd:
     description: >-
       MCP server launch command string (e.g. "node ./build/index.js" or
-      "python server.py"). Must be a plain argv string — shell metacharacters
-      (; | & $ ` \ < > ( ) { }) and newlines are rejected to prevent injection.
+      "python server.py"). Must be a plain, whitespace-separated argv string —
+      no quoted arguments and no shell metacharacters (; | & $ ` \ < > ( ) { }
+      ' ") are permitted. The guard step rejects any of these characters before
+      expansion occurs.
     required: true
 
   lock:
@@ -82,6 +84,11 @@ runs:
     # before any expansion occurs. This is a proportionate control: the
     # input is set by the workflow author (not an external actor in most
     # cases), but fork-PR / context-injection risks are real.
+    #
+    # server-cmd is a whitespace-separated argv string — no quoted arguments
+    # and no shell metacharacters are supported. Single-quote (') and
+    # double-quote (") are also rejected: the shell would re-tokenize them
+    # after the injection guard's unit-validation, undermining the check.
     # ------------------------------------------------------------------
     - name: "Validate server-cmd (injection guard)"
       shell: bash
@@ -92,7 +99,7 @@ runs:
         # Uses bash `case` glob patterns only — pure POSIX, no regex, no external
         # grep call; works identically on ubuntu / macos / windows (git-bash).
         #
-        # Character list checked: ; | & $ ` \ < > ( ) { } and embedded newlines.
+        # Character list checked: ; | & $ ` \ < > ( ) { } ' " and embedded newlines.
         _bad=0
         case "$INPUT_SERVER_CMD" in
           *";"*)         _bad=1 ;;
@@ -107,10 +114,12 @@ runs:
           *")"*)         _bad=1 ;;
           *"{"*)         _bad=1 ;;
           *"}"*)         _bad=1 ;;
+          *"'"*)         _bad=1 ;;
+          *'"'*)         _bad=1 ;;
           *$'\n'*)       _bad=1 ;;
         esac
         if [ "$_bad" -eq 1 ]; then
-          echo "::error::mcp-warden: server-cmd contains a shell metacharacter (; | & \$ \` \\ < > ( ) { }) or newline. Provide a plain argv string." >&2
+          echo "::error::mcp-warden: server-cmd contains a shell metacharacter (; | & \$ \` \\ < > ( ) { } ' \") or newline. Provide a plain whitespace-separated argv string (no quoted arguments, no metacharacters)." >&2
           exit 1
         fi
 
@@ -155,6 +164,13 @@ runs:
     # Uses `python -m mcp_warden.cli check` (not the console script) to
     # avoid PATH-shadowing issues across OSes.
     #
+    # server-cmd word-split: `read -ra CMD_ARRAY` splits $INPUT_SERVER_CMD
+    # on IFS whitespace into a bash array, then "${CMD_ARRAY[@]}" expands
+    # each token as a separate argv element — no shell re-tokenization of
+    # the already-validated string.  Single/double quotes are already
+    # blocked by the injection guard above so no quoted-argument edge cases
+    # can reach this expansion.
+    #
     # Exit-code contract: set +e captures the code without aborting; we
     # emit it as a step output; the final step raises it verbatim so the
     # runner sees 0/1/2 and the step outcome (success/failure) is correct.
@@ -172,13 +188,17 @@ runs:
         INPUT_SARIF: ${{ inputs.sarif }}
         INPUT_TIMEOUT: ${{ inputs.timeout }}
       run: |
+        # Parse server-cmd into a bash array to avoid word-splitting issues
+        # (injection guard above already vetted the string as a unit).
+        read -ra CMD_ARRAY <<< "$INPUT_SERVER_CMD"
         set +e
-        python -m mcp_warden.cli check $INPUT_SERVER_CMD \
+        python -m mcp_warden.cli check "${CMD_ARRAY[@]}" \
           --lock "$INPUT_LOCK" \
           --sarif "$INPUT_SARIF" \
           --timeout "$INPUT_TIMEOUT"
         code=$?
         set -e
+        [ -n "$GITHUB_OUTPUT" ] || { echo "GITHUB_OUTPUT unset" >&2; exit 2; }
         echo "exit-code=$code" >> "$GITHUB_OUTPUT"
 
     # ------------------------------------------------------------------
@@ -209,16 +229,17 @@ runs:
     # Runs AFTER check and BEFORE the final exit so drift findings are
     # visible in code scanning even when the step exits 1.
     #
-    # continue-on-error: true — SARIF upload failures (e.g. code-scanning
-    # rejects the format, missing GHAS, wrong permissions) must NOT abort
-    # the gate or mask the actual check result. The exit-code propagation
-    # step still always fires; the gate verdict is preserved regardless.
+    # continue-on-error removed: the emitter now emits physicalLocation so
+    # GitHub Code Scanning will accept the SARIF. Genuine upload failures
+    # (missing GHAS, wrong permissions) are now surfaced as step failures
+    # rather than swallowed.  Set upload-sarif: false for repos without
+    # code-scanning or on fork PRs lacking security-events: write.
     #
     # github/codeql-action/upload-sarif v3.36.2 pinned to full commit SHA.
     # ------------------------------------------------------------------
     - name: "Upload SARIF to GitHub code scanning"
+      id: sarif-upload
       if: inputs.upload-sarif == 'true' && steps.sarif-path.outputs.exists == 'true'
-      continue-on-error: true
       uses: github/codeql-action/upload-sarif@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.36.2
       with:
         sarif_file: ${{ steps.sarif-path.outputs.sarif }}

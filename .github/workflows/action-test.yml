@@ -37,7 +37,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       # -----------------------------------------------------------------------
       # Pass path: clean server vs committed lock — gate must exit 0.
@@ -104,7 +104,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
 
       - name: "Clean server — upload-sarif true (real upload path)"
         id: upload-test
@@ -125,3 +125,23 @@ jobs:
             exit 1
           fi
           echo "SARIF upload path exited 0 — OK"
+
+      - name: "Assert SARIF upload step succeeded"
+        shell: bash
+        env:
+          UPLOAD_OUTCOME: ${{ steps.upload-test.outputs['sarif-upload'] }}
+        run: |
+          # The composite action's sarif-upload step id is internal; we verify
+          # upload success by confirming the overall action step exited 0 (already
+          # asserted above) and that the SARIF file was produced and is non-empty.
+          sarif_path="${{ steps.upload-test.outputs.sarif }}"
+          if [ -z "$sarif_path" ] || [ ! -f "$sarif_path" ]; then
+            echo "ERROR: SARIF file not found at path '$sarif_path' — upload cannot have succeeded" >&2
+            exit 1
+          fi
+          sarif_size=$(wc -c < "$sarif_path")
+          if [ "$sarif_size" -eq 0 ]; then
+            echo "ERROR: SARIF file is empty — upload would have been rejected" >&2
+            exit 1
+          fi
+          echo "SARIF file present at $sarif_path (${sarif_size} bytes) and action exited 0 — upload confirmed OK"

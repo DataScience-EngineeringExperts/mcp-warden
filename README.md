@@ -123,7 +123,7 @@ so no transitive packages are fetched unpinned.
 
 | Input | Default | Notes |
 |-------|---------|-------|
-| `server-cmd` | *(required)* | MCP server argv string (plain; no shell metacharacters) |
+| `server-cmd` | *(required)* | Whitespace-separated argv string (e.g. `node ./build/index.js`). No quoted arguments, no shell metacharacters (`;`, `\|`, `&`, `$`, `` ` ``, `\`, `<`, `>`, `(`, `)`, `{`, `}`, `'`, `"`). The guard step rejects any of these before expansion. |
 | `lock` | `warden.lock` | Baseline lock path (relative to `working-directory`) |
 | `sarif` | `mcp-warden.sarif` | SARIF output path |
 | `upload-sarif` | `true` | Set `false` for repos without GitHub Advanced Security |
