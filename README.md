@@ -93,7 +93,52 @@ back to a single high-severity `schema-modified` until re-pinned. The SARIF repo
 (`ruleId` == the `WRD-*` / `WRD-DRIFT-*` check ID) uploads straight to GitHub code
 scanning.
 
-### Typical GitHub Actions step
+### GitHub Action (one-step drop-in)
+
+The fastest way to add the integrity gate is the official reusable action:
+
+```yaml
+# .github/workflows/mcp-integrity.yml
+permissions:
+  contents: read
+  security-events: write   # only needed when upload-sarif: true (the default)
+
+jobs:
+  mcp-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ernestprovo23/mcp-warden@v0
+        with:
+          server-cmd: "node ./build/index.js"
+          lock: "warden.lock"
+          # upload-sarif: "false"   # uncomment for private repos without GHAS
+```
+
+The action installs mcp-warden from the exact `@ref` you pin, runs `check`,
+uploads the SARIF report to GitHub code scanning (optional), and surfaces the
+raw exit code (0 = clean / 1 = drift / 2 = error) as an output for downstream
+steps. All runtime dependencies are hash-locked in `action/requirements.lock`
+so no transitive packages are fetched unpinned.
+
+| Input | Default | Notes |
+|-------|---------|-------|
+| `server-cmd` | *(required)* | Whitespace-separated argv string (e.g. `node ./build/index.js`). No quoted arguments, no shell metacharacters (`;`, `\|`, `&`, `$`, `` ` ``, `\`, `<`, `>`, `(`, `)`, `{`, `}`, `'`, `"`). The guard step rejects any of these before expansion. |
+| `lock` | `warden.lock` | Baseline lock path (relative to `working-directory`) |
+| `sarif` | `mcp-warden.sarif` | SARIF output path |
+| `upload-sarif` | `true` | Set `false` for repos without GitHub Advanced Security |
+| `category` | `mcp-warden` | Code-scanning category; use distinct values per server |
+| `python-version` | `3.11` | Python version to use (>= 3.11 required) |
+| `timeout` | `30` | Capture timeout (seconds) |
+| `working-directory` | `.` | Working directory for the check |
+
+**Outputs:** `exit-code` (0/1/2), `sarif` (resolved absolute path).
+
+> Set `upload-sarif: false` for fork pull requests or private repos without
+> GitHub Advanced Security — the `security-events: write` permission is not
+> available in those contexts.
+
+### Typical multi-step pattern (manual install)
 
 ```yaml
 - name: MCP integrity gate
@@ -101,7 +146,7 @@ scanning.
     .venv/bin/mcp-warden check node ./build/index.js --sarif warden.sarif
 - name: Upload SARIF
   if: always()
-  uses: github/codeql-action/upload-sarif@v4
+  uses: github/codeql-action/upload-sarif@v3
   with:
     sarif_file: warden.sarif
 ```

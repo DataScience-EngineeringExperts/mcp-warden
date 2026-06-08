@@ -10,9 +10,23 @@ describe and visualize the implementation that satisfies that contract.
 
 | # | Doc | Purpose |
 |---|-----|---------|
-| 1 | [`README.md`](README.md) | Project overview, install, the pin/check CI demo, CLI reference (incl. v0.3 `lock rotate` + redacted offline `diff` viewer) |
-| 2 | [`SYSTEM_CONTEXT_DIAGRAM.md`](SYSTEM_CONTEXT_DIAGRAM.md) | System context + pin/check sequence (mermaid); trust boundary; `conclave` as dev-time reviewer only |
+| 1 | [`README.md`](README.md) | Project overview, install, the pin/check CI demo, CLI reference (incl. v0.3 `lock rotate` + redacted offline `diff` viewer), GitHub Action usage section (Issue #18) |
+| 2 | [`SYSTEM_CONTEXT_DIAGRAM.md`](SYSTEM_CONTEXT_DIAGRAM.md) | System context + pin/check sequence (mermaid); trust boundary; `conclave` as dev-time reviewer only; composite GitHub Action as consumer delivery vehicle |
 | 3 | [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md) | This file |
+
+## GitHub Action (`action.yml` — Issue #18)
+
+The composite reusable action is the primary delivery vehicle for the `check` gate.
+Consumers pin `ernestprovo23/mcp-warden@<tag>` and get a zero-copy-paste integrity
+gate with hash-locked supply-chain, SARIF upload, and cross-OS support.
+
+| Artifact | Purpose |
+|----------|---------|
+| [`action.yml`](action.yml) | Composite action definition — inputs, outputs, injection guard, hash-locked install, exit-code contract |
+| [`action/build-requirements.lock`](action/build-requirements.lock) | Hash-locked build backend (hatchling + deps) — regenerate with `pip-compile --generate-hashes` on each release |
+| [`action/requirements.lock`](action/requirements.lock) | Hash-locked mcp-warden runtime closure — regenerate with `pip-compile --generate-hashes` on each release |
+| [`.github/workflows/action-test.yml`](.github/workflows/action-test.yml) | OS-matrix self-test (ubuntu/macos/windows) + dedicated SARIF-upload job |
+| [`tests/test_action_yml.py`](tests/test_action_yml.py) | Structural pytest: composite kind, SHA-pinned `uses:`, version comments, exit-code propagation step, `shell: bash` on every run step |
 
 ## Security contract (`docs/` — source of truth, do not duplicate)
 

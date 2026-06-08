@@ -1,0 +1,263 @@
+name: "mcp-warden check"
+description: >-
+  CI-first MCP supply-chain integrity gate. Re-captures a server's declared
+  tool/resource/prompt surface and fails if it has drifted from the committed
+  baseline (warden.lock). Emits a SARIF report and optionally uploads it to
+  GitHub code scanning.
+
+  Required permissions when upload-sarif is true:
+    permissions:
+      contents: read
+      security-events: write
+
+  Set upload-sarif: false for private repos without GitHub Advanced Security /
+  code-scanning, or when running on a fork pull request (which lacks the
+  required permission by default).
+
+inputs:
+  server-cmd:
+    description: >-
+      MCP server launch command string (e.g. "node ./build/index.js" or
+      "python server.py"). Must be a plain, whitespace-separated argv string —
+      no quoted arguments and no shell metacharacters (; | & $ ` \ < > ( ) { }
+      ' ") are permitted. The guard step rejects any of these characters before
+      expansion occurs.
+    required: true
+
+  lock:
+    description: "Path to the baseline lock file (relative to working-directory)."
+    required: false
+    default: "warden.lock"
+
+  sarif:
+    description: "Path for the SARIF output file (relative to working-directory)."
+    required: false
+    default: "mcp-warden.sarif"
+
+  upload-sarif:
+    description: >-
+      Upload the SARIF report to GitHub code scanning. Set false for repos
+      without GitHub Advanced Security or when security-events: write permission
+      is unavailable (e.g. fork pull requests).
+    required: false
+    default: "true"
+
+  category:
+    description: >-
+      Code-scanning category label. Use a distinct value per server when
+      running mcp-warden against multiple servers in one repo.
+    required: false
+    default: "mcp-warden"
+
+  python-version:
+    description: "Python version to use. Must be >= 3.11."
+    required: false
+    default: "3.11"
+
+  timeout:
+    description: "Capture timeout in seconds passed to mcp-warden check --timeout."
+    required: false
+    default: "30"
+
+  working-directory:
+    description: "Working directory for all steps. Defaults to the repo root."
+    required: false
+    default: "."
+
+outputs:
+  exit-code:
+    description: >-
+      Raw exit code from mcp-warden check: 0 = clean, 1 = drift detected,
+      2 = error (capture/IO failure). Use this in downstream conditional steps.
+    value: ${{ steps.propagate.outputs.exit-code }}
+
+  sarif:
+    description: "Resolved absolute path to the written SARIF file (empty if check exited 2 before writing)."
+    value: ${{ steps.sarif-path.outputs.sarif }}
+
+runs:
+  using: "composite"
+  steps:
+    # ------------------------------------------------------------------
+    # Step 1 — Injection guard
+    # Reject server-cmd values containing shell metacharacters or newlines
+    # before any expansion occurs. This is a proportionate control: the
+    # input is set by the workflow author (not an external actor in most
+    # cases), but fork-PR / context-injection risks are real.
+    #
+    # server-cmd is a whitespace-separated argv string — no quoted arguments
+    # and no shell metacharacters are supported. Single-quote (') and
+    # double-quote (") are also rejected: the shell would re-tokenize them
+    # after the injection guard's unit-validation, undermining the check.
+    # ------------------------------------------------------------------
+    - name: "Validate server-cmd (injection guard)"
+      shell: bash
+      env:
+        INPUT_SERVER_CMD: ${{ inputs.server-cmd }}
+      run: |
+        # Reject server-cmd containing shell metacharacters or newlines.
+        # Uses bash `case` glob patterns only — pure POSIX, no regex, no external
+        # grep call; works identically on ubuntu / macos / windows (git-bash).
+        #
+        # Character list checked: ; | & $ ` \ < > ( ) { } ' " and embedded newlines.
+        _bad=0
+        case "$INPUT_SERVER_CMD" in
+          *";"*)         _bad=1 ;;
+          *"|"*)         _bad=1 ;;
+          *"&"*)         _bad=1 ;;
+          *'$'*)         _bad=1 ;;
+          *'`'*)         _bad=1 ;;
+          *"\\"*)        _bad=1 ;;
+          *"<"*)         _bad=1 ;;
+          *">"*)         _bad=1 ;;
+          *"("*)         _bad=1 ;;
+          *")"*)         _bad=1 ;;
+          *"{"*)         _bad=1 ;;
+          *"}"*)         _bad=1 ;;
+          *"'"*)         _bad=1 ;;
+          *'"'*)         _bad=1 ;;
+          *$'\n'*)       _bad=1 ;;
+        esac
+        if [ "$_bad" -eq 1 ]; then
+          echo "::error::mcp-warden: server-cmd contains a shell metacharacter (; | & \$ \` \\ < > ( ) { } ' \") or newline. Provide a plain whitespace-separated argv string (no quoted arguments, no metacharacters)." >&2
+          exit 1
+        fi
+
+    # ------------------------------------------------------------------
+    # Step 2 — Python setup
+    # actions/setup-python v5.6.0 pinned to full 40-char commit SHA.
+    # ------------------------------------------------------------------
+    - name: "Set up Python ${{ inputs.python-version }}"
+      uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+      with:
+        python-version: ${{ inputs.python-version }}
+
+    # ------------------------------------------------------------------
+    # Step 3 — Hash-locked dependency install
+    # Install order:
+    #   a) Build backend (hatchling + deps) — required for --no-build-isolation
+    #   b) Runtime deps (full closure) — all pinned with --require-hashes
+    #   c) mcp-warden itself — --no-deps --no-build-isolation so the exact
+    #      @ref the consumer pinned is installed, no transitive surprises.
+    #
+    # On Windows: github.action_path is a Windows path; normalize with
+    # cygpath -u before passing to pip. On Linux/macOS it is already POSIX.
+    # ------------------------------------------------------------------
+    - name: "Install hash-locked dependencies + mcp-warden"
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        # Normalize path on Windows (git-bash provides cygpath)
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          ACTION_PATH_POSIX=$(cygpath -u "$ACTION_PATH")
+        else
+          ACTION_PATH_POSIX="$ACTION_PATH"
+        fi
+
+        python -m pip install --require-hashes -r "$ACTION_PATH_POSIX/action/build-requirements.lock"
+        python -m pip install --require-hashes -r "$ACTION_PATH_POSIX/action/requirements.lock"
+        python -m pip install --no-deps --no-build-isolation "$ACTION_PATH_POSIX"
+
+    # ------------------------------------------------------------------
+    # Step 4 — Run mcp-warden check
+    # Uses `python -m mcp_warden.cli check` (not the console script) to
+    # avoid PATH-shadowing issues across OSes.
+    #
+    # server-cmd word-split: `read -ra CMD_ARRAY` splits $INPUT_SERVER_CMD
+    # on IFS whitespace into a bash array, then "${CMD_ARRAY[@]}" expands
+    # each token as a separate argv element — no shell re-tokenization of
+    # the already-validated string.  Single/double quotes are already
+    # blocked by the injection guard above so no quoted-argument edge cases
+    # can reach this expansion.
+    #
+    # Exit-code contract: set +e captures the code without aborting; we
+    # emit it as a step output; the final step raises it verbatim so the
+    # runner sees 0/1/2 and the step outcome (success/failure) is correct.
+    # SARIF is written before the drift exit (per CLI contract), so the
+    # upload step between capture and final exit always finds the file on
+    # exit 1.
+    # ------------------------------------------------------------------
+    - name: "Run mcp-warden check"
+      id: check
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        INPUT_SERVER_CMD: ${{ inputs.server-cmd }}
+        INPUT_LOCK: ${{ inputs.lock }}
+        INPUT_SARIF: ${{ inputs.sarif }}
+        INPUT_TIMEOUT: ${{ inputs.timeout }}
+      run: |
+        # Parse server-cmd into a bash array to avoid word-splitting issues
+        # (injection guard above already vetted the string as a unit).
+        read -ra CMD_ARRAY <<< "$INPUT_SERVER_CMD"
+        set +e
+        python -m mcp_warden.cli check "${CMD_ARRAY[@]}" \
+          --lock "$INPUT_LOCK" \
+          --sarif "$INPUT_SARIF" \
+          --timeout "$INPUT_TIMEOUT"
+        code=$?
+        set -e
+        [ -n "$GITHUB_OUTPUT" ] || { echo "GITHUB_OUTPUT unset" >&2; exit 2; }
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+
+    # ------------------------------------------------------------------
+    # Step 5 — Resolve SARIF absolute path + existence guard
+    # realpath resolves the path relative to working-directory so the
+    # upload step always receives an absolute path regardless of runner OS
+    # or nested repo layout. The existence flag gates the upload step.
+    # ------------------------------------------------------------------
+    - name: "Resolve SARIF path"
+      id: sarif-path
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        INPUT_SARIF: ${{ inputs.sarif }}
+      run: |
+        if [ -f "$INPUT_SARIF" ]; then
+          abs=$(realpath "$INPUT_SARIF")
+          echo "sarif=$abs" >> "$GITHUB_OUTPUT"
+          echo "exists=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "sarif=" >> "$GITHUB_OUTPUT"
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    # ------------------------------------------------------------------
+    # Step 6 — Upload SARIF to GitHub code scanning (optional)
+    # Gated on: upload-sarif == 'true' AND the file actually exists.
+    # Runs AFTER check and BEFORE the final exit so drift findings are
+    # visible in code scanning even when the step exits 1.
+    #
+    # continue-on-error removed: the emitter now emits physicalLocation so
+    # GitHub Code Scanning will accept the SARIF. Genuine upload failures
+    # (missing GHAS, wrong permissions) are now surfaced as step failures
+    # rather than swallowed.  Set upload-sarif: false for repos without
+    # code-scanning or on fork PRs lacking security-events: write.
+    #
+    # github/codeql-action/upload-sarif v3.36.2 pinned to full commit SHA.
+    # ------------------------------------------------------------------
+    - name: "Upload SARIF to GitHub code scanning"
+      id: sarif-upload
+      if: inputs.upload-sarif == 'true' && steps.sarif-path.outputs.exists == 'true'
+      uses: github/codeql-action/upload-sarif@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.36.2
+      with:
+        sarif_file: ${{ steps.sarif-path.outputs.sarif }}
+        category: ${{ inputs.category }}
+
+    # ------------------------------------------------------------------
+    # Step 7 — Propagate exit code
+    # Always fires (no `if:` guard). Re-raises the captured exit code so
+    # the composite step's outcome matches the check result verbatim.
+    # The `exit-code` output is also surfaced here for downstream steps.
+    # ------------------------------------------------------------------
+    - name: "Propagate mcp-warden exit code"
+      id: propagate
+      if: always()
+      shell: bash
+      env:
+        WARDEN_EXIT_CODE: ${{ steps.check.outputs.exit-code }}
+      run: |
+        code="${WARDEN_EXIT_CODE:-2}"
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        exit "$code"

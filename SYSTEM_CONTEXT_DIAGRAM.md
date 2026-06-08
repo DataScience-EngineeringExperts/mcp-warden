@@ -21,6 +21,12 @@ logic) plus a separate informational provenance section. It never prints raw
 > is a **dev-time design reviewer** that shaped this contract. It is **NOT** a
 > runtime dependency and is never invoked by `pin`/`check`/`policy`.
 
+> **`action.yml` (Issue #18)** is the primary consumer delivery vehicle for the `check`
+> gate. Consumers pin `ernestprovo23/mcp-warden@<tag>` in their workflow; the composite
+> action wraps the C2 sequence (steps 1–5 of the pin/check sequence above) behind a
+> single `uses:` step with hash-locked supply-chain, injection guard, SARIF upload, and
+> cross-OS support. See `action/requirements.lock` and `README.md` §GitHub Action.
+
 ---
 
 ## C1 — System context

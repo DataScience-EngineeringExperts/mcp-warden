@@ -42,7 +42,10 @@ def _result_from_finding(f: Finding) -> dict[str, Any]:
         "level": severity_to_level(f.severity),
         "message": {"text": f"{f.message} [{f.snippet}]"},
         "locations": [
-            {"logicalLocations": [{"fullyQualifiedName": f.target, "kind": "resource"}]}
+            {
+                "physicalLocation": {"artifactLocation": {"uri": "warden.lock"}},
+                "logicalLocations": [{"fullyQualifiedName": f.target, "kind": "resource"}],
+            }
         ],
         "properties": {"severity": f.severity, "target": f.target},
     }
@@ -69,7 +72,10 @@ def _result_from_drift(d: DriftItem) -> dict[str, Any]:
         "level": severity_to_level(d.severity),
         "message": {"text": d.message},
         "locations": [
-            {"logicalLocations": [{"fullyQualifiedName": d.target, "kind": "resource"}]}
+            {
+                "physicalLocation": {"artifactLocation": {"uri": "warden.lock"}},
+                "logicalLocations": [{"fullyQualifiedName": d.target, "kind": "resource"}],
+            }
         ],
         "properties": properties,
     }

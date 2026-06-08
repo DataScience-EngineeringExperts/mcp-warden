@@ -128,6 +128,33 @@ precision with allowlists/anchoring, not by dropping coverage.
 
 ---
 
+## Regenerating the action lockfiles
+
+The composite action installs hash-locked dependencies from two lock files:
+
+- `action/build-requirements.lock` — hatchling + build backend (installed first)
+- `action/requirements.lock` — full runtime dep closure
+
+Both are generated with `uv pip compile` and must be regenerated whenever
+`pyproject.toml` dependencies change or a lockfile refresh is needed as part
+of a release. The exact command is printed at the top of each lockfile and
+reproduced here for convenience:
+
+```bash
+# From the repo root — requires uv
+uv pip compile --universal --generate-hashes pyproject.toml \
+    -o action/requirements.lock
+
+uv pip compile --universal --generate-hashes action/build-requirements.in \
+    -o action/build-requirements.lock
+```
+
+Lockfile regeneration is a **release gate** — any PR that changes runtime deps
+must include updated lockfiles. CI will reject installs whose hashes no longer
+match (`pip install --require-hashes` fails on hash mismatch).
+
+---
+
 ## Pull request expectations
 
 Before you open a PR, confirm:

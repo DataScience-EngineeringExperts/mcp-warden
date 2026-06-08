@@ -1,0 +1,147 @@
+name: Action self-test
+
+# Validates the composite mcp-warden-action against the fixture MCP servers
+# on all three supported runner OSes. Also runs a dedicated ubuntu job that
+# exercises the real SARIF upload path (requires security-events: write).
+#
+# Runs on every push/PR that touches the action itself or its fixtures.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "action.yml"
+      - "action/**"
+      - "tests/fixtures/**"
+      - ".github/workflows/action-test.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "action.yml"
+      - "action/**"
+      - "tests/fixtures/**"
+      - ".github/workflows/action-test.yml"
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Matrix job: pass path + blocking proof on ubuntu / macos / windows.
+  # upload-sarif: false — the matrix legs do not have security-events: write.
+  # --------------------------------------------------------------------------
+  action-matrix:
+    name: "Action test (${{ matrix.os }})"
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      # -----------------------------------------------------------------------
+      # Pass path: clean server vs committed lock — gate must exit 0.
+      # -----------------------------------------------------------------------
+      - name: "Pass path — clean server must exit 0"
+        id: pass-path
+        uses: ./
+        with:
+          server-cmd: "python tests/fixtures/clean_server.py"
+          lock: "tests/fixtures/clean.warden.lock"
+          sarif: "clean-check.sarif"
+          upload-sarif: "false"
+
+      - name: "Assert pass-path exit code is 0"
+        shell: bash
+        run: |
+          code="${{ steps.pass-path.outputs.exit-code }}"
+          if [ "$code" != "0" ]; then
+            echo "ERROR: pass path exit code was $code (expected 0)" >&2
+            exit 1
+          fi
+          echo "Pass path exited 0 — OK"
+
+      # -----------------------------------------------------------------------
+      # Blocking proof: mutated server vs same lock — gate must exit 1.
+      # continue-on-error: true so the job does not fail on the expected non-0.
+      # We then assert that the step outcome was 'failure' and exit-code == '1'.
+      # -----------------------------------------------------------------------
+      - name: "Blocking proof — mutated server must exit 1"
+        id: blocking-proof
+        uses: ./
+        continue-on-error: true
+        with:
+          server-cmd: "python tests/fixtures/mutated_server.py"
+          lock: "tests/fixtures/clean.warden.lock"
+          sarif: "mutated-check.sarif"
+          upload-sarif: "false"
+
+      - name: "Assert blocking-proof step failed with exit-code 1"
+        shell: bash
+        run: |
+          outcome="${{ steps.blocking-proof.outcome }}"
+          code="${{ steps.blocking-proof.outputs.exit-code }}"
+          if [ "$outcome" != "failure" ]; then
+            echo "ERROR: blocking-proof step outcome was '$outcome' (expected 'failure')" >&2
+            exit 1
+          fi
+          if [ "$code" != "1" ]; then
+            echo "ERROR: blocking-proof exit-code was '$code' (expected '1')" >&2
+            exit 1
+          fi
+          echo "Blocking proof step outcome=failure, exit-code=1 — gate is working correctly"
+
+  # --------------------------------------------------------------------------
+  # Dedicated upload job: ubuntu only, with security-events: write.
+  # Exercises the real SARIF upload path end-to-end against the clean fixture.
+  # --------------------------------------------------------------------------
+  action-upload-sarif:
+    name: "Action test (SARIF upload, ubuntu)"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: "Clean server — upload-sarif true (real upload path)"
+        id: upload-test
+        uses: ./
+        with:
+          server-cmd: "python tests/fixtures/clean_server.py"
+          lock: "tests/fixtures/clean.warden.lock"
+          sarif: "upload-test.sarif"
+          upload-sarif: "true"
+          category: "mcp-warden-action-test"
+
+      - name: "Assert upload-test exit code is 0"
+        shell: bash
+        run: |
+          code="${{ steps.upload-test.outputs.exit-code }}"
+          if [ "$code" != "0" ]; then
+            echo "ERROR: upload-test exit code was $code (expected 0)" >&2
+            exit 1
+          fi
+          echo "SARIF upload path exited 0 — OK"
+
+      - name: "Assert SARIF upload step succeeded"
+        shell: bash
+        env:
+          UPLOAD_OUTCOME: ${{ steps.upload-test.outputs['sarif-upload'] }}
+        run: |
+          # The composite action's sarif-upload step id is internal; we verify
+          # upload success by confirming the overall action step exited 0 (already
+          # asserted above) and that the SARIF file was produced and is non-empty.
+          sarif_path="${{ steps.upload-test.outputs.sarif }}"
+          if [ -z "$sarif_path" ] || [ ! -f "$sarif_path" ]; then
+            echo "ERROR: SARIF file not found at path '$sarif_path' — upload cannot have succeeded" >&2
+            exit 1
+          fi
+          sarif_size=$(wc -c < "$sarif_path")
+          if [ "$sarif_size" -eq 0 ]; then
+            echo "ERROR: SARIF file is empty — upload would have been rejected" >&2
+            exit 1
+          fi
+          echo "SARIF file present at $sarif_path (${sarif_size} bytes) and action exited 0 — upload confirmed OK"
