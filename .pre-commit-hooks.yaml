@@ -1,0 +1,27 @@
+# mcp-warden pre-commit hook definition (issue #22).
+#
+# Consumers reference this from their own .pre-commit-config.yaml and supply
+# their MCP server launch command via `args:` after a `--` separator. See the
+# "pre-commit hook" section of README.md for a copy-pasteable example.
+- id: mcp-warden-check
+  name: mcp-warden MCP integrity gate
+  description: Re-capture the MCP server surface and fail on drift vs warden.lock.
+  entry: mcp-warden-precommit
+  language: python
+  # The check consumes an MCP *server launch argv*, not the list of staged
+  # files. pre-commit would otherwise append staged filenames to the hook's
+  # argv and corrupt the server command, so filename passing is disabled.
+  pass_filenames: false
+  # A security gate must never silently skip. always_run fires the hook on
+  # every commit regardless of which files changed (adopters who find a
+  # per-commit server spawn too slow can move it to `stages: [pre-push]` or use
+  # `files:` in their own config — see README).
+  always_run: true
+  # Spawning an MCP server child process is not safe to parallelize across hook
+  # invocations (port/stdio contention, shared timeouts). require_serial keeps
+  # this hook from running concurrently with other serial hooks. Note: this
+  # serializes the hook relative to OTHER serial hooks; it does not serialize
+  # the internal capture pipeline.
+  require_serial: true
+  stages: [pre-commit]
+  minimum_pre_commit_version: "3.2.0"

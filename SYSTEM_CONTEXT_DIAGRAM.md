@@ -27,6 +27,14 @@ logic) plus a separate informational provenance section. It never prints raw
 > single `uses:` step with hash-locked supply-chain, injection guard, SARIF upload, and
 > cross-OS support. See `action/requirements.lock` and `README.md` §GitHub Action.
 
+> **`.pre-commit-hooks.yaml` (Issue #22)** is the **local pre-CI gate** delivery vehicle.
+> The `mcp-warden-precommit` wrapper runs the SAME `check` verdict via `check_core.run_check`
+> (read_lock→capture→build_lock(in-memory)→compute_drift) so a local hook and CI can never
+> disagree on drift. It is check-only: it never pins, never writes `warden.lock`. Drift always
+> exits 1 in both modes; a *locally* unspawnable server is non-blocking by default (exit 0 +
+> warning) and fail-closed under `--strict` (exit 2) — CI stays strict. The wrapper normalizes
+> cwd to the git repo root before capturing. See `README.md` §pre-commit hook.
+
 ---
 
 ## C1 — System context

@@ -25,11 +25,11 @@ from rich.console import Console
 from rich.table import Table
 
 from .capture import CaptureError, capture_surface_sync
+from .check_core import run_check_full
 from .checks import run_checks
 from .cli_diff import register as register_diff_command
 from .cli_guard import register as register_guard_commands
 from .cli_lock import register as register_lock_commands
-from .drift import compute_drift
 from .emitters import build_sarif, findings_to_jsonl, sarif_to_json
 from .lockfile import (
     DEFAULT_LOCK_NAME,
@@ -121,20 +121,18 @@ def check(
     command, args = _split_server_cmd(server_cmd)
 
     try:
-        baseline = read_lock(lock)
+        # Single source of truth shared with the pre-commit wrapper (precommit.py)
+        # so a local hook and CI can never disagree on a drift verdict.
+        result = run_check_full(command, args, lock, timeout_s=timeout)
     except (FileNotFoundError, ValueError) as exc:
         err_console.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(code=2) from exc
-
-    try:
-        surface = capture_surface_sync(command, args, timeout_s=timeout)
     except CaptureError as exc:
         err_console.print(f"[red]capture failed:[/red] {exc}")
         raise typer.Exit(code=2) from exc
 
-    findings = run_checks(surface)
-    current = build_lock(surface, findings)
-    drift = compute_drift(baseline, current)
+    findings = result.findings
+    drift = result.drift
 
     if sarif is not None:
         sarif.write_text(sarif_to_json(build_sarif(findings, drift)), encoding="utf-8")

@@ -200,6 +200,66 @@ reviews and approves the new surface.
 
 ---
 
+## pre-commit hook — the local pre-CI gate
+
+mcp-warden ships a [pre-commit](https://pre-commit.com) hook so the *same* drift
+verdict runs locally on every commit, catching a rug-pulled MCP surface before it
+ever reaches CI. The hook reuses the identical capture → checks → drift path as
+`mcp-warden check`, so a local pass/fail can never disagree with CI.
+
+Add this to your `.pre-commit-config.yaml` (a complete, copy-pasteable example):
+
+```yaml
+repos:
+  - repo: https://github.com/ernestprovo23/mcp-warden
+    rev: v0.3.0                       # pin to a release tag (supply-chain hygiene)
+    hooks:
+      - id: mcp-warden-check
+        # Everything after `--` is your MCP server launch argv.
+        # The `--lock` path is resolved relative to your git repo root.
+        args: [--lock, warden.lock, --, node, ./build/index.js]
+```
+
+Then `pre-commit install` once. The hook will re-capture your server's surface on
+every commit and **block the commit on drift** (exit 1) until you review and re-pin.
+
+### The `--` separator (required)
+
+pre-commit is file-triggered, but `mcp-warden check` takes an **MCP server launch
+argv**, not staged files (the hook sets `pass_filenames: false`). You tell the hook
+where your server command begins with the `--` separator: everything after `--` is
+launched as the server. Without it the hook exits 2 with guidance.
+
+### Behavior (clean / drift / server-unavailable)
+
+| Situation | Default (non-strict) | `--strict` |
+|-----------|----------------------|------------|
+| Surface matches `warden.lock` | exit 0 (commit proceeds) | exit 0 |
+| **Drift** vs `warden.lock` | **exit 1 (commit blocked)** | **exit 1 (commit blocked)** |
+| `warden.lock` missing / invalid | exit 2 (commit blocked) | exit 2 |
+| Server can't spawn / times out | **exit 0 + stderr WARNING (commit proceeds)** | exit 2 (commit blocked) |
+
+The default tolerates a *locally* unspawnable server (a teammate without the right
+runtime installed should not be blocked from committing) — **drift always blocks in
+both modes**, only infra-failure handling differs. CI stays strict (it can always
+spawn the server), so the drift verdict is identical everywhere. Add `--strict` to
+`args:` to fail closed locally too.
+
+### Opt-outs for slow servers
+
+Spawning the server on every commit adds latency. Teams that find this too slow can
+run the gate only on push:
+
+```yaml
+      - id: mcp-warden-check
+        stages: [pre-push]            # run on `git push`, not every commit
+        args: [--lock, warden.lock, --, node, ./build/index.js]
+```
+
+…or skip it ad-hoc for a single commit with `SKIP=mcp-warden-check git commit ...`.
+
+---
+
 ## CLI reference
 
 | Command | Purpose | Exit code |
@@ -212,6 +272,7 @@ reviews and approves the new surface.
 | `mcp-warden inspect <trace.jsonl> [--lock F] [--sarif F]` | **(v0.2)** Offline analyzer over a recorded JSON-RPC session — same `WRD-RES-*` catalog as `guard` (always report-only) | non-zero on any BLOCK-tier finding; 2 on read error |
 | `mcp-warden lock rotate <lock> [--approver ID] [--actor ID] [--note T] [--json]` | **(v0.3)** Re-attest provenance on an existing baseline without re-capturing the surface; `overall_digest` stays **byte-identical** (WARDEN_LOCK_SCHEMA §8.2). Fails closed on a tampered/inconsistent lock | 0 on success, 2 on missing/invalid/tampered lock |
 | `mcp-warden diff <lock-a> <lock-b> [--json] [--sarif F] [--no-provenance] [--exit-code]` | **(v0.3)** Offline, **redacted** viewer over the drift engine: renders integrity drift between two existing locks (A=baseline, B=current) + a separate informational provenance section. Never re-captures and never prints raw `server.command`/`args` (secret-safe) | 0 (viewer); with `--exit-code`, 1 on **integrity** drift only; 2 on missing/invalid lock |
+| `mcp-warden-precommit [--lock F] [--timeout N] [--strict] -- <server-cmd...>` | **(v0.3)** pre-commit hook entry point (see [pre-commit hook](#pre-commit-hook--the-local-pre-ci-gate)). Runs the same check verdict path; check-only (never pins, never writes the lock) | 0 clean / **1 drift** / 2 config error; server-unavailable → 0+warning (non-strict) or 2 (`--strict`) |
 
 `<server-cmd...>` is passed to the OS as an **argv array, never through a shell.**
 Set `WARDEN_LOG_LEVEL=INFO` for diagnostic logging.

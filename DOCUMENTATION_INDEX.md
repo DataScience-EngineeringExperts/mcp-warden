@@ -10,8 +10,8 @@ describe and visualize the implementation that satisfies that contract.
 
 | # | Doc | Purpose |
 |---|-----|---------|
-| 1 | [`README.md`](README.md) | Project overview, install, the pin/check CI demo, CLI reference (incl. v0.3 `lock rotate` + redacted offline `diff` viewer), GitHub Action usage section (Issue #18) |
-| 2 | [`SYSTEM_CONTEXT_DIAGRAM.md`](SYSTEM_CONTEXT_DIAGRAM.md) | System context + pin/check sequence (mermaid); trust boundary; `conclave` as dev-time reviewer only; composite GitHub Action as consumer delivery vehicle |
+| 1 | [`README.md`](README.md) | Project overview, install, the pin/check CI demo, CLI reference (incl. v0.3 `lock rotate` + redacted offline `diff` viewer), GitHub Action usage section (Issue #18), **pre-commit hook section (Issue #22)** |
+| 2 | [`SYSTEM_CONTEXT_DIAGRAM.md`](SYSTEM_CONTEXT_DIAGRAM.md) | System context + pin/check sequence (mermaid); trust boundary; `conclave` as dev-time reviewer only; composite GitHub Action + **pre-commit hook** as consumer delivery vehicles |
 | 3 | [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md) | This file |
 
 ## GitHub Action (`action.yml` — Issue #18)
@@ -27,6 +27,18 @@ gate with hash-locked supply-chain, SARIF upload, and cross-OS support.
 | [`action/requirements.lock`](action/requirements.lock) | Hash-locked mcp-warden runtime closure — regenerate with `pip-compile --generate-hashes` on each release |
 | [`.github/workflows/action-test.yml`](.github/workflows/action-test.yml) | OS-matrix self-test (ubuntu/macos/windows) + dedicated SARIF-upload job |
 | [`tests/test_action_yml.py`](tests/test_action_yml.py) | Structural pytest: composite kind, SHA-pinned `uses:`, version comments, exit-code propagation step, `shell: bash` on every run step |
+
+## pre-commit hook (`.pre-commit-hooks.yaml` — Issue #22)
+
+The local pre-CI gate: runs the same `check` verdict path on every commit so drift
+is caught before it reaches CI. A local hook and CI can never disagree on a drift
+verdict because both call the shared `check_core.run_check` sequence.
+
+| Artifact | Purpose |
+|----------|---------|
+| [`.pre-commit-hooks.yaml`](.pre-commit-hooks.yaml) | Hook definition (`id: mcp-warden-check`, `pass_filenames: false`, `always_run`, `require_serial`) consumers reference from their `.pre-commit-config.yaml` |
+| [`src/mcp_warden/precommit.py`](src/mcp_warden/precommit.py) | Wrapper entry point (`mcp-warden-precommit`): `--` server-argv contract, cwd-normalization to git root, non-strict-vs-`--strict` server-unavailability handling; check-only (never writes the lock) |
+| [`tests/test_precommit.py`](tests/test_precommit.py) | arg parsing, empty-cmd guidance, clean/drift exit codes, server-unavailable (non-strict 0 / strict 2), cwd normalization, lock write-protection (runtime spy + static import check), `.pre-commit-hooks.yaml` invariants |
 
 ## Security contract (`docs/` — source of truth, do not duplicate)
 
@@ -67,6 +79,7 @@ gate with hash-locked supply-chain, SARIF upload, and cross-OS support.
 | `src/mcp_warden/capture.py` | MCP stdio capture client (argv array, no shell; timeouts/errors) | THREAT_MODEL §3.3 / WARDEN_LOCK_SCHEMA §4.1 |
 | `src/mcp_warden/models.py` | Pydantic models for captured surface + lock (incl. `Pinner`/`Attestation` provenance) | WARDEN_LOCK_SCHEMA §2–§8 |
 | `src/mcp_warden/lockfile.py` | Lock builder + reader/writer + overall digest | WARDEN_LOCK_SCHEMA §5–§6, §9 |
+| `src/mcp_warden/check_core.py` | **(#22)** Shared check verdict core (`run_check` / `run_check_full`): read_lock→capture→checks→build_lock(in-memory)→compute_drift. Single source of truth for `cli.py:check` AND the pre-commit wrapper | WARDEN_LOCK_SCHEMA §6.2 |
 | `src/mcp_warden/provenance.py` | Out-of-digest provenance construction + `rotate_provenance` (pure; note-cap fail-closed) | WARDEN_LOCK_SCHEMA §8.1–§8.2 |
 | `src/mcp_warden/drift.py` | Per-class drift/diff engine + severities | WARDEN_LOCK_SCHEMA §6.2 |
 | `src/mcp_warden/schema_diff.py` | Deterministic structural `inputSchema` skeleton extractor + per-fact diff classifier (`WRD-DRIFT-SCHEMA-*`; `$ref`/cyclic/malformed-safe) | WARDEN_LOCK_SCHEMA §5.1, §6.2 |
@@ -89,7 +102,8 @@ gate with hash-locked supply-chain, SARIF upload, and cross-OS support.
 | `src/mcp_warden/wire_block.py` | **(v0.2/v0.3)** on-wire block synthesis: `-32001` error-response + redacted-content (`_meta.warden.modified`); **v0.3** `-32002` `transport_error` | GUARD_PROXY §7 · V3 §2.6 |
 | `src/mcp_warden/inspector.py` | **(v0.2)** offline JSONL analyzer over recorded sessions (same catalog) | GUARD_PROXY §3 |
 | `src/mcp_warden/emit_res.py` | **(v0.2)** SARIF 2.1.0 + JSONL emitters for `ResultFinding` (action/direction/tier) | GUARD_PROXY §10 |
-| `src/mcp_warden/cli.py` · `cli_guard.py` · `cli_lock.py` · `cli_diff.py` | `typer` CLI (`pin`/`check`/`policy`/`guard`/`inspect`/`lock rotate`/`diff`), exit codes; `guard`/`inspect` bodies in `cli_guard`, `lock rotate` + integrity gate in `cli_lock`, **(v0.3) `diff` redacted offline lock viewer (`SAFE_PROVENANCE_FIELDS` allowlist, never reads `server.command`/`args`)** in `cli_diff` | all |
+| `src/mcp_warden/cli.py` · `cli_guard.py` · `cli_lock.py` · `cli_diff.py` | `typer` CLI (`pin`/`check`/`policy`/`guard`/`inspect`/`lock rotate`/`diff`), exit codes; **`check` delegates its verdict to `check_core.run_check_full` (#22)**; `guard`/`inspect` bodies in `cli_guard`, `lock rotate` + integrity gate in `cli_lock`, **(v0.3) `diff` redacted offline lock viewer (`SAFE_PROVENANCE_FIELDS` allowlist, never reads `server.command`/`args`)** in `cli_diff` | all |
+| `src/mcp_warden/precommit.py` | **(#22)** `mcp-warden-precommit` pre-commit entry point — wraps `check_core.run_check`; check-only (never imports `pin`/lock-writer, never opens the lock for write) | README pre-commit section |
 
 ## Tests
 

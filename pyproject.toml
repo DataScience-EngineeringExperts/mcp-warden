@@ -27,6 +27,7 @@ dev = [
 
 [project.scripts]
 mcp-warden = "mcp_warden.cli:app"
+mcp-warden-precommit = "mcp_warden.precommit:main"
 
 [build-system]
 requires = ["hatchling"]
