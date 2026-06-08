@@ -9,5 +9,10 @@ on runtime tool behavior or tool results. See ``docs/THREAT_MODEL.md``.
 
 __version__ = "0.3.0"
 SCHEMA_VERSION = 2
+#: Provenance-block version (#19). Lives INSIDE the ``pin`` block, OUTSIDE the
+#: ``overall_digest`` payload, so it can evolve for #16/#23 without changing any
+#: server's digest. Deliberately distinct from ``SCHEMA_VERSION`` (which is in
+#: the digest payload — bumping that would falsely trip drift on v2 baselines).
+PROVENANCE_VERSION = 1
 
-__all__ = ["__version__", "SCHEMA_VERSION"]
+__all__ = ["__version__", "SCHEMA_VERSION", "PROVENANCE_VERSION"]

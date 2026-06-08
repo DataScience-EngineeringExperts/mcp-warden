@@ -5,7 +5,13 @@ from __future__ import annotations
 import json
 
 from mcp_warden.lockfile import build_lock, lock_to_pretty_json, read_lock, write_lock
-from mcp_warden.models import CapturedSurface, CapturedTool, Finding
+from mcp_warden.models import (
+    Attestation,
+    CapturedSurface,
+    CapturedTool,
+    Finding,
+    Pinner,
+)
 
 
 def _surface():
@@ -56,6 +62,90 @@ def test_approve_binds_digest():
     assert lock.pin.approved is True
     assert lock.pin.approver == "ci-bot@example.invalid"
     assert lock.pin.approved_digest == lock.overall_digest
+
+
+def test_provenance_fields_excluded_from_overall_digest():
+    """Invariant 1 (#19): mutating EVERY new provenance field leaves overall_digest
+    byte-identical, incl. a simulated future out-of-digest field (cross-version)."""
+    lock = build_lock(_surface(), [])
+    original_digest = lock.overall_digest
+
+    # Mutate every #19 provenance field on the pin block.
+    lock.pin.provenance_version = 99
+    lock.pin.pinner = Pinner(tool="other", tool_version="9.9.9", actor="someone", environment="ci")
+    lock.pin.attestations = [
+        Attestation(
+            actor="a@b.invalid",
+            role="approver",
+            method="manual",
+            created_at="2026-01-01T00:00:00Z",
+            bound_digest=original_digest,
+            note="hand-mutated",
+        )
+    ]
+    lock.pin.rotated_at = "2026-01-02T00:00:00Z"
+    lock.pin.rotation_count = 7
+
+    # overall_digest is NOT recomputed from the pin block; it must be unchanged.
+    assert lock.overall_digest == original_digest
+
+    # Cross-version: a #16/#23 reader/writer that drops an extra out-of-digest
+    # provenance field into the serialized pin must not perturb overall_digest.
+    data = lock.model_dump(mode="json")
+    data["pin"]["future_signature"] = {"alg": "ed25519", "sig": "deadbeef"}
+    reloaded = type(lock).model_validate(data)  # extra="ignore" tolerates it
+    from mcp_warden.lockfile import compute_overall_digest
+
+    recomputed = compute_overall_digest(
+        reloaded.server, reloaded.tools, reloaded.resources, reloaded.prompts
+    )
+    assert recomputed == original_digest
+
+
+def test_approve_mirrors_single_approver_attestation():
+    """B2: --approve sets scalar approved AND appends exactly one role=approver
+    attestation whose bound_digest == overall_digest."""
+    lock = build_lock(_surface(), [], approve=True, approver="ci-bot@example.invalid")
+    assert lock.pin.approved is True
+    approver_atts = [a for a in lock.pin.attestations if a.role == "approver"]
+    assert len(approver_atts) == 1
+    assert lock.pin.attestations[-1].bound_digest == lock.overall_digest
+    assert lock.pin.attestations[-1].actor == "ci-bot@example.invalid"
+
+
+def test_unapproved_pin_has_pinner_no_attestations():
+    """A plain pin populates the pinner block but appends no attestation."""
+    lock = build_lock(_surface(), [])
+    assert lock.pin.pinner is not None
+    assert lock.pin.pinner.tool == "mcp-warden"
+    assert lock.pin.attestations == []
+    assert lock.pin.rotation_count == 0
+
+
+def test_back_compat_v2_lock_without_provenance_validates(tmp_path):
+    """A hand-written v2 lock with NO #19 provenance fields validates + round-trips;
+    `check` (drift) runs against it with no crash."""
+    s = _surface()
+    lock = build_lock(s, [])
+    data = lock.model_dump(mode="json")
+    # Strip every #19 provenance field to mimic a pre-#19 on-disk lock.
+    for key in ("provenance_version", "pinner", "attestations", "rotated_at", "rotation_count"):
+        data["pin"].pop(key, None)
+    path = tmp_path / "warden.lock"
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+
+    loaded = read_lock(path)  # must not raise; defaults apply
+    assert loaded.pin.provenance_version == 1
+    assert loaded.pin.pinner is None
+    assert loaded.pin.attestations == []
+    assert loaded.pin.rotation_count == 0
+    assert loaded.overall_digest == lock.overall_digest
+
+    # drift against the same surface is clean (no crash on missing provenance).
+    from mcp_warden.drift import compute_drift
+
+    current = build_lock(s, [])
+    assert compute_drift(loaded, current) == []
 
 
 def test_roundtrip_write_read(tmp_path):

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 # --- Raw captured surface (pre-hashing) --------------------------------------
 
@@ -160,8 +160,85 @@ class PromptEntry(BaseModel):
     entry_digest: str
 
 
+#: Hard cap on ``Attestation.note`` length (#19 folded nice-to-have). Notes are
+#: public, tamper-evident free text destined for #16's signed payload; an
+#: unbounded note is a denial-of-service / bloat surface, so build/rotate reject
+#: anything longer (fail closed).
+ATTESTATION_NOTE_MAX_LEN = 1000
+
+
+class Pinner(BaseModel):
+    """Who/what produced a pin (WARDEN_LOCK_SCHEMA.md §8.x, #19).
+
+    Stored inside the ``pin`` block, OUTSIDE ``overall_digest`` (additive, never
+    re-hashes the definition portion). ``extra="ignore"`` (B1) lets a #19-era
+    reader tolerate future #16/#23 fields without raising.
+
+    Attributes:
+        tool: The tool that produced the pin (always ``"mcp-warden"`` today).
+        tool_version: The warden version at pin time. Defaults to ``"unknown"``
+            (B5) so construction never fails when ``__version__`` is unavailable
+            (test fixtures, editable/partial builds, programmatic #16/#23 use).
+        actor: Optional human/CI principal (``--actor`` or ``WARDEN_ACTOR`` env).
+            **Self-asserted and non-authoritative** (CRIT-3) — not a trust anchor;
+            authenticated identity is #16's job.
+        environment: Best-effort ``"ci"``/``"local"``/``None``. Self-asserted,
+            non-authoritative (CRIT-3).
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    tool: str = "mcp-warden"
+    tool_version: str = "unknown"
+    actor: str | None = None
+    environment: str | None = None
+
+
+class Attestation(BaseModel):
+    """One entry in the attester set (WARDEN_LOCK_SCHEMA.md §8.x, #19).
+
+    The set holds ≤1 entry today (the mirrored approver attestation) but is a
+    list so #16 (cosign) and #23 (multi-attester) extend it without another
+    schema break. Stored OUTSIDE ``overall_digest``. ``extra="ignore"`` (B1)
+    tolerates future signature fields added by #16.
+
+    Attributes:
+        actor: Who attests (identity string). Self-asserted (CRIT-3).
+        role: ``"approver"`` | ``"pinner"`` | future roles.
+        method: ``"manual"`` today; ``"cosign-keyless"`` etc. land in #16.
+        created_at: RFC 3339 UTC timestamp of the attestation.
+        bound_digest: The ``overall_digest`` this attestation binds to,
+            **VERBATIM** — i.e. ``sha256:<64 lowercase hex>`` WITH the
+            ``sha256:`` prefix this repo stores (B4). Do NOT strip the prefix on
+            disk; #16 may strip it for Rekor/in-toto subjects at signing time.
+        note: Optional public, tamper-evident free text destined for #16's
+            signed payload. Capped at :data:`ATTESTATION_NOTE_MAX_LEN` chars;
+            build/rotate reject longer (fail closed). Never holds secrets.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    actor: str
+    role: str = "approver"
+    method: str = "manual"
+    created_at: str
+    bound_digest: str
+    note: str | None = None
+
+
 class PinMetadata(BaseModel):
-    """Pin metadata + optional approver attestation (WARDEN_LOCK_SCHEMA.md §8)."""
+    """Pin metadata + optional approver attestation (WARDEN_LOCK_SCHEMA.md §8).
+
+    The scalar ``approved``/``approver``/``approved_at``/``approved_digest``
+    fields remain the **canonical** approval record (``drift.py`` reads them).
+    The #19 additive provenance fields below are all OUTSIDE ``overall_digest``
+    and degrade gracefully on pre-#19 locks (optional with defaults). The
+    ``attestations`` list is the forward-compatible superset; the scalars are
+    the legacy projection of the approver attestation. ``extra="ignore"`` (B1)
+    keeps pre-#19 locks and future #16/#23 fields readable without error.
+    """
+
+    model_config = ConfigDict(extra="ignore")
 
     created_at: str
     warden_version: str
@@ -170,6 +247,12 @@ class PinMetadata(BaseModel):
     approver: str | None = None
     approved_at: str | None = None
     approved_digest: str | None = None
+    # --- #19 additive structured provenance (all OUTSIDE overall_digest) ---
+    provenance_version: int = 1
+    pinner: Pinner | None = None
+    attestations: list[Attestation] = Field(default_factory=list)
+    rotated_at: str | None = None
+    rotation_count: int = 0
 
 
 class WardenLock(BaseModel):

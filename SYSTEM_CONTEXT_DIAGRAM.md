@@ -8,7 +8,10 @@ reports — no proxy, no runtime interception. The **v0.2** path added a transpa
 at runtime; see C3 below. **v0.3** promotes the deterministic tier to **block by default**
 (opt-OUT per category via `--no-block-<category>`; `--audit-only` restores full shadow) and
 hardens the proxy lifecycle (cancel/progress passthrough, server-crash + client-disconnect
-teardown, reserved transport code `-32002`); see `docs/GUARD_PROXY_V3.md`.
+teardown, reserved transport code `-32002`); see `docs/GUARD_PROXY_V3.md`. **v0.3** also adds
+`lock rotate` — a lifecycle verb that re-attests an existing baseline's structured provenance
+(`pinner`/`attestations`) **without re-capturing the surface**, leaving `overall_digest`
+byte-identical and failing closed on a tampered lock (`docs/WARDEN_LOCK_SCHEMA.md` §8.1–§8.2).
 
 > `conclave` (the 4-model adversarial council referenced in `docs/THREAT_MODEL.md`)
 > is a **dev-time design reviewer** that shaped this contract. It is **NOT** a
@@ -27,7 +30,7 @@ flowchart TB
     end
 
     subgraph ci["CI pipeline (GitHub Actions / local)"]
-        warden["mcp-warden CLI\npin · check · policy"]
+        warden["mcp-warden CLI\npin · check · policy · lock rotate"]
     end
 
     subgraph target["Untrusted boundary"]

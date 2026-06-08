@@ -305,13 +305,12 @@ records *what was true at approval time*.
 
 ```jsonc
 "pin": {
-  "created_at": "2026-06-06T14:22:05Z",      // RFC 3339, UTC, second precision
-  "warden_version": "0.1.0",                  // duplicate of top-level for convenience
-  "mcp_protocol_version": "2025-06-18",       // protocolVersion echoed by initialize
-  "approved": false,                          // true only when pinned with --approve
-  "approver": null,                           // string identity, or null
-  "approved_at": null,                        // RFC 3339 UTC, or null
-  "approved_digest": null                     // overall_digest the approver attested to
+  "created_at": "2026-06-06T14:22:05Z",  // RFC 3339, UTC, second precision
+  "warden_version": "0.1.0",             // duplicate of top-level for convenience
+  "mcp_protocol_version": "2025-06-18",  // protocolVersion echoed by initialize
+  "approved": false, "approver": null,   // true + identity only when pinned with --approve
+  "approved_at": null,                   // RFC 3339 UTC, or null
+  "approved_digest": null                // overall_digest the approver attested to
 }
 ```
 
@@ -330,43 +329,57 @@ Rules:
   *disagree* with the recomputed `overall_digest`, which `check` surfaces as an
   **unapproved-change** finding (severity high).
 
+### 8.1 Structured provenance (v0.3 addendum, #19)
+
+The `pin` block carries optional structured provenance — **all OUTSIDE `overall_digest`** (it
+lives in `pin`, which §6.1 excludes), so adding/changing any of it **cannot** change a server's
+digest. All fields are optional with defaults; pre-#19 locks read unchanged (models use
+`extra="ignore"`, so future fields are tolerated, not rejected). `PROVENANCE_VERSION = 1` is
+in-block, distinct from the digest-bound `schema_version`. New `pin` fields:
+
+- scalars: `provenance_version` (default 1), `rotated_at` (str|null), `rotation_count` (default 0).
+- `pinner`: `{tool:"mcp-warden", tool_version:<__version__|"unknown">, actor:str|null, environment:str|null}`.
+- `attestations`: the attester **SET** (≤1 today; a list so #16/#23 extend it). Each entry:
+  `{actor, role:"approver"|"pinner"|…, method:"manual"|…, created_at, bound_digest, note}`.
+- `pinner.actor` / `pinner.environment` are **self-asserted (CRIT-3)** — non-authoritative free
+  text, not a trust anchor, not for trust decisions; authenticated identity is #16's job.
+
+**Consistency rule (B2).** The scalar `approved/approver/approved_at/approved_digest` stay the
+**canonical** approval record. `--approve` ALSO appends one mirroring
+`Attestation(role="approver", method="manual", bound_digest=overall_digest)`; the list is the
+forward-compatible superset, the scalars its legacy projection. After `pin --approve` (and after
+`lock rotate --approver`) exactly one `role="approver"` attestation exists with
+`attestations[-1].bound_digest == overall_digest`.
+
+**`bound_digest` format (B4).** `bound_digest` equals `overall_digest` **VERBATIM** — i.e.
+`sha256:<64 lowercase hex>`, **with** the `sha256:` prefix this repo stores; do NOT strip it on
+disk. (For #16: Rekor/in-toto subjects may want the bare hex — strip at signing time only.)
+
+### 8.2 `lock rotate` digest semantics (B3) — and the #16 implication
+
+`warden lock rotate <lock> [--approver ID] [--actor ID] [--note TEXT] [--json]` re-attests
+provenance on an existing baseline **without re-capturing the server surface**: it appends one
+attestation, stamps `rotated_at`, bumps `rotation_count`, refreshes `pinner`, and (with
+`--approver`) re-binds the scalar approval to the lock's *unchanged* `overall_digest`. **It never
+recomputes entry digests; `overall_digest` is byte-identical afterward.** Rotate is permitted on
+**unapproved** locks (incremental-attestation CI) — NOT gated on approval. It **fails closed
+(exit 2, writes nothing)** when the lock is internally inconsistent: it recomputes `overall_digest`
+from the lock's OWN stored entries and refuses on mismatch (tampered — re-pin), or when an approved
+lock's `approved_digest` no longer binds the surface (stale approval).
+
+> **Implication for #16 (signing).** Rotate mutates the file while leaving `overall_digest`
+> unchanged, so **a signature over the whole lock JSON would be invalidated by a later rotate.**
+> #16 should sign **`overall_digest` + a canonical attestation subdoc** (not the whole file) —
+> the minimum rotate-compatible signing scope.
+
 ---
 
 ## 9. Worked example (illustrative, secrets redacted)
 
-```json
-{
-  "schema_version": 1,
-  "warden_version": "0.1.0",
-  "server": {
-    "command": "node",
-    "args": ["./build/index.js"],
-    "command_digest": "sha256:3a7f...e21c"
-  },
-  "tools": [
-    {
-      "name": "read_file",
-      "description_hash": "sha256:9b12...44aa",
-      "input_schema_hash": "sha256:c0de...7788",
-      "capabilities": ["fs-read"],
-      "entry_digest": "sha256:11ff...0099"
-    }
-  ],
-  "resources": [],
-  "prompts": [],
-  "findings": [],
-  "overall_digest": "sha256:aa00...ff11",
-  "pin": {
-    "created_at": "2026-06-06T14:22:05Z",
-    "warden_version": "0.1.0",
-    "mcp_protocol_version": "2025-06-18",
-    "approved": true,
-    "approver": "ci-bot@example.invalid",
-    "approved_at": "2026-06-06T14:22:06Z",
-    "approved_digest": "sha256:aa00...ff11"
-  }
-}
-```
+A full illustrative lock (v0.1 shape) plus a post-`lock rotate` `pin` block lives in
+[`WARDEN_LOCK_EXAMPLE.md`](WARDEN_LOCK_EXAMPLE.md) (archived there to keep this core doc under
+the 500-line cap). v0.3 `pin` blocks additionally carry the §8.1 provenance fields, all outside
+`overall_digest`; pre-#19 locks omit them and read unchanged.
 
 ---
 
@@ -381,6 +394,8 @@ Rules:
 5. Sort: tools by `name`, resources by `uri`, prompts by `name` — *before* hashing.
 6. Absent `description`/null → hash `""`; absent `inputSchema`/null → hash `{}`.
 7. **Any** drift → non-zero exit. Severity affects reporting only.
+8. §8.1 provenance lives in `pin` (excluded from `overall_digest`); `lock rotate` mutates only
+   provenance, leaves `overall_digest` **byte-identical**, and fails closed on inconsistency (§8.2).
 
 ---
 
@@ -458,30 +473,14 @@ explicit, reviewed lock declaration. There is no runtime override path.
 
 ```jsonc
 "tools": [
-  {
-    "name": "issue_scoped_token",
-    "description_hash": "sha256:...",
-    "input_schema_hash": "sha256:...",
-    "capabilities": [],
-    "inspection": {
-      "expected_output_charset": "text",
-      "may_return_urls": false,
-      "secret_echo_applies": false        // returns a token by design → demote secret-echo to note
-    },
-    "entry_digest": "sha256:..."
-  },
-  {
-    "name": "screenshot_png",
-    "description_hash": "sha256:...",
-    "input_schema_hash": "sha256:...",
-    "capabilities": ["fs-read"],
-    "inspection": {
-      "expected_output_charset": "binary-ok",  // raw image bytes → WRD-RES-ANSI disabled
-      "may_return_urls": false,
-      "secret_echo_applies": true
-    },
-    "entry_digest": "sha256:..."
-  }
+  // returns a token by design → demote secret-echo to a note
+  { "name": "issue_scoped_token", "description_hash": "sha256:...", "input_schema_hash": "sha256:...",
+    "capabilities": [], "entry_digest": "sha256:...",
+    "inspection": { "expected_output_charset": "text", "may_return_urls": false, "secret_echo_applies": false } },
+  // raw image bytes → WRD-RES-ANSI disabled via binary-ok charset
+  { "name": "screenshot_png", "description_hash": "sha256:...", "input_schema_hash": "sha256:...",
+    "capabilities": ["fs-read"], "entry_digest": "sha256:...",
+    "inspection": { "expected_output_charset": "binary-ok", "may_return_urls": false, "secret_echo_applies": true } }
 ]
 ```
 

@@ -32,6 +32,7 @@ from .models import (
     ToolEntry,
     WardenLock,
 )
+from .provenance import make_approver_attestation, make_pinner
 from .schema_diff import extract_skeleton
 from .tokenizer import derive_capabilities
 
@@ -178,6 +179,7 @@ def build_lock(
     *,
     approve: bool = False,
     approver: str | None = None,
+    actor: str | None = None,
 ) -> WardenLock:
     """Build a complete :class:`WardenLock` from a captured surface + findings.
 
@@ -189,6 +191,8 @@ def build_lock(
         findings: Static-check findings to embed (§7).
         approve: When True, record the ``--approve`` attestation (§8).
         approver: The approver identity string (required-ish when ``approve``).
+        actor: Optional human/CI principal for the ``pinner`` block (#19); falls
+            back to ``WARDEN_ACTOR`` env. Provenance is OUTSIDE ``overall_digest``.
 
     Returns:
         A fully-populated, internally-consistent :class:`WardenLock`.
@@ -202,6 +206,9 @@ def build_lock(
     overall_digest = compute_overall_digest(server, tools, resources, prompts)
 
     now = _now_rfc3339()
+    # #19: mirror an approver attestation into the attester set when --approve is
+    # used (B2 rule); scalar fields stay canonical for drift.py.
+    attestations = [make_approver_attestation(approver, overall_digest, now=now)] if approve and approver else []
     pin = PinMetadata(
         created_at=now,
         warden_version=__version__,
@@ -210,6 +217,8 @@ def build_lock(
         approver=approver if approve else None,
         approved_at=now if approve else None,
         approved_digest=overall_digest if approve else None,
+        pinner=make_pinner(actor),
+        attestations=attestations,
     )
 
     return WardenLock(

@@ -20,7 +20,8 @@ describe and visualize the implementation that satisfies that contract.
 |-----|---------|
 | [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | **(v0.1)** Positioning, trust model (TOFU + `--approve`), assets/actors, the four threat classes (MCP-DRIFT / MCP-CAPSURF / MCP-SECRET / MCP-SUPPLY), explicit out-of-scope limits, deliberate cuts |
 | [`docs/THREAT_MODEL_V2.md`](docs/THREAT_MODEL_V2.md) | **(v0.2)** Addendum extending the v0.1 model: T-RESULT vectors, the defends (BLOCK) / monitors (fuzzy) / still-does-NOT-defend (T-BEHAVE) table, runtime trust-model notes, retained + added cuts, shadow-default positioning |
-| [`docs/WARDEN_LOCK_SCHEMA.md`](docs/WARDEN_LOCK_SCHEMA.md) | `warden.lock` format, RFC 8785 canonicalization + SHA-256 hashing, field/entry/overall digests, the normative drift definition + severities; **§5.1/§6.2 structural schema diff** (normalized per-tool `schema_skeleton`, `schema_version` 2, granular `WRD-DRIFT-SCHEMA-*` taxonomy + severities, v1 fallback); **§11 (v0.2)** optional per-tool inspection policy (`expected_output_charset` / `may_return_urls` / `secret_echo_applies`, fail-safe defaults, digest impact) |
+| [`docs/WARDEN_LOCK_SCHEMA.md`](docs/WARDEN_LOCK_SCHEMA.md) | `warden.lock` format, RFC 8785 canonicalization + SHA-256 hashing, field/entry/overall digests, the normative drift definition + severities; **§5.1/§6.2 structural schema diff** (normalized per-tool `schema_skeleton`, `schema_version` 2, granular `WRD-DRIFT-SCHEMA-*` taxonomy + severities, v1 fallback); **§8.1/§8.2 (v0.3, #19)** structured out-of-digest provenance (`pinner` / `attestations` / `rotation_count`, `PROVENANCE_VERSION`, B4 `bound_digest` format) + `lock rotate` digest-invariant semantics + the #16 signing implication; **§11 (v0.2)** optional per-tool inspection policy (`expected_output_charset` / `may_return_urls` / `secret_echo_applies`, fail-safe defaults, digest impact) |
+| [`docs/WARDEN_LOCK_EXAMPLE.md`](docs/WARDEN_LOCK_EXAMPLE.md) | Illustrative full `warden.lock` + a post-`lock rotate` `pin` block (archived from WARDEN_LOCK_SCHEMA §9 to keep that core doc under the line cap) |
 | [`docs/CHECKS.md`](docs/CHECKS.md) | The deterministic `WRD-*` static-check catalog (capability/secret/supply/robustness), the shared tokenizer, severity→SARIF mapping, redaction rule, CUT list. **Reused by v0.2** `WRD-RES-SECRET-ECHO` (the `WRD-SEC-*` patterns + redaction) |
 | [`docs/POLICY_MODEL.md`](docs/POLICY_MODEL.md) | Policy schema, the four high-risk shapes, constraint vocabulary, fail-closed defaults, SSRF deny ranges, lint + single-sample eval semantics. **Enforced at runtime by v0.2 `guard`** on live `tools/call` requests |
 | [`docs/RESULT_INSPECTION.md`](docs/RESULT_INSPECTION.md) | **(v0.2)** The `WRD-RES-*` result-inspection catalog: deterministic/fuzzy tier partition, per-rule exact match definitions (ANSI allowlist, secret-echo via `WRD-SEC-*`, exfil seed denylist, injection seed phrase list), severities, SARIF mapping, redaction, fail-safe per-tool precision. Run identically by `guard` and `inspect` |
@@ -50,8 +51,9 @@ describe and visualize the implementation that satisfies that contract.
 | `src/mcp_warden/hashing.py` | `canon()` (RFC 8785) + `hash()` + field hashes | WARDEN_LOCK_SCHEMA §3 |
 | `src/mcp_warden/tokenizer.py` | Shared tokenizer + capability derivation (single source of truth) | CHECKS §3 / WARDEN_LOCK_SCHEMA §5.4 |
 | `src/mcp_warden/capture.py` | MCP stdio capture client (argv array, no shell; timeouts/errors) | THREAT_MODEL §3.3 / WARDEN_LOCK_SCHEMA §4.1 |
-| `src/mcp_warden/models.py` | Pydantic models for captured surface + lock | WARDEN_LOCK_SCHEMA §2–§8 |
+| `src/mcp_warden/models.py` | Pydantic models for captured surface + lock (incl. `Pinner`/`Attestation` provenance) | WARDEN_LOCK_SCHEMA §2–§8 |
 | `src/mcp_warden/lockfile.py` | Lock builder + reader/writer + overall digest | WARDEN_LOCK_SCHEMA §5–§6, §9 |
+| `src/mcp_warden/provenance.py` | Out-of-digest provenance construction + `rotate_provenance` (pure; note-cap fail-closed) | WARDEN_LOCK_SCHEMA §8.1–§8.2 |
 | `src/mcp_warden/drift.py` | Per-class drift/diff engine + severities | WARDEN_LOCK_SCHEMA §6.2 |
 | `src/mcp_warden/schema_diff.py` | Deterministic structural `inputSchema` skeleton extractor + per-fact diff classifier (`WRD-DRIFT-SCHEMA-*`; `$ref`/cyclic/malformed-safe) | WARDEN_LOCK_SCHEMA §5.1, §6.2 |
 | `src/mcp_warden/checks.py` | Static-check orchestrator (deterministic sort) | CHECKS §4–§5 |
@@ -73,7 +75,7 @@ describe and visualize the implementation that satisfies that contract.
 | `src/mcp_warden/wire_block.py` | **(v0.2/v0.3)** on-wire block synthesis: `-32001` error-response + redacted-content (`_meta.warden.modified`); **v0.3** `-32002` `transport_error` | GUARD_PROXY §7 · V3 §2.6 |
 | `src/mcp_warden/inspector.py` | **(v0.2)** offline JSONL analyzer over recorded sessions (same catalog) | GUARD_PROXY §3 |
 | `src/mcp_warden/emit_res.py` | **(v0.2)** SARIF 2.1.0 + JSONL emitters for `ResultFinding` (action/direction/tier) | GUARD_PROXY §10 |
-| `src/mcp_warden/cli.py` · `cli_guard.py` | `typer` CLI (`pin`/`check`/`policy`/`guard`/`inspect`), exit codes; `guard`/`inspect` bodies in `cli_guard` | all |
+| `src/mcp_warden/cli.py` · `cli_guard.py` · `cli_lock.py` | `typer` CLI (`pin`/`check`/`policy`/`guard`/`inspect`/`lock rotate`), exit codes; `guard`/`inspect` bodies in `cli_guard`, `lock rotate` + integrity gate in `cli_lock` | all |
 
 ## Tests
 
