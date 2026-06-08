@@ -1,6 +1,6 @@
 {
-  "schema_version": 1,
-  "warden_version": "0.1.0",
+  "schema_version": 2,
+  "warden_version": "0.3.0",
   "server": {
     "command": "python",
     "args": [
@@ -16,7 +16,31 @@
       "capabilities": [
         "fs-read"
       ],
-      "entry_digest": "sha256:3cf1c90e30e71ac19208ab0796998aad3e5a07c6894a75cee7d9cc5d20e2d350"
+      "schema_skeleton": {
+        "props": {
+          "$root": {
+            "type": [
+              "object"
+            ],
+            "required": false,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          },
+          "path": {
+            "type": [
+              "string"
+            ],
+            "required": true,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "entry_digest": "sha256:1a3b7e7ce145db27d63fb3ade3a3d2f6822d1e5b570b62f80a6c2f3de5d17569"
     },
     {
       "name": "read_file",
@@ -25,7 +49,31 @@
       "capabilities": [
         "fs-read"
       ],
-      "entry_digest": "sha256:98016383b3820067ad260fa6fd30ad1d4b74a3a32a763aa06256c058a222c36e"
+      "schema_skeleton": {
+        "props": {
+          "$root": {
+            "type": [
+              "object"
+            ],
+            "required": false,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          },
+          "path": {
+            "type": [
+              "string"
+            ],
+            "required": true,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "entry_digest": "sha256:54e67f392b48e7adeaee4760d0827cc46e069b852b56d502d4d0e59791da5164"
     }
   ],
   "resources": [
@@ -61,14 +109,14 @@
       "snippet": "name token 'read'"
     }
   ],
-  "overall_digest": "sha256:bd1edd5627454dd4fcddc300bc6be6f6e7a364a477208b463cba720d6463b0ca",
+  "overall_digest": "sha256:0e38dbcbac2379a7811d20c5274fd26228a64219f0eb895e5eabddcc948bebbe",
   "pin": {
-    "created_at": "2026-06-06T20:48:38Z",
-    "warden_version": "0.1.0",
+    "created_at": "2026-06-08T00:31:05Z",
+    "warden_version": "0.3.0",
     "mcp_protocol_version": "2025-11-25",
     "approved": true,
     "approver": "ci-bot@example.invalid",
-    "approved_at": "2026-06-06T20:48:38Z",
-    "approved_digest": "sha256:bd1edd5627454dd4fcddc300bc6be6f6e7a364a477208b463cba720d6463b0ca"
+    "approved_at": "2026-06-08T00:31:05Z",
+    "approved_digest": "sha256:0e38dbcbac2379a7811d20c5274fd26228a64219f0eb895e5eabddcc948bebbe"
   }
 }

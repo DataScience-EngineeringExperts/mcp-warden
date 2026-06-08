@@ -65,6 +65,36 @@ def test_jsonl_one_record_per_line():
     assert rec1["rule_id"] == "WRD-DRIFT-TOOL-ADDED"
 
 
+def test_sarif_schema_drift_carries_detail_and_schemapath():
+    drift = [
+        DriftItem(
+            "schema-constraint-relaxed",
+            "medium",
+            "tools/read_file",
+            "Tool 'read_file' schema schema-constraint-relaxed at 'a'",
+            detail="maxLength 64→4096",
+        )
+    ]
+    sarif = build_sarif([], drift)
+    result = sarif["runs"][0]["results"][0]
+    assert result["ruleId"] == "WRD-DRIFT-SCHEMA-CONSTRAINT-RELAXED"
+    props = result["properties"]
+    assert props["detail"] == "maxLength 64→4096"
+    assert props["schemaPath"] == "tools/read_file"
+
+
+def test_jsonl_schema_drift_includes_detail_field():
+    drift = [
+        DriftItem("schema-enum-widened", "high", "tools/t", "msg", detail="enum 1→3 values"),
+        DriftItem("tool-added", "high", "tools/x", "added"),
+    ]
+    out = findings_to_jsonl([], drift)
+    recs = [json.loads(ln) for ln in out.splitlines() if ln]
+    assert recs[0]["detail"] == "enum 1→3 values"
+    # Non-schema drift carries a null detail (field always present).
+    assert recs[1]["detail"] is None
+
+
 def test_jsonl_snippet_redacted_preserved():
     findings = [Finding(rule_id="WRD-SEC-OPENAI", severity="critical", target="tools/t", message="m", snippet="sk-a…(len=51)")]
     out = findings_to_jsonl(findings)

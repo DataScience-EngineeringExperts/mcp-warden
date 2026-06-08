@@ -72,9 +72,15 @@ def test_pin_clean_then_check_mutated_detects_drift_and_sarif(tmp_path):
     # Added shell tool
     assert "tool-added" in classes
     assert any(d.target == "tools/run_command" and d.severity == "high" for d in drift)
-    # read_file schema changed
-    assert "schema-modified" in classes
-    assert any(d.target == "tools/read_file" and d.drift_class == "schema-modified" for d in drift)
+    # read_file schema changed: adding an unconstrained "encoding" string param
+    # is now classified granularly (#15) as schema-unconstrained-added (high).
+    assert "schema-unconstrained-added" in classes
+    assert any(
+        d.target == "tools/read_file" and d.drift_class == "schema-unconstrained-added"
+        for d in drift
+    )
+    # The legacy blob-level class must NOT fire now that skeletons are present.
+    assert "schema-modified" not in classes
     # unapproved-change because the clean lock was approved
     assert "unapproved-change" in classes
 

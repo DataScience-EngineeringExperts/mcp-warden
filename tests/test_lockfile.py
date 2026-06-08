@@ -37,6 +37,8 @@ def test_entry_digest_excludes_itself():
         "description_hash": tool.description_hash,
         "input_schema_hash": tool.input_schema_hash,
         "capabilities": tool.capabilities,
+        # SCHEMA_VERSION 2: the serialized skeleton is part of the hashed body.
+        "schema_skeleton": tool.schema_skeleton.model_dump(mode="json"),
     }
     assert hash_value(body) == tool.entry_digest
 

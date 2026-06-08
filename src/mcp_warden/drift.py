@@ -7,6 +7,7 @@ produces a list of :class:`DriftItem`. Any non-empty drift set means a non-zero
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from .models import (
@@ -15,6 +16,9 @@ from .models import (
     ToolEntry,
     WardenLock,
 )
+from .schema_diff import diff_skeletons
+
+logger = logging.getLogger("mcp_warden.drift")
 
 
 @dataclass(frozen=True)
@@ -26,17 +30,75 @@ class DriftItem:
         severity: ``critical|high|medium|low``.
         target: Entry the drift applies to, e.g. ``"tools/<name>"``.
         message: Human-readable description.
+        detail: Optional compact, non-secret structural detail (schema diffs),
+            e.g. ``"maxLength 64→4096"``. ``None`` for non-schema drift.
     """
 
     drift_class: str
     severity: str
     target: str
     message: str
+    detail: str | None = None
 
 
 def _index_by(entries: list, key: str) -> dict[str, object]:
     """Index a list of entries by an attribute value."""
     return {getattr(e, key): e for e in entries}
+
+
+def _diff_tool_schema(name: str, target: str, b: ToolEntry, c: ToolEntry) -> list[DriftItem]:
+    """Classify a tool inputSchema change into granular drift (#15) with fallback.
+
+    Called only when ``input_schema_hash`` differs. Behavior (binding spec §4):
+      * Both baseline + current have a ``schema_skeleton`` and the structural diff
+        finds changes → one :class:`DriftItem` per :class:`SchemaChange` (R7).
+      * Skeletons present but the structural diff finds NO change (only cosmetic
+        bytes differ) → a single ``schema-cosmetic-modified`` (low).
+      * Baseline skeleton is ``None`` (a v1 lock) → fall back to the legacy single
+        ``schema-modified`` (high) and log the "re-pin for granular diff" note.
+        NEVER under-report.
+
+    Args:
+        name: The tool name.
+        target: The drift target string (``"tools/<name>"``).
+        b: The baseline tool entry.
+        c: The current tool entry.
+
+    Returns:
+        The list of schema drift items for this tool.
+    """
+    if b.schema_skeleton is None or c.schema_skeleton is None:
+        # v1 baseline (or, defensively, a current with no skeleton): no granular
+        # diff is possible. Fall back to the legacy high-severity signal.
+        logger.info(
+            "tool '%s': baseline lacks a schema skeleton (v1 lock) — falling back to "
+            "schema-modified; re-pin to enable granular schema diffing",
+            name,
+        )
+        return [DriftItem("schema-modified", "high", target, f"Tool '{name}' inputSchema changed")]
+
+    changes = diff_skeletons(b.schema_skeleton, c.schema_skeleton)
+    if not changes:
+        # Hash differs but skeleton is identical => only cosmetic bytes changed.
+        return [
+            DriftItem(
+                "schema-cosmetic-modified",
+                "low",
+                target,
+                f"Tool '{name}' inputSchema changed cosmetically (no structural change)",
+            )
+        ]
+
+    return [
+        DriftItem(
+            ch.change_class,
+            ch.severity,
+            target,
+            f"Tool '{name}' schema {ch.change_class} at '{ch.path}'",
+            detail=ch.detail,
+        )
+        for ch in changes
+    ]
 
 
 def _diff_tools(baseline: list[ToolEntry], current: list[ToolEntry]) -> list[DriftItem]:
@@ -57,7 +119,7 @@ def _diff_tools(baseline: list[ToolEntry], current: list[ToolEntry]) -> list[Dri
 
         schema_changed = b.input_schema_hash != c.input_schema_hash
         if schema_changed:
-            items.append(DriftItem("schema-modified", "high", target, f"Tool '{name}' inputSchema changed"))
+            items.extend(_diff_tool_schema(name, target, b, c))
 
         added_caps = sorted(set(c.capabilities) - set(b.capabilities))
         removed_caps = sorted(set(b.capabilities) - set(c.capabilities))

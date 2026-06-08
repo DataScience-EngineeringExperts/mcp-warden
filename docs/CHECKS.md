@@ -42,6 +42,45 @@ No tool results, no network, no runtime. (See `THREAT_MODEL.md` T-RESULT/T-BEHAV
 All findings carry: `rule_id`, `severity`, `target` (e.g. `tools/<name>` or
 `launch/command`), `message`, and a **redacted** `snippet`.
 
+### 2.1 Drift rule IDs (`WRD-DRIFT-*`) + the schema-diff family (#15)
+
+Drift items are emitted as SARIF/JSONL results with `ruleId = WRD-DRIFT-<CLASS>` (the
+`drift_class` upper-cased). The structural schema-diff classes (`WARDEN_LOCK_SCHEMA.md`
+§6.2) surface under this same generic scheme — the `WRD-DRIFT-SCHEMA-*` family:
+
+| `ruleId` | Severity | Meaning |
+|----------|----------|---------|
+| `WRD-DRIFT-SCHEMA-REQUIRED-REMOVED` | error (high) | required property removed |
+| `WRD-DRIFT-SCHEMA-PROPERTY-REMOVED` | warning (medium) | optional property removed |
+| `WRD-DRIFT-SCHEMA-REQUIRED-UNCONSTRAINED-ADDED` | error (high) | new required unconstrained param |
+| `WRD-DRIFT-SCHEMA-REQUIRED-ADDED` | warning (medium) | new required constrained param |
+| `WRD-DRIFT-SCHEMA-UNCONSTRAINED-ADDED` | error (high) | new optional unconstrained param |
+| `WRD-DRIFT-SCHEMA-PROPERTY-ADDED` | note (low) | new optional constrained param |
+| `WRD-DRIFT-SCHEMA-TYPE-BROADENED` | error (high) | type set widened |
+| `WRD-DRIFT-SCHEMA-TYPE-NARROWED` | note (low) | type set narrowed |
+| `WRD-DRIFT-SCHEMA-TYPE-CHANGED` | warning (medium) | type set disjoint/changed |
+| `WRD-DRIFT-SCHEMA-ENUM-WIDENED` | error (high) | enum widened |
+| `WRD-DRIFT-SCHEMA-ENUM-NARROWED` | note (low) | enum narrowed |
+| `WRD-DRIFT-SCHEMA-ENUM-REMOVED` | error (high) | enum constraint lost |
+| `WRD-DRIFT-SCHEMA-ENUM-ADDED` | note (low) | enum constraint added |
+| `WRD-DRIFT-SCHEMA-CONSTRAINT-RELAXED` | warning (medium) | required→optional / bound relaxed / pattern removed |
+| `WRD-DRIFT-SCHEMA-ADDITIONAL-PROPS-OPENED` | error (high) | `additionalProperties` false→true |
+| `WRD-DRIFT-SCHEMA-CONSTRAINT-TIGHTENED` | note (low) | constraint tightened |
+| `WRD-DRIFT-SCHEMA-COSMETIC-MODIFIED` | note (low) | schema bytes differ, structure identical |
+| `WRD-DRIFT-SCHEMA-MODIFIED` | error (high) | v1-lock fallback / opaque-leaf change |
+
+Schema-drift results additionally carry `properties.detail` (a compact, non-secret summary,
+e.g. `maxLength 64→4096`) and `properties.schemaPath` (the changed entry, `tools/<name>`).
+Items are emitted **per fact** — one property can produce several results.
+
+**Default gate threshold (R9).** `check` exits non-zero on *any* drift (no severity floor
+is applied by the CLI today). The intended downstream policy is **medium and above blocks;
+low/info does not** — e.g. `schema-cosmetic-modified` and `schema-constraint-tightened`
+(both low) inform reviewers but should not, on their own, fail a gate. Surfacing a cosmetic
+description reword as a low finding (previously zero signal) is intentional and resolves the
+#13 schema/description coupling. This issue changes only *what is emitted*, not the CLI
+exit-code logic.
+
 ---
 
 ## 3. Normative tokenization + capability derivation (shared source of truth)

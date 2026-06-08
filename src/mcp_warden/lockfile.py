@@ -32,6 +32,7 @@ from .models import (
     ToolEntry,
     WardenLock,
 )
+from .schema_diff import extract_skeleton
 from .tokenizer import derive_capabilities
 
 logger = logging.getLogger("mcp_warden.lockfile")
@@ -95,6 +96,10 @@ def _tool_entry(tool: Any, inspection: dict[str, Any] | None = None) -> ToolEntr
         The hashed :class:`ToolEntry`.
     """
     schema = tool.input_schema if isinstance(tool.input_schema, dict) else None
+    # The structural skeleton (#15) is derived from the *raw* input_schema so a
+    # malformed/non-dict schema still yields a (possibly empty) skeleton without
+    # raising (schema_diff invariant e).
+    skeleton = extract_skeleton(tool.input_schema)
     body: dict[str, Any] = {
         "name": tool.name,
         "description_hash": hash_description(tool.description),
@@ -104,8 +109,14 @@ def _tool_entry(tool: Any, inspection: dict[str, Any] | None = None) -> ToolEntr
     if inspection is not None:
         _validate_inspection(tool.name, inspection)
         body["inspection"] = inspection
+    # Include the serialized skeleton in the hashed body so a tampered stored
+    # skeleton changes entry_digest (R2). v2 entry_digest formula change is a
+    # deliberate, versioned contract change vs v1.
+    body["schema_skeleton"] = skeleton.model_dump(mode="json")
     entry_digest = hash_value(body)
-    return ToolEntry(**body, entry_digest=entry_digest)
+    # entry_digest already accounts for the skeleton; reuse the rest of body.
+    entry_fields = {k: v for k, v in body.items() if k != "schema_skeleton"}
+    return ToolEntry(**entry_fields, schema_skeleton=skeleton, entry_digest=entry_digest)
 
 
 def _resource_entry(res: Any) -> ResourceEntry:

@@ -49,8 +49,21 @@ def _result_from_finding(f: Finding) -> dict[str, Any]:
 
 
 def _result_from_drift(d: DriftItem) -> dict[str, Any]:
-    """Build a SARIF result object from a drift item."""
+    """Build a SARIF result object from a drift item.
+
+    Schema drift (#15) carries an optional compact ``detail`` (e.g.
+    ``"maxLength 64→4096"``) surfaced under ``properties.detail`` and the changed
+    entry under ``properties.schemaPath`` for downstream tooling.
+    """
     rule_id = f"WRD-DRIFT-{d.drift_class.upper()}"
+    properties: dict[str, Any] = {
+        "severity": d.severity,
+        "target": d.target,
+        "driftClass": d.drift_class,
+        "schemaPath": d.target,
+    }
+    if d.detail is not None:
+        properties["detail"] = d.detail
     return {
         "ruleId": rule_id,
         "level": severity_to_level(d.severity),
@@ -58,7 +71,7 @@ def _result_from_drift(d: DriftItem) -> dict[str, Any]:
         "locations": [
             {"logicalLocations": [{"fullyQualifiedName": d.target, "kind": "resource"}]}
         ],
-        "properties": {"severity": d.severity, "target": d.target, "driftClass": d.drift_class},
+        "properties": properties,
     }
 
 
@@ -142,6 +155,7 @@ def findings_to_jsonl(findings: list[Finding], drift: list[DriftItem] | None = N
                     "level": severity_to_level(d.severity),
                     "target": d.target,
                     "message": d.message,
+                    "detail": d.detail,
                 },
                 ensure_ascii=False,
             )

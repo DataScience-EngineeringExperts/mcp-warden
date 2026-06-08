@@ -133,15 +133,30 @@ different hash. This is intentional: schema is a security-relevant contract.
 {
   "name": "read_file",
   "description_hash": "sha256:...",          // §3.3
-  "input_schema_hash": "sha256:...",         // §3.3
+  "input_schema_hash": "sha256:...",         // §3.3 — full-fidelity "did it change" signal
   "capabilities": ["fs-read"],               // §5.4 derived flags, sorted, deduped
-  "entry_digest": "sha256:..."               // §5.3
+  "schema_skeleton": {                        // SCHEMA_VERSION 2 (#15) — structural facts
+    "props": {
+      "$root": { "type": ["object"], "required": false, "enum": null, "constraints": {"additionalProperties": true} },
+      "path":  { "type": ["string"], "required": true,  "enum": null, "constraints": {"additionalProperties": true} }
+    }
+  },
+  "entry_digest": "sha256:..."               // §5.3 — covers schema_skeleton too
 }
 ```
 
 The raw `description` and `inputSchema` text are **NOT** stored in the lock — only their
 hashes. Rationale: keep the lock small, reviewable, and free of any secret that the static
 checks did not catch. (Findings in §7 carry redacted snippets where needed.)
+
+**`schema_skeleton` (SCHEMA_VERSION 2, #15).** A deterministic, normalized extraction of the
+input schema's *security-relevant* structure (one `PropFacts` per dotted property path,
+recursing `properties` and array `items`). Keeps `type` (sorted tuple), `required`, `enum`,
+and constraints `{maxLength,minLength,minimum,maximum,pattern,format,additionalProperties}`;
+**drops** cosmetic keys (`description`,`title`,`examples`,`default`). Absent
+`additionalProperties` → `true`; `$ref` is an opaque leaf (never followed); cyclic/over-deep
+nodes record `{"_truncated": true}`. Lets `check` classify *what* changed (§6.2). `null` in
+v1 locks; a baseline lacking it falls back to blob-level `schema-modified` until re-pinned.
 
 ### 5.2 Resource and prompt entries
 
@@ -209,12 +224,44 @@ stored `warden.lock`. Drift classes and severities:
 | **Server-identity drift** | `server.command_digest` differs | **critical** | non-zero |
 | **Tool added** | a `name` present now, absent in lock | **high** | non-zero |
 | **Tool removed** | a `name` present in lock, absent now | **medium** | non-zero |
-| **Schema modified** | same `name`, `input_schema_hash` differs | **high** | non-zero |
 | **Capability added** | same `name`, a new flag in `capabilities` | **high** | non-zero |
 | **Capability removed** | same `name`, a flag dropped from `capabilities` | **medium** | non-zero |
 | **Description modified** | same `name`, `description_hash` differs, schema + caps unchanged | **low** | non-zero |
 | **Resource/prompt add/remove/modify** | analogous to tools (added=medium, removed=low, modified=low) | as noted | non-zero |
 | **No drift** | every entry_digest matches AND `overall_digest` matches | — | **zero** |
+
+**Schema drift (SCHEMA_VERSION 2, #15).** When `input_schema_hash` differs *and* both the
+baseline and current entries carry a `schema_skeleton`, the change is classified
+structurally and emitted **per fact** (a single property can yield more than one item).
+Each item carries a compact, non-secret `detail` (e.g. `maxLength 64→4096`). "Unconstrained"
+= no enum, no pattern, no maxLength, and type string/object (or absent).
+
+| `drift_class` | Change | Severity |
+|---------------|--------|----------|
+| `schema-required-removed` | a required property removed | **high** |
+| `schema-property-removed` | an optional property removed | **medium** |
+| `schema-required-unconstrained-added` | new required, unconstrained property | **high** |
+| `schema-required-added` | new required, constrained property | **medium** |
+| `schema-unconstrained-added` | new optional, unconstrained property | **high** |
+| `schema-property-added` | new optional, constrained property | **low** |
+| `schema-type-broadened` | type set widened (superset) | **high** |
+| `schema-type-narrowed` | type set narrowed (subset) | **low** |
+| `schema-type-changed` | type set disjoint / otherwise changed | **medium** |
+| `schema-enum-widened` | enum widened (superset / new members) | **high** |
+| `schema-enum-narrowed` | enum narrowed (subset) | **low** |
+| `schema-enum-removed` | enum constraint lost entirely | **high** |
+| `schema-enum-added` | enum constraint newly added | **low** |
+| `schema-constraint-relaxed` | required→optional, maxLen↑/min↓/max↑, pattern/format removed | **medium** |
+| `schema-additional-props-opened` | `additionalProperties` false→true | **high** |
+| `schema-constraint-tightened` | any tightening (bounds, pattern/format added) | **low** |
+| `schema-cosmetic-modified` | `input_schema_hash` differs but skeleton is identical | **low** |
+| `schema-modified` (fallback) | v1 baseline lacks a skeleton, OR an opaque-leaf (`$ref`/truncated) change with no matching rule | **high** |
+
+Migration: `entry_digest` (and `overall_digest`) **changes on ANY schema byte change,
+cosmetic included** — `input_schema_hash` is an input, so a cosmetic reword shows
+`entry_digest` changed while the skeleton diff reports `schema-cosmetic-modified`. The v1→v2
+`entry_digest` formula change (skeleton now hashed in) is a deliberate versioned contract
+change: re-pinning a v1 server produces a v2 lock. No signed migration record is written.
 
 Notes:
 

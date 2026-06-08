@@ -54,6 +54,49 @@ class CapturedSurface(BaseModel):
     prompts: list[CapturedPrompt] = Field(default_factory=list)
 
 
+# --- normalized schema skeleton (structural diff input) ----------------------
+
+
+class PropFacts(BaseModel):
+    """Security-relevant facts about one property path in a tool input schema.
+
+    A skeleton stores one :class:`PropFacts` per dotted property path. Only
+    security-relevant structure is kept; cosmetic keys (description, title,
+    examples, default) are dropped at extraction time so semantically equal
+    schemas produce byte-identical skeletons (WARDEN_LOCK_SCHEMA.md §6.2).
+
+    Attributes:
+        type: The JSON Schema ``type`` normalized to a sorted tuple, or ``None``
+            when the schema declares no type.
+        required: Whether this property is listed in its parent's ``required``.
+        enum: The sorted, canonicalized enum values, or ``None`` when absent.
+        constraints: The retained constraint keys (``maxLength``, ``minLength``,
+            ``minimum``, ``maximum``, ``pattern``, ``format``,
+            ``additionalProperties``) plus the opaque-leaf markers ``$ref`` and
+            ``_truncated``. Sorted for determinism.
+    """
+
+    type: tuple[str, ...] | None = None
+    required: bool = False
+    enum: list[Any] | None = None
+    constraints: dict[str, Any] = Field(default_factory=dict)
+
+
+class SchemaSkeleton(BaseModel):
+    """A deterministic structural extraction of a tool input schema.
+
+    Maps each dotted property path to its :class:`PropFacts`. The skeleton is a
+    pure function of the input schema and is serialized into the lock so that
+    ``check`` can classify *what* changed between baseline and current surfaces.
+
+    Attributes:
+        props: Path -> facts mapping. Insertion order is deterministic (sorted
+            by path at build time).
+    """
+
+    props: dict[str, PropFacts] = Field(default_factory=dict)
+
+
 # --- warden.lock entry models (hashed) ---------------------------------------
 
 
@@ -82,6 +125,11 @@ class ToolEntry(BaseModel):
     excluded from both the serialized lock and the canonicalized entry body, so
     a tool with no inspection policy hashes BYTE-IDENTICALLY to a v0.1 entry
     (existing locks need no re-pin — see §11.4).
+
+    ``schema_skeleton`` (SCHEMA_VERSION 2) holds the normalized structural
+    skeleton used for granular schema-diff classification. It defaults to
+    ``None`` so v1 locks (no skeleton) still validate on read; ``check`` falls
+    back to the legacy ``schema-modified`` drift when a baseline lacks it.
     """
 
     name: str
@@ -89,6 +137,7 @@ class ToolEntry(BaseModel):
     input_schema_hash: str
     capabilities: list[str]
     inspection: dict[str, Any] | None = None
+    schema_skeleton: SchemaSkeleton | None = None
     entry_digest: str
 
 

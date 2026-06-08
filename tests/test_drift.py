@@ -46,11 +46,46 @@ def test_tool_removed_medium():
     assert removed and removed[0].severity == "medium"
 
 
-def test_schema_modified_high():
+def test_schema_added_unconstrained_high():
+    # Adding an unconstrained property is now granular: schema-unconstrained-added (high).
     base = _lock(_surface([CapturedTool(name="t", input_schema={"properties": {"a": {}}})]))
     cur = _lock(_surface([CapturedTool(name="t", input_schema={"properties": {"a": {}, "b": {}}})]))
     drift = compute_drift(base, cur)
-    assert any(d.drift_class == "schema-modified" and d.severity == "high" for d in drift)
+    assert any(d.drift_class == "schema-unconstrained-added" and d.severity == "high" for d in drift)
+    # Legacy blob-level class must NOT fire when skeletons are present.
+    assert not any(d.drift_class == "schema-modified" for d in drift)
+
+
+def test_schema_modified_v1_fallback_high():
+    # A v1 baseline (schema_skeleton=None) with a changed schema falls back to the
+    # legacy single schema-modified (high) — never under-report.
+    base = _lock(_surface([CapturedTool(name="t", input_schema={"properties": {"a": {}}})]))
+    cur = _lock(_surface([CapturedTool(name="t", input_schema={"properties": {"a": {}, "b": {}}})]))
+    # Simulate a v1 baseline tool entry by stripping its skeleton.
+    base.tools[0] = base.tools[0].model_copy(update={"schema_skeleton": None})
+    drift = compute_drift(base, cur)
+    fb = [d for d in drift if d.drift_class == "schema-modified"]
+    assert fb and fb[0].severity == "high"
+
+
+def test_schema_cosmetic_modified_low():
+    # Only a cosmetic key (description) changes inside the schema: hash differs
+    # but the skeleton is identical -> schema-cosmetic-modified (low).
+    base = _lock(_surface([CapturedTool(name="t", input_schema={"properties": {"a": {"type": "string", "description": "old"}}})]))
+    cur = _lock(_surface([CapturedTool(name="t", input_schema={"properties": {"a": {"type": "string", "description": "new"}}})]))
+    drift = compute_drift(base, cur)
+    cosmetic = [d for d in drift if d.drift_class == "schema-cosmetic-modified"]
+    assert cosmetic and cosmetic[0].severity == "low"
+    assert not any(d.drift_class == "schema-modified" for d in drift)
+
+
+def test_schema_constraint_relaxed_carries_detail():
+    base = _lock(_surface([CapturedTool(name="t", input_schema={"properties": {"a": {"type": "string", "maxLength": 64}}})]))
+    cur = _lock(_surface([CapturedTool(name="t", input_schema={"properties": {"a": {"type": "string", "maxLength": 4096}}})]))
+    drift = compute_drift(base, cur)
+    relaxed = [d for d in drift if d.drift_class == "schema-constraint-relaxed"]
+    assert relaxed and relaxed[0].severity == "medium"
+    assert relaxed[0].detail == "maxLength 64→4096"
 
 
 def test_capability_added_high():
