@@ -80,6 +80,10 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             raise typer.Exit(code=2)
 
         old_count = lock_doc.pin.rotation_count
+        # Capture the pre-rotate digest so the "unchanged" claim is COMPUTED, not
+        # asserted: rotate is digest-invariant by contract, but a future regression
+        # that mutated overall_digest must be caught here, not silently reported True.
+        before_digest = lock_doc.overall_digest
         now = _now_rfc3339()
         try:
             rotated = rotate_provenance(lock_doc, approver=approver, actor=actor, note=note, now=now)
@@ -95,6 +99,7 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
 
         attester = rotated.pin.attestations[-1].actor
         role = rotated.pin.attestations[-1].role
+        digest_unchanged = rotated.overall_digest == before_digest
         if json_out:
             console.print(
                 json.dumps(
@@ -105,7 +110,7 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
                         "role": role,
                         "rotated_at": now,
                         "overall_digest": rotated.overall_digest,
-                        "overall_digest_unchanged": True,
+                        "overall_digest_unchanged": digest_unchanged,
                     },
                     indent=2,
                 ),
@@ -115,4 +120,5 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             console.print(f"[green]rotated[/green] -> {lock}")
             console.print(f"  rotation_count: {old_count} -> {rotated.pin.rotation_count}")
             console.print(f"  attester: {attester} (role={role})")
-            console.print(f"  overall_digest: {rotated.overall_digest} [dim](unchanged)[/dim]")
+            unchanged_tag = "unchanged" if digest_unchanged else "CHANGED"
+            console.print(f"  overall_digest: {rotated.overall_digest} [dim]({unchanged_tag})[/dim]")

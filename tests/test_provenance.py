@@ -10,12 +10,13 @@ from __future__ import annotations
 import json
 
 import pytest
+from pydantic import ValidationError
 from typer.testing import CliRunner
 
 from mcp_warden.cli import app
 from mcp_warden.drift import compute_drift
 from mcp_warden.lockfile import build_lock, read_lock, write_lock
-from mcp_warden.models import ATTESTATION_NOTE_MAX_LEN, CapturedSurface, CapturedTool
+from mcp_warden.models import ATTESTATION_NOTE_MAX_LEN, Attestation, CapturedSurface, CapturedTool
 from mcp_warden.provenance import ProvenanceError, rotate_provenance
 
 runner = CliRunner()
@@ -94,6 +95,30 @@ def test_rotate_accepts_note_at_cap():
     assert rotated.pin.attestations[-1].note == "x" * ATTESTATION_NOTE_MAX_LEN
 
 
+def test_attestation_model_validator_rejects_overlong_note():
+    """D3: a DIRECT Attestation(...) constructor cannot bypass the note cap — the
+    model-level field_validator fails closed with a pydantic ValidationError, so
+    future #16/#23 paths that build attestations without the CLI helper are bounded."""
+    with pytest.raises(ValidationError):
+        Attestation(
+            actor="a",
+            created_at="2026-06-08T00:00:00Z",
+            bound_digest="sha256:" + "0" * 64,
+            note="x" * (ATTESTATION_NOTE_MAX_LEN + 1),
+        )
+
+
+def test_attestation_model_validator_accepts_note_at_cap():
+    """D3 boundary: a note exactly at the cap constructs cleanly (off-by-one guard)."""
+    att = Attestation(
+        actor="a",
+        created_at="2026-06-08T00:00:00Z",
+        bound_digest="sha256:" + "0" * 64,
+        note="x" * ATTESTATION_NOTE_MAX_LEN,
+    )
+    assert att.note == "x" * ATTESTATION_NOTE_MAX_LEN
+
+
 # --- CLI `warden lock rotate` -----------------------------------------------
 
 
@@ -121,10 +146,15 @@ def test_cli_rotate_happy_path_preserves_digest_and_check_stays_clean(tmp_path):
 def test_cli_rotate_json_summary(tmp_path):
     path = tmp_path / "warden.lock"
     write_lock(build_lock(_surface(), []), path)
+    # Capture the pre-rotate digest so the assertions below COMPUTE the unchanged
+    # claim against ground truth — this test must be able to FAIL if rotate ever
+    # mutates overall_digest (it can no longer pass on a hardcoded literal).
+    before = read_lock(path).overall_digest
     result = runner.invoke(app, ["lock", "rotate", str(path), "--actor", "ci@x.invalid", "--json"])
     assert result.exit_code == 0, result.output
     payload = json.loads(result.output)
     assert payload["rotation_count"] == {"old": 0, "new": 1}
+    assert payload["overall_digest"] == before
     assert payload["overall_digest_unchanged"] is True
 
 
@@ -144,6 +174,14 @@ def test_cli_rotate_approved_lock_rebinds_and_stays_clean(tmp_path):
     assert after.pin.approved is True
     assert after.pin.approver == "new@x.invalid"
     assert after.pin.approved_digest == before
+
+    # Append-only contract (D2): the fresh build_lock(approve=True) wrote one
+    # approver attestation; rotating with --approver appends a SECOND. The log is
+    # NOT deduped, and the LATEST approver attestation binds the current digest.
+    approver_atts = [a for a in after.pin.attestations if a.role == "approver"]
+    assert len(approver_atts) == 2
+    assert after.pin.attestations[-1].role == "approver"
+    assert after.pin.attestations[-1].bound_digest == after.overall_digest
 
     current = build_lock(s, [])
     drift = compute_drift(after, current)

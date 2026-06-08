@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # --- Raw captured surface (pre-hashing) --------------------------------------
 
@@ -195,12 +195,17 @@ class Pinner(BaseModel):
 
 
 class Attestation(BaseModel):
-    """One entry in the attester set (WARDEN_LOCK_SCHEMA.md §8.x, #19).
+    """One entry in the attester APPEND-ONLY log (WARDEN_LOCK_SCHEMA.md §8.x, #19).
 
-    The set holds ≤1 entry today (the mirrored approver attestation) but is a
-    list so #16 (cosign) and #23 (multi-attester) extend it without another
-    schema break. Stored OUTSIDE ``overall_digest``. ``extra="ignore"`` (B1)
-    tolerates future signature fields added by #16.
+    ``pin.attestations`` is an append-only audit log: a fresh ``build_lock(approve)``
+    holds one mirrored approver attestation, but every ``lock rotate`` APPENDS one
+    more entry and never dedups — so rotating an already-approved lock yields TWO
+    ``role="approver"`` attestations (intended). The scalar ``approved*`` fields stay
+    the single canonical approval; the MOST-RECENT ``role="approver"`` attestation
+    binds the current ``overall_digest``. The list also lets #16 (cosign) and #23
+    (multi-attester) extend it without another schema break. Stored OUTSIDE
+    ``overall_digest``. ``extra="ignore"`` (B1) tolerates future signature fields
+    added by #16.
 
     Attributes:
         actor: Who attests (identity string). Self-asserted (CRIT-3).
@@ -224,6 +229,23 @@ class Attestation(BaseModel):
     created_at: str
     bound_digest: str
     note: str | None = None
+
+    @field_validator("note")
+    @classmethod
+    def _cap_note(cls, value: str | None) -> str | None:
+        """Enforce the note length cap at the TYPE boundary (fail closed).
+
+        Belt-and-suspenders for the helper-only ``provenance._validate_note``: a
+        direct ``Attestation(...)`` constructor (future #16/#23 paths) cannot bypass
+        the cap. Raises pydantic ``ValidationError`` when ``note`` exceeds
+        :data:`ATTESTATION_NOTE_MAX_LEN`. The CLI keeps ``_validate_note`` ahead of
+        construction so the operator still sees the clean ``ProvenanceError`` message.
+        """
+        if value is not None and len(value) > ATTESTATION_NOTE_MAX_LEN:
+            raise ValueError(
+                f"attestation note exceeds {ATTESTATION_NOTE_MAX_LEN} chars (got {len(value)})"
+            )
+        return value
 
 
 class PinMetadata(BaseModel):

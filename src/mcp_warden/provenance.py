@@ -111,6 +111,14 @@ def rotate_provenance(
     gate (recompute-from-entries) BEFORE calling this; this helper assumes the
     lock is already verified consistent.
 
+    **Append-only attestation log (contract).** ``pin.attestations`` is an
+    append-only audit log: each rotation appends one entry and NEVER dedups or
+    rewrites prior ones. Rotating an already-approved lock with ``--approver``
+    therefore appends a SECOND ``role="approver"`` attestation — this is intended.
+    The scalar ``approved*`` fields remain the single canonical approval record;
+    the **most-recent** ``role="approver"`` attestation (``attestations[-1]`` after
+    an approver rotation) binds the CURRENT ``overall_digest``. Do not add dedup.
+
     Args:
         lock: The verified baseline lock to re-attest.
         approver: When given, the attestation is ``role="approver"`` and the

@@ -347,9 +347,15 @@ in-block, distinct from the digest-bound `schema_version`. New `pin` fields:
 **Consistency rule (B2).** The scalar `approved/approver/approved_at/approved_digest` stay the
 **canonical** approval record. `--approve` ALSO appends one mirroring
 `Attestation(role="approver", method="manual", bound_digest=overall_digest)`; the list is the
-forward-compatible superset, the scalars its legacy projection. After `pin --approve` (and after
-`lock rotate --approver`) exactly one `role="approver"` attestation exists with
-`attestations[-1].bound_digest == overall_digest`.
+forward-compatible superset, the scalars its legacy projection. After a FRESH `pin --approve`
+exactly one `role="approver"` attestation exists with `attestations[-1].bound_digest ==
+overall_digest`.
+
+**Append-only log (B2 cont.).** `attestations` is an **append-only** audit log — `lock rotate`
+APPENDS one entry per rotation and NEVER dedups. So rotating an already-approved lock with
+`--approver` appends a SECOND `role="approver"` attestation (intended): the scalar `approved*`
+fields remain the single canonical approval, and the **most-recent** `role="approver"`
+attestation (`attestations[-1]` after an approver rotation) binds the current `overall_digest`.
 
 **`bound_digest` format (B4).** `bound_digest` equals `overall_digest` **VERBATIM** — i.e.
 `sha256:<64 lowercase hex>`, **with** the `sha256:` prefix this repo stores; do NOT strip it on
