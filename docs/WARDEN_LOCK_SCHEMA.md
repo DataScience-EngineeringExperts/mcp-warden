@@ -477,18 +477,8 @@ explicit, reviewed lock declaration. There is no runtime override path.
 
 ### 11.5 Worked example (illustrative)
 
-```jsonc
-"tools": [
-  // returns a token by design → demote secret-echo to a note
-  { "name": "issue_scoped_token", "description_hash": "sha256:...", "input_schema_hash": "sha256:...",
-    "capabilities": [], "entry_digest": "sha256:...",
-    "inspection": { "expected_output_charset": "text", "may_return_urls": false, "secret_echo_applies": false } },
-  // raw image bytes → WRD-RES-ANSI disabled via binary-ok charset
-  { "name": "screenshot_png", "description_hash": "sha256:...", "input_schema_hash": "sha256:...",
-    "capabilities": ["fs-read"], "entry_digest": "sha256:...",
-    "inspection": { "expected_output_charset": "binary-ok", "may_return_urls": false, "secret_echo_applies": true } }
-]
-```
+A §11 inspection-policy worked example (a secret-echo demotion + a `binary-ok` charset tool) lives in
+[`WARDEN_LOCK_EXAMPLE.md`](WARDEN_LOCK_EXAMPLE.md) (archived to keep this core doc under the 500-line cap).
 
 ### 11.6 §11 implementer must-not-deviate list
 

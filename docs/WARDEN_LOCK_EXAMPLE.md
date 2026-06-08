@@ -39,3 +39,20 @@ post-`lock rotate` `pin` block (same `overall_digest`, `rotation_count` bumped):
   "rotated_at": "2026-06-08T09:00:00Z", "rotation_count": 1
 }
 ```
+
+## §11.5 — per-tool inspection policy worked example
+
+Companion to `WARDEN_LOCK_SCHEMA.md` §11. Illustrative only.
+
+```jsonc
+"tools": [
+  // returns a token by design → demote secret-echo to a note
+  { "name": "issue_scoped_token", "description_hash": "sha256:...", "input_schema_hash": "sha256:...",
+    "capabilities": [], "entry_digest": "sha256:...",
+    "inspection": { "expected_output_charset": "text", "may_return_urls": false, "secret_echo_applies": false } },
+  // raw image bytes → WRD-RES-ANSI disabled via binary-ok charset
+  { "name": "screenshot_png", "description_hash": "sha256:...", "input_schema_hash": "sha256:...",
+    "capabilities": ["fs-read"], "entry_digest": "sha256:...",
+    "inspection": { "expected_output_charset": "binary-ok", "may_return_urls": false, "secret_echo_applies": true } }
+]
+```
