@@ -33,6 +33,11 @@ WARDEN_ERROR_CODE = -32001
 #: mcp-warden reserved JSON-RPC error code for transport/lifecycle synthetic
 #: errors — server-exit, truncation-at-EOF teardown (GUARD_PROXY_V3.md §2.6).
 WARDEN_TRANSPORT_ERROR_CODE = -32002
+#: mcp-warden reserved JSON-RPC error code for a ``--strict`` abort: an internal
+#: inspection error could not complete its safety analysis, so the session is
+#: terminated fail-CLOSED (GUARD_PROXY_V3.md, strict mode). NON-RETRIABLE — the
+#: guard is tearing the session down and exiting 3; the client MUST NOT retry.
+WARDEN_STRICT_ABORT_ERROR_CODE = -32003
 
 MODE_ERROR = "error"
 MODE_REDACT = "redact"
@@ -62,6 +67,37 @@ def transport_error(rpc_id: Any, *, reason: str, stage: str = "lifecycle", messa
             "code": WARDEN_TRANSPORT_ERROR_CODE,
             "message": message or "mcp-warden: server exited before responding",
             "data": {"warden": True, "stage": stage, "reason": reason},
+        },
+    }
+
+
+def strict_abort_error(rpc_id: Any, *, site: str, reason: str) -> dict[str, Any]:
+    """Build a ``--strict`` abort error response (code ``-32003``, NON-RETRIABLE).
+
+    Resolves an in-flight client promise when strict mode terminates the session
+    because an internal inspection (``site``) could not complete. Distinct from
+    :func:`error_response` (``-32001`` policy/result block) and
+    :func:`transport_error` (``-32002`` lifetime/transport): a ``-32003`` means
+    "the guard could not verify this frame's safety and is fail-CLOSING". The
+    ``reason`` MUST be pre-sanitized (no original-exception ``repr``/``str`` and
+    no result/argument content) — only the sanitized ``site`` + exception class.
+
+    Args:
+        rpc_id: The id of the in-flight request being abandoned.
+        site: The inspection site id (``request-policy`` / ``result-inspect`` /
+            ``list-gate``).
+        reason: A secret-free, pre-sanitized explanation.
+
+    Returns:
+        A complete JSON-RPC error object with code ``-32003``.
+    """
+    return {
+        "jsonrpc": "2.0",
+        "id": rpc_id,
+        "error": {
+            "code": WARDEN_STRICT_ABORT_ERROR_CODE,
+            "message": "mcp-warden: strict mode aborted the session (inspection error)",
+            "data": {"warden": True, "stage": "strict_abort", "site": site, "reason": reason},
         },
     }
 

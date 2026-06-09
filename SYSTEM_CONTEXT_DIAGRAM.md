@@ -151,9 +151,12 @@ flowchart LR
 - `guard` passes **every frame through untouched EXCEPT** `tools/call` request/response
   (+ the `tools/list_changed` gate vs the lock). `initialize`/capabilities are never
   rewritten; enforcement begins only at the first `tools/call` (`GUARD_PROXY.md` §2).
-- A framing/inspection **error fails open** — the frame passes through and the session is
-  never killed (`GUARD_PROXY.md` §9). Oversized frames (> `--max-frame-bytes`) and truncated
-  frames at EOF also fail open (`GUARD_PROXY_V3.md` §2.3–§2.4).
+- A framing/inspection **error fails open** by default — the frame passes through and the session
+  is never killed (`GUARD_PROXY.md` §9). Oversized frames (> `--max-frame-bytes`) and truncated
+  frames at EOF also fail open (`GUARD_PROXY_V3.md` §2.3–§2.4). **(#21)** The opt-in `--strict`
+  flag fails CLOSED instead, but only for the inspection layer: an error at the result /
+  argument-policy / tools-list inspection sites **terminates** the session (`-32003` non-retriable
+  to the client, exit `3`); framing/EOF/over-cap stay fail-open in all modes (`GUARD_PROXY_V3.md` §5).
 - "Block" on the wire is a **well-formed JSON-RPC frame**: an error response (`-32001`) for
   blocked requests/exfil/secret-echo results, or a redacted-content result for ANSI stripping
   (`GUARD_PROXY.md` §7).

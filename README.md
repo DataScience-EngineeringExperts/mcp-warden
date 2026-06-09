@@ -268,7 +268,7 @@ run the gate only on push:
 | `mcp-warden check <server-cmd...> [--lock F] [--sarif F] [--json]` | Re-capture + diff vs lock | **non-zero on drift**, 2 on error |
 | `mcp-warden policy lint <file> [--lock F]` | Lint a policy file (fail closed) | non-zero on lint error |
 | `mcp-warden policy eval <file> <sample.json> [--lock F]` | Evaluate one sample call | **non-zero on a deny verdict** (CI assertion) |
-| `mcp-warden guard <server-cmd...> [--lock F] [--policy F] [--no-block-* / --allow-exfil-domain] [--block-inject-phrase] [--audit-only] [--sarif F] [--record T]` | **(v0.3)** Transparent stdio proxy: inspects `tools/call` results + arguments at runtime. **Deterministic tier blocks by default**; opt out per-category with `--no-block-<category>` or fully with `--audit-only` | child's exit code; never breaks the session |
+| `mcp-warden guard <server-cmd...> [--lock F] [--policy F] [--no-block-* / --allow-exfil-domain] [--block-inject-phrase] [--audit-only] [--strict] [--sarif F] [--record T]` | **(v0.3)** Transparent stdio proxy: inspects `tools/call` results + arguments at runtime. **Deterministic tier blocks by default**; opt out per-category with `--no-block-<category>` or fully with `--audit-only`. `--strict` fails CLOSED on an internal inspection error (exit `3`) | child's exit code; `3` on a `--strict` abort; otherwise never breaks the session |
 | `mcp-warden inspect <trace.jsonl> [--lock F] [--sarif F]` | **(v0.2)** Offline analyzer over a recorded JSON-RPC session — same `WRD-RES-*` catalog as `guard` (always report-only) | non-zero on any BLOCK-tier finding; 2 on read error |
 | `mcp-warden lock rotate <lock> [--approver ID] [--actor ID] [--note T] [--json]` | **(v0.3)** Re-attest provenance on an existing baseline without re-capturing the surface; `overall_digest` stays **byte-identical** (WARDEN_LOCK_SCHEMA §8.2). Fails closed on a tampered/inconsistent lock | 0 on success, 2 on missing/invalid/tampered lock |
 | `mcp-warden diff <lock-a> <lock-b> [--json] [--sarif F] [--no-provenance] [--exit-code]` | **(v0.3)** Offline, **redacted** viewer over the drift engine: renders integrity drift between two existing locks (A=baseline, B=current) + a separate informational provenance section. Never re-captures and never prints raw `server.command`/`args` (secret-safe) | 0 (viewer); with `--exit-code`, 1 on **integrity** drift only; 2 on missing/invalid lock |
@@ -299,6 +299,11 @@ mcp-warden guard node ./build/index.js --no-block-deterministic
 # Opt INTO the fuzzy injection tier (never default):
 mcp-warden guard node ./build/index.js --block-inject-phrase
 
+# Fail-CLOSED (high-security): TERMINATE the session (exit 3, -32003 to the client) if an
+# internal inspection (result / argument-policy / tools-list) cannot complete, instead of the
+# default fail-open pass-through. Opt-in; integrity over availability.
+mcp-warden guard node ./build/index.js --lock warden.lock --policy policy.yaml --strict
+
 # Re-analyze a recorded session offline with the identical rule catalog (always report-only):
 mcp-warden inspect session.trace.jsonl --lock warden.lock --sarif inspect.sarif
 ```
@@ -308,8 +313,12 @@ mcp-warden inspect session.trace.jsonl --lock warden.lock --sarif inspect.sarif
 whole tier); `--allow-exfil-domain` is the sole affirmative alias. Precedence:
 `--audit-only` > `--no-block-*` > default-block / `--block-inject-phrase`. The v0.2
 `--block-*` enable flags are accepted but **inert no-ops** (one-line stderr deprecation note),
-so old scripts keep working. Reserved error codes: **`-32001`** (policy/result block),
-**`-32002`** (transport/lifecycle). See
+so old scripts keep working. **`--strict`** (opt-in, default off) trades availability for
+integrity: an internal inspection error at the result / argument-policy / tools-list layer
+**terminates the session** (exit `3`, `-32003` non-retriable error to the client) instead of
+failing open — framing/EOF/over-cap stay fail-open in all modes (known limitation). Reserved
+error codes: **`-32001`** (policy/result block), **`-32002`** (transport/lifecycle), **`-32003`**
+(`--strict` abort, non-retriable). See
 [`docs/RESULT_INSPECTION.md`](docs/RESULT_INSPECTION.md),
 [`docs/GUARD_PROXY.md`](docs/GUARD_PROXY.md), and
 [`docs/GUARD_PROXY_V3.md`](docs/GUARD_PROXY_V3.md).

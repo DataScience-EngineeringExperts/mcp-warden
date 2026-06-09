@@ -23,7 +23,7 @@ from .models import WardenLock
 logger = logging.getLogger("mcp_warden.guard")
 
 
-def diverges_from_lock(result: dict[str, Any], lock: WardenLock) -> tuple[bool, str]:
+def diverges_from_lock(result: dict[str, Any], lock: WardenLock, *, strict: bool = False) -> tuple[bool, str]:
     """Compare an inline ``tools/list`` result's tool surface to the lock.
 
     Compares the set of tool names plus each tool's ``(description, inputSchema)``
@@ -33,6 +33,11 @@ def diverges_from_lock(result: dict[str, Any], lock: WardenLock) -> tuple[bool, 
     Args:
         result: The JSON-RPC ``result`` object of a ``tools/list`` response.
         lock: The loaded ``warden.lock`` baseline.
+        strict: When True (``--strict``), a hash error on a live tool entry is a
+            failed inspection and is RE-RAISED (binding #5) instead of swallowed,
+            so the caller can fail-CLOSE. When False (default) the behavior is
+            byte-identical to before: swallow the hash error and return
+            ``(False, "")`` (= no divergence claim, fail-open).
 
     Returns:
         ``(diverged, reason)`` — ``reason`` is a secret-free, human-readable
@@ -47,7 +52,11 @@ def diverges_from_lock(result: dict[str, Any], lock: WardenLock) -> tuple[bool, 
 
     try:
         live = _hash_live_tools(tools)
-    except Exception as exc:  # malformed entry -> fail-open
+    except Exception as exc:  # malformed entry
+        if strict:
+            # Strict: a hash failure means we could not gate this surface. Re-raise
+            # so the loop converts it to a list-gate StrictInspectionAbort (#5).
+            raise
         logger.debug("list-gate: could not hash live tools (fail-open): %s", exc)
         return False, ""
 

@@ -378,7 +378,80 @@ change behavior, so v0.2 scripts keep working.
 
 ---
 
-## 5. Related documents
+## 5. `--strict` — fail-CLOSED mode (opt-in, default OFF)
+
+> **Availability trade-off (state it plainly):** strict mode chooses **integrity over
+> availability**. By default `guard` fails **OPEN** on an internal inspection error (emits a
+> `WRD-RES-FRAME-ERROR` note and passes the frame through, §2.7). `--strict` instead **terminates
+> the whole session non-zero** the instant an inspection cannot complete, so an un-inspectable
+> message never silently passes. The cost is that an internal inspection bug (or a deliberately
+> malformed frame that trips a rule) ends the session rather than degrading to pass-through.
+> Default stays fail-open to preserve the current contract.
+>
+> **What `--strict` terminates on (state it plainly):** strict does NOT only fire on malicious
+> inputs. It terminates on *any* inspection that cannot complete — that explicitly includes
+> **inspection bugs** (a crash inside `inspect_result()` / `evaluate_call()` / `diverges_from_lock()`)
+> and **policy configuration errors** (a malformed or self-contradictory argument policy that makes
+> the eval raise). A legitimate session can therefore be killed by a guard-internal bug or a bad
+> policy file, not just by a hostile server. That false-positive kill is the deliberate
+> integrity-over-availability trade-off: when the analyzer cannot vouch for a frame, strict refuses
+> to let it pass rather than guessing. Run default (fail-open) if availability outranks integrity.
+
+### 5.1 The TIGHT scope — exactly the inspection layer (3 + 1 sites)
+
+Strict termination fires **only** when the safety analysis of an *inspected* frame could not
+complete. The cardinal risk is false-positive terminations of legitimate sessions, so the trigger
+set is deliberately minimal:
+
+| Site id | Where | Trigger |
+|---|---|---|
+| `request-policy` | `tools/call` **request** | `evaluate_call()` / argument-policy eval raised |
+| `result-inspect` | `tools/call` **response** | `inspect_result()` raised |
+| `list-gate` | gated `tools/list` **response** | `diverges_from_lock()` raised, **OR** the nested `_hash_live_tools()` hash error (which fails open in default mode by returning *no divergence*) re-raises under strict |
+
+Everything else stays **fail-open in ALL modes** (it is NOT an inspection failure):
+
+- framing / parse errors, including **truncated-at-EOF** (a normal session end, §2.3);
+- **over-cap** frames beyond `--max-frame-bytes` (a documented resource limit, §2.4) — *known
+  limitation:* an over-cap `tools/call` result is forwarded un-inspected even under `--strict`;
+  expanding strict to over-cap risks breaking legitimate large results and is deferred to a
+  follow-up issue;
+- finding-sink callback errors (a sink bug must never break the session);
+- all stream-closure / signal / lifecycle best-effort paths and every normal protocol event.
+
+### 5.2 Wire contract + exit code
+
+On a strict abort, in this exact order:
+
+1. The offending frame is **not forwarded** (inspection runs *before* any client write of that
+   frame — the inspection-before-write invariant; so no partial-forward + error double-delivery).
+2. A JSON-RPC error is synthesized to every in-flight request id with reserved code **`-32003`**,
+   `stage: "strict_abort"`, and `data.warden: true`, so the client never hangs. `-32003` is
+   **NON-RETRIABLE** (distinct from `-32001` policy/result block and `-32002` transport).
+3. Exactly **one** structured stderr line is emitted (a session-level dedup flag suppresses a
+   second near-simultaneous abort): `{"event":"strict_abort","site":...,"tool":...,"exc_type":...,
+   "rpc_id":...}`. It is built **only** from the sanitized `{site, tool, exc_type}` — never the
+   original exception's `repr()/str()`, result content, or arguments (a rule exception message can
+   echo secret-bearing result text; cf. the `_redact_server` lesson). The raise site uses
+   `from None` so a traceback cannot print the secret-bearing original.
+4. The child is torn down **gracefully** — the existing SIGTERM-plus-grace `teardown_child` path,
+   **not** an immediate SIGKILL (the server may be healthy; the failed inspection is guard-internal).
+5. `guard` exits with the dedicated code **`3`** (`GUARD_STRICT_EXIT`), distinct from child-natural
+   (`0..127`), `128+signum`, `GUARD_FATAL_EXIT` (`2`), and `GUARD_TRANSPORT_EXIT` (`2`) — so an
+   operator can tell "terminated by internal inspection error" from "blocked by policy".
+
+### 5.3 Must-not-deviate (§5)
+
+1. **Default is fail-open** — `--strict` is opt-in; the no-strict path is byte-identical to today.
+2. **Only the 3 + 1 inspection sites terminate.** Framing/EOF/over-cap/sink/lifecycle/normal stay
+   fail-open in every mode.
+3. **`-32003` for strict, exit `3`** — never reuse `-32001`/`-32002` or the fatal/transport codes.
+4. **Sanitized fields only** on stderr and in the `-32003` frame — no original exception text.
+5. **Graceful teardown**, never immediate SIGKILL.
+
+---
+
+## 6. Related documents
 
 - [`GUARD_PROXY.md`](GUARD_PROXY.md) — v0.2 base proxy contract + the v0.3 default-posture
   change (§5) this doc backs with the full flag scheme (§4).

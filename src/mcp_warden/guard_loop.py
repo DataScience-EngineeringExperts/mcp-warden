@@ -34,6 +34,40 @@ logger = logging.getLogger("mcp_warden.guard")
 PASSTHROUGH_METHODS = frozenset({"notifications/cancelled", "notifications/progress"})
 
 
+class StrictInspectionAbort(BaseException):
+    """Raised at an inspection site under ``--strict`` to fail-CLOSE the session.
+
+    Subclasses :class:`BaseException` (NOT :class:`Exception`) on purpose: it is
+    raised from inside the very ``except Exception`` fail-open handlers it must
+    escape, and a ``BaseException`` is not caught by ``except Exception``. That
+    guarantees the abort cannot be silently swallowed back into the fail-open
+    pass-through (which would downgrade exit 3 -> 2 and drop the stderr line).
+
+    Carries ONLY pre-sanitized fields — NEVER the original exception, its
+    message, the result content, or the tool arguments (the original may embed
+    secret-bearing result text; see issue #22 B3). The raise site uses
+    ``from None`` to sever ``__cause__`` so a traceback cannot print the
+    secret-bearing original.
+
+    Attributes:
+        site: The inspection site id (``request-policy`` / ``result-inspect`` /
+            ``list-gate``).
+        tool: The tool name under inspection (or ``"?"`` when unknown).
+        exc_type: The class name of the swallowed inspection exception.
+        rpc_id: The id of the in-flight request whose inspection failed (carried
+            explicitly because a result-side abort has already popped this id
+            from the in-flight map, so the loop must synthesize the client error
+            for it from here). ``None`` if the frame had no id.
+    """
+
+    def __init__(self, *, site: str, tool: str, exc_type: str, rpc_id: Any = None) -> None:
+        self.site = site
+        self.tool = tool
+        self.exc_type = exc_type
+        self.rpc_id = rpc_id
+        super().__init__(f"strict inspection abort at {site} ({exc_type})")
+
+
 @dataclass
 class GuardConfig:
     """Runtime configuration for ``guard`` (GUARD_PROXY.md §5, GUARD_PROXY_V3.md §4).
@@ -58,6 +92,11 @@ class GuardConfig:
     armed_policy: bool = False  # True iff --policy supplied
     redact_secret_echo: bool = False
     audit_only: bool = False
+    #: Strict fail-CLOSED mode (opt-in, default off). When True, an internal
+    #: inspection error (the 3 inspection try/except sites + the nested list-gate
+    #: hash error) TERMINATES the session non-zero (exit 3) instead of failing
+    #: open. Integrity over availability — see GUARD_PROXY_V3.md strict mode.
+    strict: bool = False
     max_frame_bytes: int = 8 * 1024 * 1024
     max_inflight: int = 1024
 
@@ -119,6 +158,14 @@ class GuardState:
     #: True once a notifications/tools/list_changed was seen; the next tools/list
     #: response is re-checked against the lock (§4.3). Reset after the check runs.
     list_changed_pending: bool = False
+    #: Double-emission guard for strict aborts (binding #6): two pumps could both
+    #: raise StrictInspectionAbort in one loop iteration. Only the FIRST abort
+    #: emits the structured stderr line + drives exit 3; later ones are no-ops.
+    #: Defense-in-depth: anyio's single-event-loop model makes a SECOND
+    #: StrictInspectionAbort effectively impossible (the first abort cancels the
+    #: task group before another pump can raise), but this flag GUARANTEES a single
+    #: stderr line + single exit 3 even if that concurrency assumption ever changes.
+    strict_abort_fired: bool = False
 
     def remember_request(self, rpc_id: Any, method: str, tool: str = "") -> None:
         """Record an in-flight request id->method (+tool), bounded LRU (§4.4)."""
@@ -189,9 +236,21 @@ def handle_c2s(state: GuardState, frame: Frame, mode: str) -> bytes:
     state.enforcing = True  # first tools/call starts enforcement (§2.2)
     if state.policy is None:
         return frame.raw  # argument policy inactive
+    # Inspection-before-write invariant (binding #2): the policy evaluation below
+    # runs BEFORE this request is ever forwarded to the server, so a strict abort
+    # here cannot leave a partially-forwarded frame.
     try:
         verdicts, tool = _eval_request_policy(state, obj)
+    except StrictInspectionAbort:
+        raise  # never swallow the abort (BaseException; would not hit except Exception anyway)
     except Exception as exc:  # inspection error -> fail-open pass-through (§9)
+        if state.config.strict:
+            # `from None` severs __cause__ so the secret-bearing original cannot
+            # print in a traceback (binding #4a). Carry sanitized fields only.
+            _tool = _tool_name_from_request(obj)
+            raise StrictInspectionAbort(
+                site="request-policy", tool=_tool, exc_type=type(exc).__name__, rpc_id=rpc_id
+            ) from None
         state.emit(_frame_error_note("c2s", rpc_id, f"policy eval error: {exc}"))
         return frame.raw
     if not overall_denied(verdicts):
@@ -222,6 +281,20 @@ def _error_response(rpc_id: Any, rule: str, tool: str, reason: str) -> dict[str,
     from .wire_block import error_response
 
     return error_response(rpc_id, stage="request", rule=rule, tool=tool, reason=reason)
+
+
+def _tool_name_from_request(obj: dict[str, Any]) -> str:
+    """Best-effort tool name from a tools/call request (or ``"?"``).
+
+    Used only to label a :class:`StrictInspectionAbort` — never includes
+    arguments or any secret-bearing content.
+    """
+    params = obj.get("params")
+    if isinstance(params, dict):
+        name = params.get("name")
+        if isinstance(name, str) and name:
+            return name
+    return "?"
 
 
 def _eval_request_policy(state: GuardState, obj: dict[str, Any]):

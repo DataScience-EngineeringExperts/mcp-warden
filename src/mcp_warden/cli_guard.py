@@ -90,6 +90,19 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         block_deterministic: bool = typer.Option(False, "--block-deterministic", help="DEPRECATED no-op", hidden=True),
         redact_secret_echo: bool = typer.Option(False, "--redact-secret-echo", help="Redact secret echoes in place vs error-replace"),
         audit_only: bool = typer.Option(False, "--audit-only", help="Force warnings; disable ALL blocking (highest precedence)"),
+        strict: bool = typer.Option(
+            False,
+            "--strict/--no-strict",
+            help=(
+                "Fail-CLOSED on internal inspection errors (integrity over availability): "
+                "terminate the session non-zero (exit 3) if any tool-result / argument-policy "
+                "/ tools-list inspection cannot complete, instead of failing open. This fires on "
+                "inspection BUGS and policy CONFIGURATION errors too, not only on malicious inputs "
+                "-- any uncompleted inspection ends the session (a false-positive kill is the "
+                "deliberate integrity-over-availability trade-off). Default off (fail-open). "
+                "Framing/EOF/over-cap stay fail-open in all modes."
+            ),
+        ),
         sarif: Optional[Path] = typer.Option(None, "--sarif", help="Write a SARIF report on shutdown"),
         json_out: Optional[Path] = typer.Option(None, "--json", help="Write JSONL findings on shutdown"),
         record: Optional[Path] = typer.Option(None, "--record", help="Record observed frames for later inspect"),
@@ -120,6 +133,7 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             armed_policy=policy_file is not None,
             redact_secret_echo=redact_secret_echo,
             audit_only=audit_only,
+            strict=strict,
             max_frame_bytes=max_frame_bytes,
             max_inflight=max_inflight,
         )

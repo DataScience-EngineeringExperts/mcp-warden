@@ -22,13 +22,22 @@ from anyio.abc import Process
 
 from .framing import MODE_NEWLINE, FrameReader
 from .guard_io import wrap_recv, wrap_send
-from .guard_lifecycle import exit_code_for_child, forward_signals, synthesize_pending_errors, teardown_child
+from .guard_lifecycle import (
+    exit_code_for_child,
+    forward_signals,
+    synthesize_pending_errors,
+    teardown_child,
+)
 from .guard_loop import GuardConfig, GuardState, handle_c2s, handle_s2c
+from .guard_strict import GUARD_STRICT_EXIT, _find_strict_abort, _handle_strict_abort
 
 logger = logging.getLogger("mcp_warden.guard")
 
 GUARD_FATAL_EXIT = 2
 GUARD_TRANSPORT_EXIT = 2  # client-disconnect transport exit (v0.1 IO-error code)
+#: :data:`GUARD_STRICT_EXIT` (3) is defined in and re-exported from
+#: :mod:`mcp_warden.guard_strict` (alongside the strict-abort helpers); imported
+#: above so existing callers/tests can keep referencing ``guard.GUARD_STRICT_EXIT``.
 
 
 class _Channels:
@@ -233,14 +242,32 @@ async def run_guard_async(
                 return  # child already exiting; _watch_child owns the cancel
         tg.cancel_scope.cancel()
 
-    async with anyio.create_task_group() as tg:
-        _install_signal_forwarding(tg, proc)
-        tg.start_soon(_pump_client_to_server, state, c2s_reader, proc.stdin, client_out, chan)
-        tg.start_soon(_pump_server_to_client, state, s2c_reader, client_out, chan)
-        if proc.stderr is not None:
-            tg.start_soon(_pump_stderr, proc.stderr, client_err)
-        tg.start_soon(_watch_child, tg)
-        tg.start_soon(_watch_client_eof, tg)
+    try:
+        async with anyio.create_task_group() as tg:
+            _install_signal_forwarding(tg, proc)
+            tg.start_soon(_pump_client_to_server, state, c2s_reader, proc.stdin, client_out, chan)
+            tg.start_soon(_pump_server_to_client, state, s2c_reader, client_out, chan)
+            if proc.stderr is not None:
+                tg.start_soon(_pump_stderr, proc.stderr, client_err)
+            tg.start_soon(_watch_child, tg)
+            tg.start_soon(_watch_client_eof, tg)
+    except BaseException as group_exc:  # noqa: BLE001 - unwrap to find a strict abort
+        # anyio task groups collect failures into a (Base)ExceptionGroup. A
+        # StrictInspectionAbort is a BaseException, so it lands in a
+        # BaseExceptionGroup; unwrap to find it. Anything else re-raises.
+        #
+        # SystemExit(3) invariant (audit B1): exit 3 is the strict-abort code and
+        # is paired with exactly one structured `strict_abort` stderr line emitted
+        # by `_handle_strict_abort`. An unrelated `SystemExit(3)` propagating
+        # through the task group is theoretically possible — `_find_strict_abort`
+        # would return None for it and it re-raises here, so the process would
+        # still exit 3 but WITHOUT a `strict_abort` stderr line. Operators MUST
+        # treat "exit 3 with NO structured `strict_abort` stderr line" as a guard
+        # internal error, not a strict abort.
+        abort = _find_strict_abort(group_exc)
+        if abort is None:
+            raise
+        return await _handle_strict_abort(state, proc, client_out, client_err, chan.client_mode, abort)
 
     # Decide the teardown path: client gone first vs child exited first (§2.1/§2.2).
     client_gone = (chan.client_eof or chan.client_pipe_broken) and proc.returncode is None
