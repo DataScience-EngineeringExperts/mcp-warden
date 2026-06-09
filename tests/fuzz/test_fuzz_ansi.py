@@ -177,6 +177,12 @@ def test_strip_redact_composition_same_security_outcome(secret: str) -> None:
     assert res_rules.find_ansi_codepoints(redact_then_strip, cs) == []
 
     # The revealed prefix is bounded the same way regardless of order: redaction
-    # always keeps at most the first 4 codepoints of whatever it redacted.
-    assert strip_then_redact.startswith(stripped[:4])
-    assert redact_then_strip.startswith(res_rules.strip_ansi(secret[:4], cs))
+    # always keeps at most min(4, n//2) codepoints of whatever it redacted (the
+    # issue #38 floor), never more than the first 4 and never more than half.
+    assert strip_then_redact.startswith(stripped[: min(4, len(stripped) // 2)])
+    redacted_secret = redact_secret(secret)
+    assert redact_then_strip.startswith(
+        res_rules.strip_ansi(secret[: min(4, len(secret) // 2)], cs)
+    )
+    # And the redacted output never reveals more than the floored prefix.
+    assert redacted_secret.startswith(secret[: min(4, len(secret) // 2)])

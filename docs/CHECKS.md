@@ -189,8 +189,14 @@ Entropy rule (normative):
 - Threshold `4.0` is the v0.1 constant. It is chosen to avoid flagging hex hashes of
   normal English (≈ 3.5–3.9) while catching random base64/hex secrets (≈ 4.5–6.0).
 
-`message` names the rule and field; `snippet` is **redacted**: emit `first4 + "…" +
-"(len=" + N + ")"`. Never the raw match. (The lock and SARIF are committed/shared.)
+`message` names the rule and field; `snippet` is **redacted**: emit
+`prefix + "…" + "(" + length-tag + ")"` where `prefix = raw[:min(4, n//2)]` (never
+more than half the secret, so a short secret is never fully disclosed) and the
+length-tag is **exact** for `n>=4` (`len=N`, a drift/audit signal) but **bucketed**
+to `len<=3` for `n<=3` (exact length there would narrow a brute-force to a handful).
+`n`/slicing are **codepoint** (not grapheme) counts; input is `str` (non-`str` is
+defensively coerced, never raised, so the on-wire echo path can't crash the proxy).
+Never the raw match. (The lock and SARIF are committed/shared.) Issue #38.
 
 ### 4.3 Supply-chain checks (MCP-SUPPLY) — `WRD-SUP-*`
 
@@ -267,7 +273,8 @@ Robustness:
 ## 8. Implementer must-not-deviate list
 
 1. **No fuzzy/NLP description scanning.** Deterministic checks only.
-2. Secret snippets are **always redacted** (`first4 + "…" + "(len=N)"`).
+2. Secret snippets are **always redacted** (`raw[:min(4, n//2)] + "…" + "(len=N)"`,
+   length bucketed to `len<=3` for `n<=3`; codepoint semantics; `str` input). Issue #38.
 3. Entropy threshold = **4.0 bits/char**, candidate length ≥ 24, alnum-dominant ≥ 80%,
    de-duped against vendor patterns.
 4. Token matching is **segment-exact**, case-insensitive, never substring.
