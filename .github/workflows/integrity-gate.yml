@@ -34,6 +34,13 @@ jobs:
       - name: Run pytest
         run: pytest -q
 
+      # Re-run the property-fuzz suite deterministically with a FIXED hypothesis
+      # seed so any counterexample is replayable from the workflow log alone
+      # (issue #17, binding fix #5). The ci profile (max_examples=1000,
+      # derandomize, no example DB) is loaded by tests/fuzz/conftest.py.
+      - name: Run property-fuzz suite (deterministic, seed=0)
+        run: pytest tests/fuzz -p no:randomly --hypothesis-seed=0
+
   # --------------------------------------------------------------------------
   # Job 2: MCP integrity gate demo
   #
