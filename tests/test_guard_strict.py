@@ -74,11 +74,12 @@ class StrictClient:
         return init
 
     def finish(self, timeout: float = 15.0) -> tuple[int, str]:
-        """Close stdin, drain, and return ``(exit_code, stderr_text)``."""
-        try:
-            self.proc.stdin.close()
-        except Exception:
-            pass
+        """Drain to EOF and return ``(exit_code, stderr_text)``.
+
+        ``communicate`` closes stdin itself (signalling the guard's EOF teardown)
+        then reads stdout/stderr to EOF — do NOT pre-close stdin or Python 3.11
+        raises ``ValueError: I/O operation on closed file`` from ``communicate``.
+        """
         try:
             _out, err = self.proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -205,7 +206,8 @@ def _run_clean_session_strict(*guard_args: str, server: str = POISON) -> tuple[i
     send({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
           "params": {"name": "clean_tool", "arguments": {"q": "x"}}})
     proc.stdout.readline()
-    proc.stdin.close()
+    # communicate() closes stdin itself (EOF teardown); pre-closing it makes
+    # Python 3.11 raise ValueError from communicate().
     _out, err = proc.communicate(timeout=15)
     return proc.returncode, err.decode(errors="replace")
 
@@ -230,8 +232,7 @@ def test_negative_overcap_frame_fails_open_under_strict():
                                   "params": {"protocolVersion": "2025-06-18", "capabilities": {},
                                              "clientInfo": {"name": big, "version": "1"}}}) + "\n").encode())
     proc.stdin.flush()
-    proc.stdin.close()
-    _out, err = proc.communicate(timeout=15)
+    _out, err = proc.communicate(timeout=15)  # closes stdin itself (no pre-close)
     stderr = err.decode(errors="replace")
     assert _strict_abort_lines(stderr) == [], "over-cap frame must NOT strict-abort"
     assert proc.returncode != GUARD_STRICT_EXIT
@@ -246,8 +247,7 @@ def test_negative_unparseable_frame_fails_open_under_strict():
     )
     proc.stdin.write(b"{ this is not valid json\n")
     proc.stdin.flush()
-    proc.stdin.close()
-    _out, err = proc.communicate(timeout=15)
+    _out, err = proc.communicate(timeout=15)  # closes stdin itself (no pre-close)
     stderr = err.decode(errors="replace")
     assert _strict_abort_lines(stderr) == [], "unparseable frame must NOT strict-abort"
     assert proc.returncode != GUARD_STRICT_EXIT
@@ -263,8 +263,7 @@ def test_negative_truncated_at_eof_fails_open_under_strict():
     # Partial frame then EOF: a normal session end, NOT an inspection error.
     proc.stdin.write(b'{"jsonrpc": "2.0", "id": 1, "method": "init')
     proc.stdin.flush()
-    proc.stdin.close()
-    _out, err = proc.communicate(timeout=15)
+    _out, err = proc.communicate(timeout=15)  # closes stdin itself (no pre-close)
     stderr = err.decode(errors="replace")
     assert _strict_abort_lines(stderr) == [], "truncated-at-EOF must NOT strict-abort"
     assert proc.returncode != GUARD_STRICT_EXIT
