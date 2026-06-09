@@ -117,11 +117,41 @@ def test_real_object_body_is_recovered(obj: dict) -> None:
 # ASCII `^[0-9]+$`. The frozen @examples below pin that regression permanently.
 
 
+# A generous bound for the unit tests of _parse_content_length: large enough that
+# legitimate small lengths pass, small enough that 2**63 is rejected (B2).
+_CL_MAX = 1 << 20
+
+
 @given(header=st.binary(max_size=128))
 def test_parse_content_length_int_or_none_never_negative(header: bytes) -> None:
     """For ANY header bytes: returns int|None, never raises, never negative."""
-    out = _parse_content_length(header)
-    assert out is None or (isinstance(out, int) and out >= 0)
+    out = _parse_content_length(header, _CL_MAX)
+    assert out is None or (isinstance(out, int) and 0 <= out <= _CL_MAX)
+
+
+def _oracle_cl(header: bytes, bound: int) -> int | None:
+    """Independent reference for the hardened _parse_content_length contract.
+
+    Mirrors the spec (B1 single-valid-only, B2 bound, B9 leading-zero) WITHOUT
+    reusing the implementation, so the property is a real cross-check:
+    accept iff there is EXACTLY ONE Content-Length header AND its stripped value
+    is an ASCII-digit run AND (value == "0" or no leading zero) AND int <= bound.
+    """
+    prefix = b"content-length:"
+    vals = [
+        line[len(prefix) :].strip()
+        for line in header.split(b"\r\n")
+        if line[: len(prefix)].lower() == prefix
+    ]
+    if len(vals) != 1:
+        return None
+    v = vals[0]
+    if not v.isdigit():
+        return None
+    if len(v) > 1 and v[:1] == b"0":  # leading zero (B9)
+        return None
+    n = int(v)
+    return n if n <= bound else None
 
 
 @example(b"Content-Length: -5")  # Finding A: negative must be rejected
@@ -129,6 +159,12 @@ def test_parse_content_length_int_or_none_never_negative(header: bytes) -> None:
 @example(b"Content-Length: 1_000")  # underscores must be rejected
 @example(b"Content-Length: 0")  # zero is valid
 @example(b"Content-Length: 42")  # plain digits valid
+@example(b"Content-Length: 007")  # B9: leading zeros rejected
+@example(b"Content-Length: 5\r\nContent-Length: 5")  # B1: duplicate (even equal) rejected
+@example(b"Content-Length: x\r\nContent-Length: 5")  # B1: malformed-first + valid-second rejected
+@example(b"Content-Length: 5\r\nContent-Length: 9")  # B1: two different values rejected
+@example(b"Content-Length: " + str(2**63).encode())  # B2: absurd length rejected, no hang
+@example(b"Content-Length: 16")  # single valid within bound: accepted
 @given(
     header=st.one_of(
         st.binary(max_size=128),
@@ -136,26 +172,44 @@ def test_parse_content_length_int_or_none_never_negative(header: bytes) -> None:
         st.builds(
             lambda tok: b"Content-Length: " + tok,
             st.sampled_from(
-                [b"-1", b"-999", b"+7", b" 5 ", b"1_2", b"0x10", b"abc", b"", b"5\t", b"  3"]
+                [b"-1", b"-999", b"+7", b" 5 ", b"1_2", b"0x10", b"abc", b"", b"5\t", b"  3", b"007"]
             ),
         ),
         st.builds(lambda n: b"Content-Length: " + str(n).encode(), st.integers(min_value=0, max_value=10**9)),
+        # B1: build multi-Content-Length headers (duplicate / malformed+valid).
+        st.builds(
+            lambda a, b: b"Content-Length: " + a + b"\r\nContent-Length: " + b,
+            st.sampled_from([b"5", b"9", b"x", b"-1", b"007"]),
+            st.sampled_from([b"5", b"9", b"x", b"-1", b"007"]),
+        ),
     )
 )
 def test_parse_content_length_rejects_nonconformant(header: bytes) -> None:
-    """Only an ASCII-digit run is a valid length; everything else => None.
+    """Single-valid-only + bounded: the impl agrees with an independent oracle.
 
-    Liveness for the soundness fix: a known-bad ``-5`` is REJECTED (None), while
-    a plain non-negative digit run is accepted as exactly that integer.
+    Liveness for the soundness fix: a known-bad ``-5`` is REJECTED (None), a
+    duplicate Content-Length (B1) is REJECTED, an absurd ``2**63`` (B2) is
+    REJECTED, and a lone in-bound digit run is accepted as exactly that integer.
     """
-    out = _parse_content_length(header)
-    assert out is None or (isinstance(out, int) and out >= 0)
-    if header.lower().startswith(b"content-length:"):
-        tail = header[len(b"content-length:") :].strip()
-        if tail.isdigit() and tail.isascii():
-            assert out == int(tail)
-        else:
-            assert out is None
+    out = _parse_content_length(header, _CL_MAX)
+    assert out is None or (isinstance(out, int) and 0 <= out <= _CL_MAX)
+    assert out == _oracle_cl(header, _CL_MAX)
+
+
+def test_parse_content_length_absurd_value_returns_promptly() -> None:
+    """B2 regression: a 2**63 declared length is rejected (None), never a hang.
+
+    Asserts the parse returns promptly (no attempt to bound/allocate the value)
+    and yields None so the framer surfaces a visible parse_error fail-open rather
+    than blocking on a body that can never arrive.
+    """
+    import time
+
+    header = b"Content-Length: " + str(2**63).encode()
+    start = time.monotonic()
+    out = _parse_content_length(header, _CL_MAX)
+    assert out is None
+    assert time.monotonic() - start < 1.0
 
 
 # --- read_frame: never raises, never hangs, XOR on non-EOF (binding #1) --------
@@ -262,8 +316,21 @@ def result_frame_with_ansi(draw):
     blocks = []
     for _ in range(n_blocks):
         # Allowed text plus possibly-spliced disallowed control codepoints.
+        # B4 (issue #17 audit): exercise the FULL disallowed set, not just the 4
+        # C0/DEL points — add the C1 control range (0x80-0x9F) and the Unicode
+        # line/paragraph separators U+2028/U+2029 so the Content-Length /
+        # pipeline composition property sees every codepoint the ANSI rule strips.
         base = draw(st.text(max_size=20))
-        bad = draw(st.lists(st.sampled_from([0x1B, 0x07, 0x00, 0x7F]), max_size=3))
+        bad = draw(
+            st.lists(
+                st.sampled_from(
+                    [0x1B, 0x07, 0x00, 0x7F]  # ESC / BEL / NUL / DEL
+                    + list(range(0x80, 0xA0))  # C1 controls
+                    + [0x2028, 0x2029]  # line / paragraph separator
+                ),
+                max_size=3,
+            )
+        )
         chars = list(base)
         for cp in bad:
             chars.insert(draw(st.integers(min_value=0, max_value=len(chars))), chr(cp))
@@ -308,7 +375,7 @@ async def test_redact_pipeline_content_length_is_consistent(frame_obj: dict) -> 
     # (1) The declared Content-Length equals the ACTUAL serialized body length.
     sep = wire.find(b"\r\n\r\n")
     assert sep != -1
-    declared = _parse_content_length(wire[:sep])
+    declared = _parse_content_length(wire[:sep], 1 << 20)
     actual_body = wire[sep + 4 :]
     assert declared is not None
     assert declared == len(actual_body), "emitted Content-Length must match the post-transform body"

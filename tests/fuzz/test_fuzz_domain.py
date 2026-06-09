@@ -151,15 +151,34 @@ def test_idn_unicode_label_does_not_false_match(label: str, domain: str) -> None
 # --- NEGATIVE soundness: random non-URL noise never invents a denylist hit -----
 
 
+def _independent_domain_present(host: str, domain: str) -> bool:
+    """A SIMPLE, independent anchored-suffix predicate (NOT the fn under test).
+
+    B7 (issue #17 audit): the negative-soundness filter must not be the function
+    being tested, or a false-negative in ``host_matches_domain`` would silently
+    weaken the property (it would only ever feed itself inputs it already calls
+    clean). This plain ``host == domain or host endswith '.'+domain`` test is the
+    independent oracle; it is intentionally NOT normalization-aware (no trailing
+    dot / IDN handling), so it is at-least-as-permissive as the real matcher for
+    the simple ASCII alphabet this strategy draws from — which is exactly what a
+    sound negative filter needs.
+    """
+    h = host.lower()
+    d = domain.lower()
+    return h == d or h.endswith("." + d)
+
+
 @given(text=st.text(alphabet="abcdefghij ./:-\n", max_size=80))
 def test_noise_without_denylist_host_yields_no_hit(text: str) -> None:
     """If no extractable host matches any denylist entry, there are NO hits."""
     hosts = _hosts_in_text(text)
-    assume(not any(host_matches_domain(h, d) for h in hosts for d in DENYLIST))
-    # Also ensure no path-qualified hit is possible from this noise.
+    # Independent filter (B7): does NOT call host_matches_domain.
+    assume(not any(_independent_domain_present(h, d) for h in hosts for d in DENYLIST))
+    # Also ensure no path-qualified hit is possible from this noise (independent
+    # host predicate, plain prefix path check).
     assume(
         not any(
-            host_matches_domain(host, q_host) and path.startswith(q_path)
+            _independent_domain_present(host, q_host) and path.startswith(q_path)
             for host, path, _full in extract_urls(text)
             for q_host, q_path in SEED_EXFIL_PATH_QUALIFIED
         )

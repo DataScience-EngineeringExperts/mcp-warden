@@ -197,6 +197,15 @@ Required behavior — **defined failure, fail-open** (the asymmetric-failure rul
 > *verdict*, and verdicts in a default-blocking category are enforced (v0.3 §5). The two are
 > never conflated.
 
+> **Residual risk — the padded-frame inspection bypass (`THREAT_MODEL_V2.md` T-CAP-PAD):**
+> because over-cap frames are forwarded un-inspected, an attacker who controls the **size** of a
+> tool result can deliberately **pad a malicious frame above `--max-frame-bytes`** to skip
+> inspection entirely. This is fail-OPEN by the deliberate availability-over-inspection choice
+> above, not an oversight: a malicious server must not be able to break a session by emitting a
+> huge frame. Making the over-cap path fail-CLOSED under `--strict` (terminate or block the
+> padded frame instead of passing it through) is tracked in **#37**, which is expanded to cover
+> this attack explicitly. v0.3 does not change the over-cap contract.
+
 ### 2.5 Ordering of teardown vs. in-flight inspection
 
 If a lifecycle event (§2.1–§2.4) fires while a `tools/call` result is mid-inspection, the

@@ -36,8 +36,11 @@ jobs:
 
       # Re-run the property-fuzz suite deterministically with a FIXED hypothesis
       # seed so any counterexample is replayable from the workflow log alone
-      # (issue #17, binding fix #5). The ci profile (max_examples=1000,
-      # derandomize, no example DB) is loaded by tests/fuzz/conftest.py.
+      # (issue #17, binding fix #5). The pinned --hypothesis-seed=0 is what makes
+      # this run deterministic; the ci profile (max_examples=1000, no example DB)
+      # is loaded by tests/fuzz/conftest.py. (No derandomize on top of the fixed
+      # seed — see the B5 note in conftest.py: it would be moot here and diverge
+      # from the unseeded local pytest run.)
       - name: Run property-fuzz suite (deterministic, seed=0)
         run: pytest tests/fuzz -p no:randomly --hypothesis-seed=0
 

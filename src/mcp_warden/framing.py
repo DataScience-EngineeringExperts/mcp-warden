@@ -148,7 +148,7 @@ class FrameReader:
                 return None
         sep = self._buf.find(b"\r\n\r\n")
         header_bytes = bytes(self._buf[:sep])
-        length = _parse_content_length(header_bytes)
+        length = _parse_content_length(header_bytes, self.max_frame_bytes)
         if length is None:
             raw = bytes(self._buf[: sep + 4])
             del self._buf[: sep + 4]
@@ -165,7 +165,7 @@ class FrameReader:
         return _parse_frame(raw, body)
 
 
-def _parse_content_length(header_bytes: bytes) -> int | None:
+def _parse_content_length(header_bytes: bytes, max_frame_bytes: int) -> int | None:
     """Parse the Content-Length value from a header block (case-insensitive).
 
     A conformant Content-Length is a run of ASCII digits only. Python's ``int``
@@ -175,14 +175,50 @@ def _parse_content_length(header_bytes: bytes) -> int | None:
     digits. Any of those is a malformed frame, so we require ``^[0-9]+$`` and
     return ``None`` otherwise (surfaced upstream as the visible fail-open
     ``parse_error``). See issue #17 fuzz Finding A.
+
+    Hardening (issue #17 code audit, B1/B2/B9):
+
+    * **B1 — duplicate/multiple Content-Length (request-smuggling class).** We
+      scan EVERY header line and collect EVERY ``Content-Length`` value rather
+      than returning on the first one found. A frame is accepted only when there
+      is EXACTLY ONE occurrence and it is valid. Zero, a duplicate (even of equal
+      values), or any malformed occurrence => ``None`` (visible ``parse_error``
+      fail-open). An early-exit on the first line let a malformed-first +
+      valid-second (or two-different-values) header desync the framer / turn a
+      frame into an uninspected pass-through.
+    * **B2 — upper bound.** ``isdigit()`` accepts arbitrarily huge integers
+      (e.g. ``2**63``); the framer would then block reading a body that never
+      arrives (``max_frame_bytes`` is a fail-open pass-through cap per
+      GUARD_PROXY_V3 §2.4 — it does NOT bound the declared length). A declared
+      length larger than ``max_frame_bytes`` can never be satisfied by a frame
+      the reader will accept, so we reject it here => ``None`` (parse_error),
+      never a blocking read. The bound is threaded from
+      ``FrameReader.max_frame_bytes``.
+    * **B9 — leading zeros.** ``007`` is non-conformant per RFC 7230 §3.3.2;
+      rejected (any value with a redundant leading zero), which falls out of the
+      single-valid-only scan cheaply.
     """
+    values: list[bytes] = []
     for line in header_bytes.split(b"\r\n"):
         if line[: len(_CL_PREFIX)].lower() == _CL_PREFIX:
-            value = line[len(_CL_PREFIX) :].strip()
-            if value.isdigit() and value.isascii():
-                return int(value)
-            return None
-    return None
+            values.append(line[len(_CL_PREFIX) :].strip())
+    # B1: exactly one Content-Length header, or it is malformed -> reject.
+    if len(values) != 1:
+        return None
+    value = values[0]
+    # bytes.isdigit() is already ASCII-0-9-only (no sign/underscore/whitespace/
+    # unicode digits), so a separate .isascii() check (B8) is redundant here.
+    if not value.isdigit():
+        return None
+    # B9: RFC 7230 forbids leading zeros (``007``); a lone ``0`` is still valid.
+    if len(value) > 1 and value[:1] == b"0":
+        return None
+    n = int(value)
+    # B2: a length the reader can never satisfy must fail-open as parse_error,
+    # not hang on a body that will never arrive.
+    if n > max_frame_bytes:
+        return None
+    return n
 
 
 def _parse_frame(raw: bytes, body: bytes) -> Frame:
