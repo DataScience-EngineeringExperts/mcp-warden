@@ -99,6 +99,39 @@ async def synthesize_pending_errors(state, client_out, mode: str, returncode: in
     state.inflight_tool.clear()
 
 
+async def synthesize_strict_abort(
+    state, client_out, mode: str, site: str, reason: str, pending_ids: list[Any]
+) -> None:
+    """Emit a ``-32003`` strict-abort error for every in-flight id (binding #5).
+
+    Resolves each pending client promise when ``--strict`` terminates the session
+    on an internal inspection error, so the client never hangs. Flushed BEFORE the
+    pipes close. Best-effort per id: a send failure on one id (client already
+    gone) does not stop the others. The ``reason`` MUST be pre-sanitized — no
+    original-exception ``repr``/``str``, no result/argument content (binding #4c).
+
+    Args:
+        state: The :class:`~mcp_warden.guard_loop.GuardState` (its in-flight maps
+            are cleared after synthesis).
+        client_out: The client-facing send stream.
+        mode: The client-side framing mode for serialization.
+        site: The inspection site id (``request-policy`` / ``result-inspect`` /
+            ``list-gate``).
+        pending_ids: The in-flight request ids to resolve with a -32003 error.
+    """
+    if not pending_ids:
+        return
+    logger.info("guard: strict abort at %s; synthesizing -32003 for %d in-flight id(s)", site, len(pending_ids))
+    for rpc_id in pending_ids:
+        err = wire_block.strict_abort_error(rpc_id, site=site, reason=reason)
+        try:
+            await client_out.send(serialize_frame(err, mode))
+        except Exception as exc:  # noqa: BLE001 - client may be gone; keep going
+            logger.debug("guard: could not deliver -32003 for id=%r: %s", rpc_id, exc)
+    state.inflight.clear()
+    state.inflight_tool.clear()
+
+
 async def teardown_child(proc: Process, *, on_note=None) -> None:
     """Tear down the child process group on client disconnect/EOF (§2.2, §3.2).
 

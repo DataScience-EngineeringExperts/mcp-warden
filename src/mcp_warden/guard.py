@@ -11,6 +11,7 @@ owns process lifecycle, the byte plumbing, and signal forwarding.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import subprocess
@@ -22,13 +23,24 @@ from anyio.abc import Process
 
 from .framing import MODE_NEWLINE, FrameReader
 from .guard_io import wrap_recv, wrap_send
-from .guard_lifecycle import exit_code_for_child, forward_signals, synthesize_pending_errors, teardown_child
-from .guard_loop import GuardConfig, GuardState, handle_c2s, handle_s2c
+from .guard_lifecycle import (
+    exit_code_for_child,
+    forward_signals,
+    synthesize_pending_errors,
+    synthesize_strict_abort,
+    teardown_child,
+)
+from .guard_loop import GuardConfig, GuardState, StrictInspectionAbort, handle_c2s, handle_s2c
 
 logger = logging.getLogger("mcp_warden.guard")
 
 GUARD_FATAL_EXIT = 2
 GUARD_TRANSPORT_EXIT = 2  # client-disconnect transport exit (v0.1 IO-error code)
+#: Dedicated exit code for a ``--strict`` abort: an internal inspection error
+#: terminated the session fail-CLOSED. DISTINCT from child-natural (0..127),
+#: 128+signum, GUARD_FATAL_EXIT(2), and GUARD_TRANSPORT_EXIT(2) so an operator
+#: can tell "terminated by internal inspection error" from "blocked by policy".
+GUARD_STRICT_EXIT = 3
 
 
 class _Channels:
@@ -172,6 +184,107 @@ def _signal_child(proc: Process, signum: int) -> None:
         logger.debug("could not signal child %s: %s", pid, exc)
 
 
+def _find_strict_abort(exc: BaseException) -> StrictInspectionAbort | None:
+    """Unwrap an anyio (Base)ExceptionGroup to find a :class:`StrictInspectionAbort`.
+
+    anyio's task group raises a ``BaseExceptionGroup`` aggregating every task
+    failure; a ``StrictInspectionAbort`` (a ``BaseException``) is carried inside
+    it (possibly nested). Returns the FIRST abort found in depth-first order, or
+    ``None`` if the group holds no strict abort (then the caller re-raises).
+
+    Args:
+        exc: The exception (or exception group) raised out of the task group.
+
+    Returns:
+        The first :class:`StrictInspectionAbort`, or ``None``.
+    """
+    if isinstance(exc, StrictInspectionAbort):
+        return exc
+    if isinstance(exc, BaseExceptionGroup):
+        for sub in exc.exceptions:
+            found = _find_strict_abort(sub)
+            if found is not None:
+                return found
+    return None
+
+
+async def _handle_strict_abort(
+    state: GuardState,
+    proc: Process,
+    client_out,
+    client_err,
+    chan: "_Channels",
+    abort: StrictInspectionAbort,
+) -> int:
+    """Fail-CLOSE the session after a strict inspection abort (binding #5 ordering).
+
+    Ordering (exact): the offending frame is ALREADY not forwarded (the pump
+    raised before any write of it, binding #2) -> synthesize a ``-32003`` error
+    to every in-flight id so the client never hangs -> set ``strict_abort_fired``
+    FIRST, then emit exactly ONE structured stderr line (binding #6) built only
+    from the sanitized ``{site, tool, exc_type}`` (never the original exception;
+    binding #4c) -> graceful ``teardown_child`` (SIGTERM + grace; binding #7,
+    NO immediate SIGKILL) -> exit :data:`GUARD_STRICT_EXIT`.
+
+    Args:
+        state: The guard state (holds the in-flight id map + the dedup flag).
+        proc: The child process to tear down.
+        client_out: The client-facing send stream (for the -32003 frames).
+        client_err: The client-facing stderr stream (for the structured line).
+        chan: The shared channel state (client framing mode).
+        abort: The unwrapped strict abort carrying sanitized fields only.
+
+    Returns:
+        :data:`GUARD_STRICT_EXIT` (3).
+    """
+    # Double-emission guard (binding #6): if two pumps both aborted, only the
+    # first does the work; a second is a no-op (still exits 3).
+    if state.strict_abort_fired:
+        logger.debug("guard: strict abort already fired; suppressing duplicate")
+        return GUARD_STRICT_EXIT
+    state.strict_abort_fired = True
+
+    # In-flight id(s) for the client error frame(s). The offending request's id
+    # may already have been popped from `inflight` during result-side inspection,
+    # so the abort carries it explicitly: lead with it, then any other still-
+    # pending ids (de-duplicated, order-preserving) so NO in-flight call hangs.
+    pending_ids: list[Any] = []
+    if abort.rpc_id is not None:
+        pending_ids.append(abort.rpc_id)
+    for rid in state.inflight.keys():
+        if rid not in pending_ids:
+            pending_ids.append(rid)
+
+    # Synthesize -32003 to the in-flight id(s) so the client never hangs. The
+    # reason is pre-sanitized: site + exception class only, no original repr/str.
+    reason = f"inspection failed at {abort.site} ({abort.exc_type}); session terminated (non-retriable)"
+    await synthesize_strict_abort(state, client_out, chan.client_mode, abort.site, reason, pending_ids)
+
+    # Exactly ONE structured stderr line, built ONLY from sanitized fields
+    # (binding #4c). exc_info is irrelevant here (no logging of the original).
+    rpc_id = abort.rpc_id if abort.rpc_id is not None else (pending_ids[0] if pending_ids else None)
+    line = json.dumps(
+        {
+            "event": "strict_abort",
+            "site": abort.site,
+            "tool": abort.tool,
+            "exc_type": abort.exc_type,
+            "rpc_id": rpc_id,
+        },
+        ensure_ascii=False,
+    )
+    try:
+        await client_err.send((line + "\n").encode())
+    except Exception as exc:  # noqa: BLE001 - stderr may be gone; do not leak original
+        # exc_info=False semantics (binding #4b): never format the abort/original.
+        logger.debug("guard: could not write strict-abort stderr line: %s", exc)
+
+    # Graceful child teardown (binding #7): reuse the existing SIGTERM+grace path.
+    await teardown_child(proc, on_note=state.emit)
+    logger.info("guard: strict abort at %s; session terminated, exit %d", abort.site, GUARD_STRICT_EXIT)
+    return GUARD_STRICT_EXIT
+
+
 async def run_guard_async(
     command: str,
     args: list[str],
@@ -233,14 +346,23 @@ async def run_guard_async(
                 return  # child already exiting; _watch_child owns the cancel
         tg.cancel_scope.cancel()
 
-    async with anyio.create_task_group() as tg:
-        _install_signal_forwarding(tg, proc)
-        tg.start_soon(_pump_client_to_server, state, c2s_reader, proc.stdin, client_out, chan)
-        tg.start_soon(_pump_server_to_client, state, s2c_reader, client_out, chan)
-        if proc.stderr is not None:
-            tg.start_soon(_pump_stderr, proc.stderr, client_err)
-        tg.start_soon(_watch_child, tg)
-        tg.start_soon(_watch_client_eof, tg)
+    try:
+        async with anyio.create_task_group() as tg:
+            _install_signal_forwarding(tg, proc)
+            tg.start_soon(_pump_client_to_server, state, c2s_reader, proc.stdin, client_out, chan)
+            tg.start_soon(_pump_server_to_client, state, s2c_reader, client_out, chan)
+            if proc.stderr is not None:
+                tg.start_soon(_pump_stderr, proc.stderr, client_err)
+            tg.start_soon(_watch_child, tg)
+            tg.start_soon(_watch_client_eof, tg)
+    except BaseException as group_exc:  # noqa: BLE001 - unwrap to find a strict abort
+        # anyio task groups collect failures into a (Base)ExceptionGroup. A
+        # StrictInspectionAbort is a BaseException, so it lands in a
+        # BaseExceptionGroup; unwrap to find it. Anything else re-raises.
+        abort = _find_strict_abort(group_exc)
+        if abort is None:
+            raise
+        return await _handle_strict_abort(state, proc, client_out, client_err, chan, abort)
 
     # Decide the teardown path: client gone first vs child exited first (§2.1/§2.2).
     client_gone = (chan.client_eof or chan.client_pipe_broken) and proc.returncode is None

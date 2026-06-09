@@ -48,7 +48,7 @@ def handle_s2c(state, frame: Frame, mode: str) -> bytes:
     Returns:
         The bytes to forward client-ward.
     """
-    from .guard_loop import PASSTHROUGH_METHODS
+    from .guard_loop import PASSTHROUGH_METHODS, StrictInspectionAbort
 
     if state.record is not None and frame.json is not None:
         state.record("s2c", frame.json)
@@ -81,11 +81,21 @@ def handle_s2c(state, frame: Frame, mode: str) -> bytes:
     result = obj.get("result")
     if not isinstance(result, dict):
         return frame.raw
+    # Inspection-before-write invariant (binding #2): inspect_result runs BEFORE
+    # this response frame is forwarded to the client, so a strict abort here
+    # cannot leave a partially-forwarded (un-inspected) frame on the wire.
     try:
         findings = inspect_result(
             result, tool, pol, exfil_denylist=state.exfil_denylist, inject_phrases=state.inject_phrases
         )
+    except StrictInspectionAbort:
+        raise  # never swallow the abort (BaseException)
     except Exception as exc:  # inspection error -> fail-open pass-through (§9)
+        if state.config.strict:
+            # `from None` severs __cause__ (binding #4a); sanitized fields only.
+            raise StrictInspectionAbort(
+                site="result-inspect", tool=tool or "?", exc_type=type(exc).__name__, rpc_id=rpc_id
+            ) from None
         state.emit(_frame_error_note("s2c", rpc_id, f"inspect error: {exc}"))
         return frame.raw
     return _apply_result_findings(state, frame, mode, rpc_id, tool, result, findings, pol)
@@ -98,17 +108,32 @@ def _handle_list_response(state, frame: Frame, mode: str, rpc_id: Any, obj: dict
     armed it AND a lock is loaded. A divergence blocks by default (error-replace)
     unless ``--no-block-list-changed`` demotes it to shadow. Any error fails open.
     """
+    from .guard_loop import StrictInspectionAbort
+
     if not state.list_changed_pending or state.lock is None:
         return frame.raw  # not armed (no list_changed seen) -> pass-through
     state.list_changed_pending = False  # consume the arming
     result = obj.get("result")
     if not isinstance(result, dict):
         return frame.raw
+    # Inspection-before-write invariant (binding #2): the drift gate runs BEFORE
+    # the tools/list response is forwarded, so a strict abort here cannot leave a
+    # partially-forwarded (un-gated) list on the wire.
     try:
         from .guard_list_gate import diverges_from_lock
 
-        diverged, reason = diverges_from_lock(result, state.lock)
+        # strict threads down so the nested _hash_live_tools error RE-RAISES
+        # (binding #5) instead of silently returning (False, "") = no divergence;
+        # that re-raise lands here and becomes a list-gate StrictInspectionAbort.
+        diverged, reason = diverges_from_lock(result, state.lock, strict=state.config.strict)
+    except StrictInspectionAbort:
+        raise  # never swallow the abort (BaseException)
     except Exception as exc:  # gate error -> fail-open pass-through (§9)
+        if state.config.strict:
+            # `from None` severs __cause__ (binding #4a); sanitized fields only.
+            raise StrictInspectionAbort(
+                site="list-gate", tool="?", exc_type=type(exc).__name__, rpc_id=rpc_id
+            ) from None
         state.emit(_frame_error_note("s2c", rpc_id, f"list-gate error: {exc}"))
         return frame.raw
     if not diverged:
