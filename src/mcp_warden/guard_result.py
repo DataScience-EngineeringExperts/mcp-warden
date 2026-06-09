@@ -130,7 +130,15 @@ def _handle_list_response(state, frame: Frame, mode: str, rpc_id: Any, obj: dict
         raise  # never swallow the abort (BaseException)
     except Exception as exc:  # gate error -> fail-open pass-through (§9)
         if state.config.strict:
-            # `from None` severs __cause__ (binding #4a); sanitized fields only.
+            # This is the boundary for the `_hash_live_tools` bare-`raise` (it
+            # re-raises the malformed-entry exception under strict, which lands
+            # here). `from None` severs `__cause__` AND sets `__suppress_context__`
+            # on the new abort (binding #4a): Python's default traceback printer
+            # honors `__suppress_context__`, so even though `__context__` is still
+            # implicitly set to the original (secret-bearing) exception, it is
+            # NEVER printed or logged -> no leak. The structured stderr is built
+            # from sanitized fields only, so the original cannot escape that path
+            # either. Sanitized fields only on the abort itself.
             raise StrictInspectionAbort(
                 site="list-gate", tool="?", exc_type=type(exc).__name__, rpc_id=rpc_id
             ) from None

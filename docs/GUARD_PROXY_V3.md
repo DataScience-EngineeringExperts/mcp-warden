@@ -387,6 +387,15 @@ change behavior, so v0.2 scripts keep working.
 > message never silently passes. The cost is that an internal inspection bug (or a deliberately
 > malformed frame that trips a rule) ends the session rather than degrading to pass-through.
 > Default stays fail-open to preserve the current contract.
+>
+> **What `--strict` terminates on (state it plainly):** strict does NOT only fire on malicious
+> inputs. It terminates on *any* inspection that cannot complete — that explicitly includes
+> **inspection bugs** (a crash inside `inspect_result()` / `evaluate_call()` / `diverges_from_lock()`)
+> and **policy configuration errors** (a malformed or self-contradictory argument policy that makes
+> the eval raise). A legitimate session can therefore be killed by a guard-internal bug or a bad
+> policy file, not just by a hostile server. That false-positive kill is the deliberate
+> integrity-over-availability trade-off: when the analyzer cannot vouch for a frame, strict refuses
+> to let it pass rather than guessing. Run default (fail-open) if availability outranks integrity.
 
 ### 5.1 The TIGHT scope — exactly the inspection layer (3 + 1 sites)
 

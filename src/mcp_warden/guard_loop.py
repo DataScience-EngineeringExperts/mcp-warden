@@ -161,6 +161,10 @@ class GuardState:
     #: Double-emission guard for strict aborts (binding #6): two pumps could both
     #: raise StrictInspectionAbort in one loop iteration. Only the FIRST abort
     #: emits the structured stderr line + drives exit 3; later ones are no-ops.
+    #: Defense-in-depth: anyio's single-event-loop model makes a SECOND
+    #: StrictInspectionAbort effectively impossible (the first abort cancels the
+    #: task group before another pump can raise), but this flag GUARANTEES a single
+    #: stderr line + single exit 3 even if that concurrency assumption ever changes.
     strict_abort_fired: bool = False
 
     def remember_request(self, rpc_id: Any, method: str, tool: str = "") -> None:

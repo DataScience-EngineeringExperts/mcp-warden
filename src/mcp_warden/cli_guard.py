@@ -96,8 +96,11 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             help=(
                 "Fail-CLOSED on internal inspection errors (integrity over availability): "
                 "terminate the session non-zero (exit 3) if any tool-result / argument-policy "
-                "/ tools-list inspection cannot complete, instead of failing open. Default off "
-                "(fail-open). Framing/EOF/over-cap stay fail-open in all modes."
+                "/ tools-list inspection cannot complete, instead of failing open. This fires on "
+                "inspection BUGS and policy CONFIGURATION errors too, not only on malicious inputs "
+                "-- any uncompleted inspection ends the session (a false-positive kill is the "
+                "deliberate integrity-over-availability trade-off). Default off (fail-open). "
+                "Framing/EOF/over-cap stay fail-open in all modes."
             ),
         ),
         sarif: Optional[Path] = typer.Option(None, "--sarif", help="Write a SARIF report on shutdown"),

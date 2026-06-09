@@ -26,8 +26,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-from mcp_warden.guard import GUARD_STRICT_EXIT, _find_strict_abort
-from mcp_warden.guard_loop import GuardConfig, StrictInspectionAbort
+import anyio
+
+from mcp_warden.guard import GUARD_STRICT_EXIT, _find_strict_abort, _handle_strict_abort
+from mcp_warden.guard_loop import GuardConfig, GuardState, StrictInspectionAbort
 
 REPO = Path(__file__).resolve().parent.parent
 FIX = REPO / "tests" / "fixtures"
@@ -408,3 +410,59 @@ def test_find_strict_abort_unwraps_exception_group():
     nested = BaseExceptionGroup("outer", [BaseExceptionGroup("inner", [abort])])
     assert _find_strict_abort(nested) is abort
     assert _find_strict_abort(BaseExceptionGroup("g", [ValueError("x")])) is None
+
+
+# --- rpc_id=None abort path (audit B2) -----------------------------------------
+
+
+class _CollectSend:
+    """Minimal client-facing send stream: collects every ``send``-ed bytes chunk."""
+
+    def __init__(self) -> None:
+        self.chunks: list[bytes] = []
+
+    async def send(self, data: bytes) -> None:
+        self.chunks.append(data)
+
+
+class _ExitedProc:
+    """Fake already-exited child so ``teardown_child`` early-returns (returncode set)."""
+
+    def __init__(self) -> None:
+        self.returncode = 0  # already exited -> teardown_child is a no-op
+
+
+def test_strict_abort_rpc_id_none_early_returns_but_still_emits_and_exits_3():
+    # B2: a strict abort on a frame with NO JSON-RPC id (a notification, so
+    # abort.rpc_id is None) and an EMPTY inflight map yields empty pending_ids.
+    # Contract: synthesize_strict_abort EARLY-RETURNS (no -32003 client frame is
+    # written), the structured stderr line STILL emits with "rpc_id": null, and
+    # _handle_strict_abort still returns exit 3.
+    state = GuardState(config=GuardConfig())  # inflight is empty by default
+    assert not state.inflight, "precondition: no in-flight ids -> empty pending_ids"
+    client_out = _CollectSend()
+    client_err = _CollectSend()
+    abort = StrictInspectionAbort(
+        site="request-policy", tool="?", exc_type="RuntimeError", rpc_id=None
+    )
+
+    async def _run() -> int:
+        return await _handle_strict_abort(
+            state, _ExitedProc(), client_out, client_err, "newline", abort
+        )
+
+    code = anyio.run(_run)
+
+    # Exits 3 even with no in-flight id to resolve.
+    assert code == GUARD_STRICT_EXIT
+    # synthesize_strict_abort early-returned: NO -32003 client frame was written
+    # (the early-return path on empty pending_ids is exercised).
+    assert client_out.chunks == [], "no client frame expected when pending_ids is empty"
+    # The structured stderr line still emits, with rpc_id explicitly null.
+    assert len(client_err.chunks) == 1, "exactly one structured stderr line expected"
+    obj = json.loads(client_err.chunks[0].decode().strip())
+    assert obj["event"] == "strict_abort"
+    assert obj["site"] == "request-policy"
+    assert obj["rpc_id"] is None, "rpc_id must serialize to null"
+    # The dedup flag fired (single-emission guarantee).
+    assert state.strict_abort_fired is True
