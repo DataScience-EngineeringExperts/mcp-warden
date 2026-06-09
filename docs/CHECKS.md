@@ -67,11 +67,49 @@ Drift items are emitted as SARIF/JSONL results with `ruleId = WRD-DRIFT-<CLASS>`
 | `WRD-DRIFT-SCHEMA-ADDITIONAL-PROPS-OPENED` | error (high) | `additionalProperties` false→true |
 | `WRD-DRIFT-SCHEMA-CONSTRAINT-TIGHTENED` | note (low) | constraint tightened |
 | `WRD-DRIFT-SCHEMA-COSMETIC-MODIFIED` | note (low) | schema bytes differ, structure identical |
-| `WRD-DRIFT-SCHEMA-MODIFIED` | error (high) | v1-lock fallback / opaque-leaf change |
+| `WRD-DRIFT-SCHEMA-MODIFIED` | error (high) | v1-lock fallback / **unresolvable** opaque-leaf `$ref` change |
+| `WRD-DRIFT-SCHEMA-VERSION-MIGRATED` | note (low) | lock schema-format upgrade (v2→v3) moved the digest; advisory only (#29) |
 
 Schema-drift results additionally carry `properties.detail` (a compact, non-secret summary,
 e.g. `maxLength 64→4096`) and `properties.schemaPath` (the changed entry, `tools/<name>`).
 Items are emitted **per fact** — one property can produce several results.
+
+### 2.2 In-document `$ref` resolution (#29, schema v3)
+
+As of schema **v3**, `extract_skeleton` FOLLOWS an in-document `$ref` into its target
+subschema so a constraint relaxation hidden behind a shared definition classifies
+GRANULARLY (e.g. `WRD-DRIFT-SCHEMA-CONSTRAINT-RELAXED`) instead of collapsing to the coarse
+`WRD-DRIFT-SCHEMA-MODIFIED`. Semantics (binding, never under-report):
+
+- **Resolved** only when `$ref` is the **sole** key of the node (a sibling key such as
+  `description` keeps the node opaque), the ref is a **same-document** pointer
+  (`#/$defs/...`, `#/definitions/...`, any same-document RFC 6901 JSON pointer), and it
+  resolves to a **dict** subschema. The pointer is percent-decoded BEFORE the RFC 6901
+  `~1`→`/`, `~0`→`~` unescape; numeric segments index arrays with no list/dict coercion.
+- **Stays OPAQUE** (`WRD-DRIFT-SCHEMA-MODIFIED`, high) for: remote refs (`https://…#/…`),
+  the bare `#`, an unresolvable pointer, a non-dict target, a non-string ref, a `$ref` with
+  sibling keys, or per-path budget exhaustion (`MAX_REFS = 256`).
+- **Cyclic** / mutually-recursive refs terminate at the re-entrant position with the
+  `_truncated` leaf (also `WRD-DRIFT-SCHEMA-MODIFIED`, high). Extraction is bounded, pure,
+  deterministic, and never raises or infinite-loops; a diamond DAG (two refs to one shared
+  definition) yields a byte-identical, order-independent skeleton.
+
+### 2.3 v2 → v3 migration note (re-pin required)
+
+Following `$ref` changes the skeleton of any ref-using tool, which changes its `entry_digest`
+and the `overall_digest` (which embeds `schema_version`). After upgrading mcp-warden, an
+**approved** v2 lock for a ref-using server will report an `unapproved-change` (high) on the
+next `check`, accompanied by an additive `schema-version-migrated` (low) advisory explaining
+that the digest moved due to the schema-format upgrade (no surface change is implied by the
+advisory alone). The advisory NEVER replaces, gates, or downgrades the `unapproved-change`
+finding — `overall_digest` guards holistic integrity, so auto-downgrading across the version
+boundary would be a laundering bypass. **Action:** review the diff, then **re-pin**
+(`mcp-warden pin --approve`) to re-attest the surface under schema v3. Locks for servers that
+use no `$ref` keep an identical skeleton; only their `schema_version`/digest changes on re-pin.
+When a pre-#29 v2 baseline is diffed under v3, any tool whose schema used `$ref` (and thus held
+an opaque leaf in the v2 skeleton) falls back to a coarse `WRD-DRIFT-SCHEMA-MODIFIED` (high) at
+the ref-bearing path — granularity-loss by design, never an under-report; re-pin to regain
+granular classification.
 
 **Default gate threshold (R9).** `check` exits non-zero on *any* drift (no severity floor
 is applied by the CLI today). The intended downstream policy is **medium and above blocks;

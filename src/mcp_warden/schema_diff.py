@@ -8,7 +8,12 @@ Design invariants (tested as contracts):
   a. ``extract_skeleton`` is PURE/order-independent — same (or key-reordered) schema
      → byte-identical skeleton (everything sorted).
   b. Absent ``additionalProperties`` normalized to ``true`` at build (R1).
-  c. ``$ref`` is an OPAQUE LEAF (R4): literal target recorded, never followed.
+  c. In-document ``$ref`` is FOLLOWED into its target subschema (R8) so a
+     constraint relaxation hidden behind a shared definition classifies
+     granularly. A non-resolvable ref (remote / unresolvable / sibling keys /
+     non-dict target / budget exhausted) degrades to the legacy OPAQUE LEAF
+     (literal target recorded); a cyclic ref degrades to the ``_truncated`` leaf
+     — both map to ``schema-modified`` (high). Never under-report.
   d. ``type`` normalized to a sorted tuple (R5).
   e. Extraction NEVER raises on cyclic/malformed/non-dict input — degrades to an
      empty/partial skeleton (R4 recursion guard + MAX_DEPTH).
@@ -18,6 +23,7 @@ Design invariants (tested as contracts):
 from __future__ import annotations
 
 import json
+import urllib.parse
 from dataclasses import dataclass
 from typing import Any
 
@@ -25,6 +31,19 @@ from .models import PropFacts, SchemaSkeleton
 
 #: Hard cap on recursion depth; on hit a node is recorded as an opaque leaf (R4).
 MAX_DEPTH = 64
+
+#: Per-path unique-$ref budget (R8): cap on the number of in-document refs that
+#: may be resolved along a SINGLE walk path. Exceeding it degrades to an opaque
+#: leaf (never under-report) and is a belt-and-suspenders bound against an
+#: adversarial deeply-chained-ref schema (B4/B5).
+MAX_REFS = 256
+
+#: Sentinel: ``$ref`` does not resolve to a follow-able in-document dict subschema
+#: → record the existing opaque leaf ``{"$ref": r}`` (maps to schema-modified).
+_OPAQUE = object()
+#: Sentinel: ``$ref`` re-enters a ref already resolved on the current path (cycle)
+#: → record the existing ``{"_truncated": True}`` leaf (maps to schema-modified).
+_CYCLE = object()
 
 #: Reserved path for root-level facts (e.g. a root ``additionalProperties`` open).
 ROOT_PATH = "$root"
@@ -95,6 +114,85 @@ def _extract_constraints(schema: dict[str, Any]) -> dict[str, Any]:
     return dict(sorted(out.items()))
 
 
+def _resolve_in_doc_ref(ref: str, root: Any, ref_path: frozenset[str]) -> Any:
+    """Resolve a SAME-DOCUMENT ``$ref`` JSON pointer to its dict subschema (R8).
+
+    Follows ``#/$defs/...``, ``#/definitions/...`` and any same-document RFC 6901
+    JSON pointer. Returns the resolved dict subschema, or a sentinel:
+
+      * :data:`_OPAQUE` — not an in-document ref, unresolvable, a non-dict target,
+        budget exhausted, or any unexpected error (caller records ``{"$ref": r}``).
+      * :data:`_CYCLE` — ``ref`` is already on the current resolution path
+        (caller records ``{"_truncated": True}``).
+
+    The function NEVER raises (belt-and-suspenders, invariant e): any unexpected
+    exception degrades to :data:`_OPAQUE`.
+
+    Args:
+        ref: The raw ``$ref`` string.
+        root: The top-level schema document (captured once in extract_skeleton).
+        ref_path: The frozenset of ref strings already resolved on THIS path
+            (passed by value; never mutated — B5).
+
+    Returns:
+        The resolved dict subschema, or :data:`_OPAQUE` / :data:`_CYCLE`.
+    """
+    try:
+        if not isinstance(root, dict):
+            return _OPAQUE
+        # In-document iff a non-empty same-document fragment. Remote refs
+        # (``https://x/y#/z``) and the bare document self-ref (``#``) are opaque.
+        if not ref.startswith("#") or ref == "#":
+            return _OPAQUE
+        # Cycle on the CURRENT path: re-entering an already-resolved ref (B5).
+        if ref in ref_path:
+            return _CYCLE
+        # Budget (B4/B5): bound the per-path ref chain length.
+        if len(ref_path) >= MAX_REFS:
+            return _OPAQUE
+
+        # B3 — pointer resolution order: percent-decode BEFORE RFC 6901 unescape.
+        frag = ref[1:]  # drop the leading '#'
+        frag = urllib.parse.unquote(frag)  # percent-decode first
+        if frag == "":
+            return _OPAQUE  # bare '#' already excluded; defensive.
+        segments = frag.split("/")
+        # A same-document pointer is ``#/a/b`` → split yields ['', 'a', 'b']; the
+        # leading element is the empty string before the first '/'. A ref like
+        # ``#foo`` (no leading slash) is NOT a valid JSON pointer → opaque.
+        if segments[0] != "":
+            return _OPAQUE
+        segments = segments[1:]
+        # RFC 6901 unescape per segment: ``~1`` → ``/`` THEN ``~0`` → ``~``.
+        segments = [seg.replace("~1", "/").replace("~0", "~") for seg in segments]
+
+        cur: Any = root
+        for seg in segments:
+            if isinstance(cur, dict):
+                if seg in cur:
+                    cur = cur[seg]
+                else:
+                    return _OPAQUE
+            elif isinstance(cur, list):
+                # NO list/dict coercion: only a literal numeric index resolves.
+                # RFC 6901 §4: array indices are ASCII digits with no leading
+                # zero (except the single "0"); reject "007" (silently → idx 7)
+                # and non-ASCII digit codepoints for strict determinism.
+                if seg.isascii() and seg.isdigit() and (seg == "0" or not seg.startswith("0")) and int(seg) < len(cur):
+                    cur = cur[int(seg)]
+                else:
+                    return _OPAQUE
+            else:
+                return _OPAQUE
+        # Only dict subschemas resolve; a non-dict target stays opaque.
+        if not isinstance(cur, dict):
+            return _OPAQUE
+        return cur
+    except Exception:
+        # Belt-and-suspenders: resolution must never propagate (invariant e).
+        return _OPAQUE
+
+
 def _walk(
     schema: Any,
     path: str,
@@ -102,12 +200,22 @@ def _walk(
     props: dict[str, PropFacts],
     visited: set[int],
     depth: int,
+    *,
+    root: dict | None,
+    ref_path: frozenset[str] = frozenset(),
 ) -> None:
     """Recurse a schema node, recording one :class:`PropFacts` per property path.
 
-    Never raises (invariant e): malformed/non-dict nodes, ``$ref`` and
-    recursion-guard hits degrade to opaque/skipped leaves. ``props`` is mutated
-    in place; ``visited`` (id-set) + ``depth`` cap enforce termination (R4).
+    Never raises (invariant e): malformed/non-dict nodes, unresolvable ``$ref``
+    and recursion-guard hits degrade to opaque/skipped leaves. ``props`` is
+    mutated in place; ``visited`` (id-set) + ``depth`` cap enforce termination (R4).
+
+    In-document ``$ref`` (``#/$defs/...``, ``#/definitions/...``, same-document
+    JSON pointers) is FOLLOWED into its target subschema so constraint changes
+    hidden behind a shared definition diff GRANULARLY (R8). Resolution is bounded
+    by ``ref_path`` (per-path cycle/budget guard, passed BY VALUE — never mutated,
+    so a diamond-DAG resolves order-independently, B5/B6) and degrades to the
+    existing opaque/cycle leaves on every non-resolution path (never under-report).
     """
     # The root node is recorded under ROOT_PATH so root-level facts (e.g. an
     # ``additionalProperties`` open-world escalation) are diffable. A non-dict
@@ -120,9 +228,40 @@ def _walk(
             props[path] = PropFacts(constraints={"additionalProperties": True})
         return
 
-    # R4: opaque $ref — record the literal target, do NOT follow it.
+    # R8: in-document $ref resolution. A bare ``$ref`` is FOLLOWED into its
+    # target subschema; every non-resolution path degrades to the legacy opaque
+    # leaf (``{"$ref": r}``) or cycle leaf (``{"_truncated": True}``), both of
+    # which ``_diff_constraints`` maps to schema-modified (high) — never
+    # under-report (R4/R8).
     if "$ref" in schema:
-        props[node_key] = PropFacts(required=required, constraints={"$ref": str(schema["$ref"])})
+        # B2 — siblings: a ``$ref`` accompanied by ANY other key is treated as an
+        # opaque leaf (resolving would silently drop the siblings' semantics).
+        if len(schema) != 1:
+            props[node_key] = PropFacts(required=required, constraints={"$ref": str(schema["$ref"])})
+            return
+        ref = schema["$ref"]
+        if not isinstance(ref, str):
+            props[node_key] = PropFacts(required=required, constraints={"$ref": str(ref)})
+            return
+        resolved = _resolve_in_doc_ref(ref, root, ref_path)
+        if resolved is _OPAQUE:
+            props[node_key] = PropFacts(required=required, constraints={"$ref": ref})
+            return
+        if resolved is _CYCLE:
+            props[node_key] = PropFacts(required=required, constraints={"_truncated": True})
+            return
+        # Resolved to a dict subschema: recurse INTO it at the SAME path,
+        # recording ``ref`` on the path-local frozenset (passed by value, B5).
+        _walk(
+            resolved,
+            path,
+            required,
+            props,
+            visited,
+            depth + 1,
+            root=root,
+            ref_path=ref_path | {ref},
+        )
         return
 
     # R4: recursion / cycle guard — terminate on depth or re-visit.
@@ -147,13 +286,13 @@ def _walk(
         for key in sorted(properties, key=str):
             child = properties[key]
             child_path = f"{path}.{key}" if path else key
-            _walk(child, child_path, key in req_set, props, visited, depth + 1)
+            _walk(child, child_path, key in req_set, props, visited, depth + 1, root=root, ref_path=ref_path)
 
     # Recurse array items (single-schema form only; tuple form is treated opaque).
     items = schema.get("items")
     if isinstance(items, dict):
         child_path = f"{path}[]" if path else "[]"
-        _walk(items, child_path, False, props, visited, depth + 1)
+        _walk(items, child_path, False, props, visited, depth + 1, root=root, ref_path=ref_path)
 
 
 def extract_skeleton(input_schema: Any | None) -> SchemaSkeleton:
@@ -170,8 +309,12 @@ def extract_skeleton(input_schema: Any | None) -> SchemaSkeleton:
         A :class:`SchemaSkeleton` whose ``props`` are sorted by path.
     """
     props: dict[str, PropFacts] = {}
+    # R8: capture the top-level document ONCE so in-document ``$ref`` pointers
+    # (``#/$defs/...`` etc.) resolve against it. A non-dict root → no resolution
+    # target (refs stay opaque), matching pre-R8 behavior for malformed input.
+    root = input_schema if isinstance(input_schema, dict) else None
     try:
-        _walk(input_schema, "", False, props, set(), 0)
+        _walk(input_schema, "", False, props, set(), 0, root=root, ref_path=frozenset())
     except Exception:
         # Belt-and-suspenders: extraction must never propagate (invariant e).
         pass

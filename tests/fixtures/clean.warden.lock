@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "warden_version": "0.3.0",
   "server": {
     "command": "python",
@@ -109,14 +109,33 @@
       "snippet": "name token 'read'"
     }
   ],
-  "overall_digest": "sha256:0e38dbcbac2379a7811d20c5274fd26228a64219f0eb895e5eabddcc948bebbe",
+  "overall_digest": "sha256:cb20a16ce572cca8f682672c42036e351359d32ca8265e5af3bfc861ab6f9219",
   "pin": {
-    "created_at": "2026-06-08T00:31:05Z",
+    "created_at": "2026-06-09T21:24:46Z",
     "warden_version": "0.3.0",
     "mcp_protocol_version": "2025-11-25",
     "approved": true,
     "approver": "ci-bot@example.invalid",
-    "approved_at": "2026-06-08T00:31:05Z",
-    "approved_digest": "sha256:0e38dbcbac2379a7811d20c5274fd26228a64219f0eb895e5eabddcc948bebbe"
+    "approved_at": "2026-06-09T21:24:46Z",
+    "approved_digest": "sha256:cb20a16ce572cca8f682672c42036e351359d32ca8265e5af3bfc861ab6f9219",
+    "provenance_version": 1,
+    "pinner": {
+      "tool": "mcp-warden",
+      "tool_version": "0.3.0",
+      "actor": null,
+      "environment": null
+    },
+    "attestations": [
+      {
+        "actor": "ci-bot@example.invalid",
+        "role": "approver",
+        "method": "manual",
+        "created_at": "2026-06-09T21:24:46Z",
+        "bound_digest": "sha256:cb20a16ce572cca8f682672c42036e351359d32ca8265e5af3bfc861ab6f9219",
+        "note": null
+      }
+    ],
+    "rotated_at": null,
+    "rotation_count": 0
   }
 }

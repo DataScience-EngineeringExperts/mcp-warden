@@ -134,3 +134,121 @@ def test_unapproved_change_finding():
     cur = build_lock(mutated, [])
     drift = compute_drift(base, cur)
     assert any(d.drift_class == "unapproved-change" for d in drift)
+
+
+# --- #29 v2→v3 schema-version migration compat (B1) --------------------------
+
+
+def _v2_approved_lock(surface, approver, monkeypatch):
+    """Build an APPROVED baseline at schema_version=2 using the real builder.
+
+    ``build_lock`` and ``compute_overall_digest`` both read the module-level
+    ``lockfile.SCHEMA_VERSION``; patching it to 2 yields a genuine v2 lock whose
+    ``overall_digest`` (and mirrored ``approved_digest``) are computed under the
+    v2 payload — no hand-rolled JSON.
+    """
+    import mcp_warden.lockfile as lockfile_mod
+
+    monkeypatch.setattr(lockfile_mod, "SCHEMA_VERSION", 2)
+    return build_lock(surface, [], approve=True, approver=approver)
+
+
+def test_schema_version_migrated_additive_low(monkeypatch):
+    # A $ref-using surface: v2 records the ref opaquely, v3 follows it, so the
+    # v3 overall_digest differs from the approved v2 digest of the SAME surface.
+    schema = {
+        "type": "object",
+        "properties": {"x": {"$ref": "#/$defs/S"}},
+        "$defs": {"S": {"type": "string", "maxLength": 64}},
+    }
+    s = _surface([CapturedTool(name="t", input_schema=schema)])
+
+    base = _v2_approved_lock(s, "ci-bot@example.invalid", monkeypatch)
+    monkeypatch.undo()  # restore SCHEMA_VERSION=3 for the current build
+    cur = build_lock(s, [])
+
+    assert base.schema_version == 2
+    assert cur.schema_version == 3
+    assert base.overall_digest != cur.overall_digest  # ref resolution moved the digest
+
+    drift = compute_drift(base, cur)
+    unapproved = [d for d in drift if d.drift_class == "unapproved-change"]
+    migrated = [d for d in drift if d.drift_class == "schema-version-migrated"]
+    assert unapproved and unapproved[0].severity == "high"
+    assert migrated and migrated[0].severity == "low"
+    assert "re-pin" in migrated[0].message
+    # Non-zero exit: any non-empty drift set means check fails.
+    assert drift
+
+
+def test_genuine_surface_drift_across_version_boundary(monkeypatch):
+    # A real surface change (added required unconstrained prop) ALSO crossing the
+    # v2→v3 boundary still surfaces its real granular drift item, not just the
+    # version-migration advisory.
+    base_schema = {"type": "object", "properties": {"a": {"type": "string", "maxLength": 8}}}
+    s = _surface([CapturedTool(name="t", input_schema=base_schema)])
+    base = _v2_approved_lock(s, "ci-bot@example.invalid", monkeypatch)
+    monkeypatch.undo()
+
+    cur_schema = {
+        "type": "object",
+        "properties": {"a": {"type": "string", "maxLength": 8}, "b": {}},
+        "required": ["b"],
+    }
+    cur = build_lock(_surface([CapturedTool(name="t", input_schema=cur_schema)]), [])
+
+    drift = compute_drift(base, cur)
+    assert any(d.drift_class == "unapproved-change" for d in drift)
+    assert any(d.drift_class == "schema-version-migrated" for d in drift)
+    # The genuine surface change is still reported granularly.
+    assert any(d.drift_class == "schema-required-unconstrained-added" for d in drift)
+
+
+def test_relaxed_ref_def_across_v2_v3_boundary_blocks_high(monkeypatch):
+    # Compat regression: an APPROVED v2 baseline for a $ref-using surface, vs a v3
+    # lock of a RELAXED version of that shared definition (drop a `required` entry).
+    # With input_schema_hash differing, compute_drift MUST yield at least one HIGH
+    # DriftItem (the gate blocks) AND must still report the genuine relaxation
+    # granularly. Proves no silent under-report across the v2→v3 boundary.
+    base_schema = {
+        "type": "object",
+        "properties": {"x": {"$ref": "#/$defs/S"}},
+        "$defs": {
+            "S": {
+                "type": "object",
+                "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
+                "required": ["a", "b"],
+            }
+        },
+    }
+    s = _surface([CapturedTool(name="t", input_schema=base_schema)])
+    base = _v2_approved_lock(s, "ci-bot@example.invalid", monkeypatch)
+    monkeypatch.undo()  # restore SCHEMA_VERSION=3 for the current build
+
+    # v3 lock of a RELAXED shared definition: drop the `required` entry "b".
+    cur_schema = {
+        "type": "object",
+        "properties": {"x": {"$ref": "#/$defs/S"}},
+        "$defs": {
+            "S": {
+                "type": "object",
+                "properties": {"a": {"type": "string"}, "b": {"type": "string"}},
+                "required": ["a"],
+            }
+        },
+    }
+    cur = build_lock(_surface([CapturedTool(name="t", input_schema=cur_schema)]), [])
+
+    # The shared-definition relaxation changes the tool's input_schema_hash.
+    assert base.tools[0].input_schema_hash != cur.tools[0].input_schema_hash
+
+    drift = compute_drift(base, cur)
+    # The gate blocks: at least one HIGH DriftItem in the set (no silent pass).
+    assert any(d.severity == "high" for d in drift), (
+        "v2→v3 relaxed-ref-def must yield at least one HIGH drift item (gate blocks)"
+    )
+    # The genuine relaxation through the shared $ref is still reported granularly
+    # at the tool path (never under-reported / laundered across the boundary).
+    assert any(
+        d.target == "tools/t" and d.drift_class == "schema-constraint-relaxed" for d in drift
+    )

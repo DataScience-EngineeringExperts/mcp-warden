@@ -243,6 +243,30 @@ def compute_drift(baseline: WardenLock, current: WardenLock) -> list[DriftItem]:
                 "Surface changed since approval; approved_digest no longer matches the current surface",
             )
         )
+        # B1 (#29): a schema-format upgrade (e.g. v2→v3 in-document $ref
+        # resolution) changes overall_digest WITHOUT implying a surface change.
+        # Emit a SEPARATE low advisory EXPLAINING the digest delta. This is
+        # ADDITIVE only — it never replaces, gates, or downgrades the
+        # unapproved-change finding above (overall_digest guards holistic
+        # integrity beyond the per-field diff; auto-downgrading across the
+        # version boundary would be a laundering bypass).
+        if current.schema_version > baseline.schema_version:
+            items.append(
+                DriftItem(
+                    "schema-version-migrated",
+                    "low",
+                    "pin/approved_digest",
+                    (
+                        f"Lock schema version migrated v{baseline.schema_version}→"
+                        f"v{current.schema_version}; the approved_digest changed because the "
+                        "lock's schema-format upgraded (e.g. opaque $ref leaves are now "
+                        "resolved). This advisory does NOT by itself excuse or downgrade the "
+                        "accompanying 'unapproved-change' finding: that finding is real and the "
+                        "operator must review it and re-pin to re-attest the surface under "
+                        f"schema v{current.schema_version}."
+                    ),
+                )
+            )
 
     items.sort(key=lambda d: (d.target, d.drift_class))
     return items
