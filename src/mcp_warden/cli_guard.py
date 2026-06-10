@@ -103,6 +103,16 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
                 "Framing/EOF/over-cap stay fail-open in all modes."
             ),
         ),
+        strict_frame_cap: bool = typer.Option(
+            False,
+            "--strict-frame-cap",
+            help=(
+                "Terminate the session (exit 3) if a server->client result frame exceeds "
+                "--max-frame-bytes (closes the padded-frame inspection bypass). Independent "
+                "of --strict. Raise --max-frame-bytes for legitimately large results -- that "
+                "widens the per-frame memory cap for ALL frames."
+            ),
+        ),
         sarif: Optional[Path] = typer.Option(None, "--sarif", help="Write a SARIF report on shutdown"),
         json_out: Optional[Path] = typer.Option(None, "--json", help="Write JSONL findings on shutdown"),
         record: Optional[Path] = typer.Option(None, "--record", help="Record observed frames for later inspect"),
@@ -134,6 +144,7 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             redact_secret_echo=redact_secret_echo,
             audit_only=audit_only,
             strict=strict,
+            strict_frame_cap=strict_frame_cap,
             max_frame_bytes=max_frame_bytes,
             max_inflight=max_inflight,
         )

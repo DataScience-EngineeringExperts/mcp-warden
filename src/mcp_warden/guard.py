@@ -20,7 +20,13 @@ from typing import Any, Callable
 import anyio
 from anyio.abc import Process
 
-from .framing import MODE_NEWLINE, FrameReader
+from .framing import (
+    FRAME_OVER_CAP_PARSE_ERROR,
+    MODE_CONTENT_LENGTH,
+    MODE_NEWLINE,
+    FrameReader,
+    declared_over_cap_value,
+)
 from .guard_io import wrap_recv, wrap_send
 from .guard_lifecycle import (
     exit_code_for_child,
@@ -116,11 +122,27 @@ async def _pump_server_to_client(
                 break
             chan.client_mode = reader.mode or MODE_NEWLINE
             _note_truncation(state, "s2c", frame)
-            if len(frame.raw) > state.config.max_frame_bytes:
-                from .guard_loop import _frame_error_note
-
-                state.emit(_frame_error_note("s2c", None, "frame exceeds max-frame-bytes (passed through)"))
-                out = frame.raw
+            # Over-cap detection (issue #37) is MODE-AWARE to cover both s2c shapes
+            # WITHOUT false-killing a fully-inspectable Content-Length frame whose
+            # body is exactly the cap (issue #37 NO-SHIP fix — false-positive KILL):
+            #   * Case A (Content-Length declared > cap): the framing layer never
+            #     reads the body and stamps FRAME_OVER_CAP_PARSE_ERROR (raw is the
+            #     header only, so a raw-length check would MISS it) -> over-cap.
+            #   * Content-Length mode (parsed frame): compare the BODY only. The
+            #     parsed body is <= cap by construction (_parse_content_length
+            #     rejects declared > cap), so this never false-kills; the old
+            #     len(frame.raw) > cap fired on a legit header+CRLFCRLF+body whose
+            #     body == cap (raw = header + 4 + cap > cap), killing a clean frame.
+            #   * Case B (newline, no Content-Length): the whole body IS frame.raw,
+            #     so the raw length is the real body size.
+            if frame.parse_error == FRAME_OVER_CAP_PARSE_ERROR:
+                over_cap = True
+            elif reader.mode == MODE_CONTENT_LENGTH:
+                over_cap = len(frame.body) > state.config.max_frame_bytes
+            else:
+                over_cap = len(frame.raw) > state.config.max_frame_bytes
+            if over_cap:
+                out = _handle_s2c_over_cap(state, frame)
             else:
                 out = handle_s2c(state, frame, reader.mode or MODE_NEWLINE)
             if out:
@@ -132,6 +154,57 @@ async def _pump_server_to_client(
                     break
     except anyio.BrokenResourceError:
         logger.debug("server->client pump: stream closed")
+
+
+def _handle_s2c_over_cap(state: GuardState, frame) -> bytes:
+    """Handle an over-``max-frame-bytes`` server->client frame (issue #37).
+
+    Default / non-strict-frame-cap behavior is UNCHANGED from before #37: emit a
+    ``WRD-RES-FRAME-ERROR`` note and pass the frame through (fail-open). Under
+    ``--strict-frame-cap`` the same over-cap frame fail-CLOSES the session: a
+    SANITIZED forensic note (SIZES ONLY — never any body/secret bytes) is emitted
+    FIRST, then a :class:`StrictInspectionAbort` is raised. The raise happens here,
+    BEFORE the caller forwards ``out`` to the client (binding F4), so the offending
+    frame is NEVER sent. s2c ONLY: the c2s pump keeps its byte-for-byte fail-open
+    path (binding F3).
+
+    Args:
+        state: The guard state (carries the config + finding sink).
+        frame: The over-cap :class:`~mcp_warden.framing.Frame`.
+
+    Returns:
+        ``frame.raw`` to pass through (non-strict-frame-cap only).
+
+    Raises:
+        StrictInspectionAbort: under ``--strict-frame-cap`` (site ``frame-cap-s2c``).
+    """
+    from .guard_loop import StrictInspectionAbort, _frame_error_note
+
+    # FIX 3 (#37): one declared-value extractor shared with the over-cap predicate.
+    # For Case A, frame.raw is the header block (the body was never read), so the
+    # helper recovers the server-asserted Content-Length from it. Case B (newline)
+    # has no Content-Length -> None -> the note reports raw_length only. SIZES ONLY.
+    if frame.parse_error == FRAME_OVER_CAP_PARSE_ERROR:
+        declared = declared_over_cap_value(frame.raw, state.config.max_frame_bytes)
+    else:
+        declared = None
+    if state.config.strict_frame_cap:
+        # Forensic note BEFORE raising (binding F5): direction + sizes only, never
+        # body/secret bytes. `declared` is the server-asserted Content-Length when
+        # known (Case A), else None (Case B, where raw_length is the real size).
+        detail = f"s2c result frame exceeds max-frame-bytes (raw_length={len(frame.raw)}"
+        if declared is not None:
+            detail += f", declared_content_length={declared}"
+        detail += "; session terminated)"
+        state.emit(_frame_error_note("s2c", None, detail))
+        # rpc_id=None -> _handle_strict_abort synthesizes -32003 to ALL in-flight
+        # ids (no hang). Do NOT partial-parse the over-cap frame to recover its id.
+        raise StrictInspectionAbort(
+            site="frame-cap-s2c", tool="?", exc_type="FrameCapExceeded", rpc_id=None
+        )
+    # Non-strict-frame-cap: today's fail-open pass-through, byte-for-byte unchanged.
+    state.emit(_frame_error_note("s2c", None, "frame exceeds max-frame-bytes (passed through)"))
+    return frame.raw
 
 
 def _note_truncation(state: GuardState, direction: str, frame) -> None:

@@ -198,13 +198,37 @@ Required behavior — **defined failure, fail-open** (the asymmetric-failure rul
 > never conflated.
 
 > **Residual risk — the padded-frame inspection bypass (`THREAT_MODEL_V2.md` T-CAP-PAD):**
-> because over-cap frames are forwarded un-inspected, an attacker who controls the **size** of a
-> tool result can deliberately **pad a malicious frame above `--max-frame-bytes`** to skip
-> inspection entirely. This is fail-OPEN by the deliberate availability-over-inspection choice
-> above, not an oversight: a malicious server must not be able to break a session by emitting a
-> huge frame. Making the over-cap path fail-CLOSED under `--strict` (terminate or block the
-> padded frame instead of passing it through) is tracked in **#37**, which is expanded to cover
-> this attack explicitly. v0.3 does not change the over-cap contract.
+> because over-cap frames are forwarded un-inspected by default, an attacker controlling the
+> **size** of a tool result can **pad a malicious frame above `--max-frame-bytes`** to skip
+> inspection. This is fail-OPEN by the deliberate availability-over-inspection choice above (a
+> server must not break a session with a huge frame). The opt-in **`--strict-frame-cap`** flag
+> (#37, §2.4.1) closes this bypass on the **s2c** direction; the default contract is unchanged.
+
+#### 2.4.1 `--strict-frame-cap` — opt-in fail-CLOSED on an over-cap s2c result (#37)
+
+`--strict-frame-cap` (default OFF, **independent of `--strict`**) makes a server→client (**s2c**)
+result frame exceeding `--max-frame-bytes` **terminate the session** (exit 3, reusing the §5
+strict-abort machinery) instead of passing it through. It closes **T-CAP-PAD** — a malicious
+server padding a `tools/call` result past the cap to skip inspection. Normative scope:
+
+1. **s2c ONLY.** Only the server→client pump changes; the client→server (**c2s**) direction and
+   the default mode stay byte-for-byte fail-open. A giant *client* frame is out of scope.
+2. **Both over-cap shapes are caught:** **Case B** (newline / accumulated bytes — `len(raw)` >
+   cap) and **Case A** (declared `Content-Length` > cap — the framing layer never reads the body
+   and stamps a distinct `parse_error` so the pump recognizes it despite a small header-only `raw`).
+3. **The offending frame is NEVER forwarded.** The pump emits a **sanitized forensic note**
+   (`WRD-RES-FRAME-ERROR`, direction `s2c`, **sizes only** — `raw_length` and, for Case A, the
+   declared `Content-Length`; never body/secret bytes) then **raises before any send**.
+4. **No client hangs.** The abort carries no rpc_id (the over-cap frame is not partial-parsed for
+   its id), so the `-32003` is synthesized to **ALL** in-flight ids. Cost: a deep pipeline
+   resolves every in-flight call at once — the trade for a clean teardown over a silent bypass.
+5. **Differentiated `-32003` (F6).** A frame-cap abort is a *size-cap* termination, so its
+   `data.reason` is distinct (`session terminated: frame size cap exceeded at frame-cap-s2c
+   (non-retriable)`) vs. the inspection-error `inspection failed at <site> ...`; the structured
+   stderr line carries `site: "frame-cap-s2c"`, `exc_type: "FrameCapExceeded"` (sizes/labels only).
+
+Tuning: a legitimately large result is configuration, not an attack — **raise `--max-frame-bytes`**
+to admit it (widens the per-frame memory cap for **all** frames).
 
 ### 2.5 Ordering of teardown vs. in-flight inspection
 
@@ -234,6 +258,8 @@ ever forwarded."
    direction-appropriate teardown; **never hang**.
 4. **Oversized frame beyond `--max-frame-bytes` →** pass through unmodified +
    `WRD-RES-FRAME-ERROR`, **fail-open**, session continues; never blocked, never full-buffered.
+   EXCEPTION (opt-in, §2.4.1): `--strict-frame-cap` fail-CLOSES on an over-cap **s2c** result
+   (exit 3, frame not forwarded); **c2s** + default stay fail-open.
 5. A half-inspected result is **never** forwarded; the id gets the `-32002` synthetic error.
 6. `-32002` = transport/lifecycle; `-32001` = policy/result block. `data.warden: true` on both.
    Secret redaction is unconditional.
@@ -421,10 +447,10 @@ set is deliberately minimal:
 Everything else stays **fail-open in ALL modes** (it is NOT an inspection failure):
 
 - framing / parse errors, including **truncated-at-EOF** (a normal session end, §2.3);
-- **over-cap** frames beyond `--max-frame-bytes` (a documented resource limit, §2.4) — *known
-  limitation:* an over-cap `tools/call` result is forwarded un-inspected even under `--strict`;
-  expanding strict to over-cap risks breaking legitimate large results and is deferred to a
-  follow-up issue;
+- **over-cap** frames beyond `--max-frame-bytes` (a documented resource limit, §2.4) — `--strict`
+  does NOT terminate on an over-cap frame; the **separate** opt-in `--strict-frame-cap` flag
+  (§2.4.1, #37) owns that behavior for the **s2c** direction (a distinct `frame-cap-s2c` abort
+  site, independent of `--strict`). `--strict` alone still forwards an over-cap result un-inspected;
 - finding-sink callback errors (a sink bug must never break the session);
 - all stream-closure / signal / lifecycle best-effort paths and every normal protocol event.
 

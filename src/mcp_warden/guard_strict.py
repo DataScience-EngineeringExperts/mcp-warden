@@ -126,7 +126,12 @@ async def _handle_strict_abort(
 
     # Synthesize -32003 to the in-flight id(s) so the client never hangs. The
     # reason is pre-sanitized: site + exception class only, no original repr/str.
-    reason = f"inspection failed at {abort.site} ({exc_type}); session terminated (non-retriable)"
+    # Site-aware (binding F6): a frame-cap abort is a SIZE-cap termination, not an
+    # inspection error, so it gets a distinct (still sanitized) reason string.
+    if abort.site.startswith("frame-cap"):
+        reason = f"session terminated: frame size cap exceeded at {abort.site} (non-retriable)"
+    else:
+        reason = f"inspection failed at {abort.site} ({exc_type}); session terminated (non-retriable)"
     await synthesize_strict_abort(state, client_out, client_mode, abort.site, reason, pending_ids)
 
     # Exactly ONE structured stderr line, built ONLY from sanitized fields

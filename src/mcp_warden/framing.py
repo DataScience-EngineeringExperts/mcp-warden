@@ -26,6 +26,16 @@ MODE_CONTENT_LENGTH = "content-length"
 
 _CL_PREFIX = b"content-length:"
 
+#: Distinct ``Frame.parse_error`` string set by ``_read_content_length`` when a
+#: Content-Length-framed message declares a length GREATER than
+#: ``max_frame_bytes`` (issue #37, Case A). The body is never read (so
+#: ``len(frame.raw)`` stays small — the header only), which means the s2c pump's
+#: ``len(frame.raw) > cap`` check would MISS it. The pump compares
+#: ``frame.parse_error`` against this exact constant to recognize a declared
+#: over-cap frame and (under ``--strict-frame-cap``) fail-CLOSE it. A non-over-cap
+#: parse failure keeps the generic ``"missing/invalid Content-Length"`` string.
+FRAME_OVER_CAP_PARSE_ERROR = "declared Content-Length exceeds max-frame-bytes"
+
 
 @dataclass
 class Frame:
@@ -152,7 +162,17 @@ class FrameReader:
         if length is None:
             raw = bytes(self._buf[: sep + 4])
             del self._buf[: sep + 4]
-            return Frame(raw=raw, body=b"", json=None, parse_error="missing/invalid Content-Length")
+            # Distinguish a declared-over-cap header (issue #37, Case A) from any
+            # other malformed/missing Content-Length. Over-cap is the ONLY case
+            # the s2c pump may fail-CLOSE under --strict-frame-cap; every other
+            # parse failure stays the generic fail-open note. The body is never
+            # read in either case, so raw is the header block only (no body/secret
+            # bytes are ever buffered here).
+            if _declared_length_over_cap(header_bytes, self.max_frame_bytes):
+                parse_error = FRAME_OVER_CAP_PARSE_ERROR
+            else:
+                parse_error = "missing/invalid Content-Length"
+            return Frame(raw=raw, body=b"", json=None, parse_error=parse_error)
         body_start = sep + 4
         while len(self._buf) < body_start + length:
             if not await self._fill():
@@ -219,6 +239,75 @@ def _parse_content_length(header_bytes: bytes, max_frame_bytes: int) -> int | No
     if n > max_frame_bytes:
         return None
     return n
+
+
+def _declared_length_over_cap(header_bytes: bytes, max_frame_bytes: int) -> bool:
+    """Whether a header block declares ANY Content-Length over the cap (FAIL-CLOSED).
+
+    A pure helper used ONLY to distinguish issue #37's Case A (a server padding a
+    result by declaring ``Content-Length > max_frame_bytes``) from every other
+    reason ``_parse_content_length`` returns ``None`` (missing / non-digit / ``<=
+    cap``). It is a SEPARATE function on purpose: ``_parse_content_length`` is
+    pinned by the issue #17 fuzz suite and MUST NOT be modified.
+
+    Security posture (issue #37 NO-SHIP fix — inspection BYPASS closed): this is a
+    SECURITY GATE, so it over-approximates toward FAIL-CLOSED. The earlier
+    "exactly one valid Content-Length > cap" rule let a malicious server EVADE the
+    over-cap marker (and thus fail-open uninspected) with a duplicate header
+    (``Content-Length: 100000\\r\\nContent-Length: 4``) or a leading-zero value
+    (``Content-Length: 0100000``). To close every bypass shape we scan ALL header
+    lines and return ``True`` if ANY ``content-length:``-prefixed line carries an
+    all-digit stripped value strictly greater than ``max_frame_bytes`` — lenient
+    on leading zeros and duplicates (any candidate over cap wins). Over-flagging a
+    benign frame as over-cap (the over-approximation cost) merely fails it closed,
+    which is the correct direction for a guard; under-flagging a malicious one
+    (the old behavior) was the bug.
+
+    Args:
+        header_bytes: The CRLF header block (without the trailing blank line),
+            exactly as passed to ``_parse_content_length``.
+        max_frame_bytes: The per-frame cap.
+
+    Returns:
+        ``True`` iff ANY Content-Length header line has an all-digit value
+        strictly greater than ``max_frame_bytes``; ``False`` otherwise.
+    """
+    for line in header_bytes.split(b"\r\n"):
+        if line[: len(_CL_PREFIX)].lower() == _CL_PREFIX:
+            value = line[len(_CL_PREFIX) :].strip()
+            # Lenient on leading zeros (``0100000``) and duplicates: any all-digit
+            # candidate over the cap fails the frame closed. Non-digit values
+            # (sign/whitespace/letters) are not numeric over-cap candidates.
+            if value.isdigit() and int(value) > max_frame_bytes:
+                return True
+    return False
+
+
+def declared_over_cap_value(header_bytes: bytes, max_frame_bytes: int) -> int | None:
+    """First declared Content-Length value that is all-digit and over the cap, else None.
+
+    Diagnostic counterpart to :func:`_declared_length_over_cap` (issue #37 FIX 3):
+    the s2c forensic note needs the actual server-asserted size to record. Uses the
+    SAME lenient scan (all header lines; leading zeros / duplicates tolerated) so
+    the note value can never disagree with the over-cap decision. SIZES ONLY — this
+    only ever returns an integer parsed from a Content-Length header; it never reads
+    or returns any body bytes.
+
+    Args:
+        header_bytes: The CRLF header block (Case A: the over-cap frame's header).
+        max_frame_bytes: The per-frame cap.
+
+    Returns:
+        The FIRST over-cap all-digit Content-Length value, or ``None`` when no
+        header line declares an over-cap length (e.g. Case B newline frames carry
+        no Content-Length at all).
+    """
+    for line in header_bytes.split(b"\r\n"):
+        if line[: len(_CL_PREFIX)].lower() == _CL_PREFIX:
+            value = line[len(_CL_PREFIX) :].strip()
+            if value.isdigit() and int(value) > max_frame_bytes:
+                return int(value)
+    return None
 
 
 def _parse_frame(raw: bytes, body: bytes) -> Frame:
