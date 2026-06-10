@@ -97,6 +97,15 @@ class GuardConfig:
     #: hash error) TERMINATES the session non-zero (exit 3) instead of failing
     #: open. Integrity over availability — see GUARD_PROXY_V3.md strict mode.
     strict: bool = False
+    #: Strict frame-cap mode (opt-in, default off; issue #37). When True, a
+    #: server->client (s2c) result frame that exceeds ``max_frame_bytes``
+    #: TERMINATES the session non-zero (exit 3, reusing the strict-abort
+    #: machinery) instead of failing open / passing the over-cap frame through.
+    #: Closes T-CAP-PAD (a malicious server padding a tools/call result past the
+    #: cap to skip inspection). INDEPENDENT of ``strict`` — either, both, or
+    #: neither may be set. s2c ONLY: the client->server direction is UNCHANGED
+    #: (fail-open in all modes). See GUARD_PROXY_V3.md strict mode.
+    strict_frame_cap: bool = False
     max_frame_bytes: int = 8 * 1024 * 1024
     max_inflight: int = 1024
 

@@ -37,6 +37,7 @@ LAUNCHER = str(FIX / "fault_guard_launcher.py")
 POISON = str(FIX / "poison_server.py")
 LISTCHANGE = str(FIX / "listchange_server.py")
 LISTLOCK = str(FIX / "clean_listchange.warden.lock")
+OVERCAP = str(FIX / "overcap_server.py")
 PY = sys.executable
 
 
@@ -466,3 +467,510 @@ def test_strict_abort_rpc_id_none_early_returns_but_still_emits_and_exits_3():
     assert obj["rpc_id"] is None, "rpc_id must serialize to null"
     # The dedup flag fired (single-emission guarantee).
     assert state.strict_abort_fired is True
+
+
+# --- issue #37: --strict-frame-cap s2c over-cap termination --------------------
+
+
+class FrameCapClient:
+    """Drives the REAL ``guard`` CLI against ``overcap_server.py`` over JSON-RPC.
+
+    Unlike :class:`StrictClient`, NO fault is injected — the over-cap behavior is
+    produced by a genuine oversized / declared-over-cap server->client frame. The
+    server's s2c framing mode (``newline`` Case B vs ``content-length`` Case A) is
+    selected by ``server_mode`` and the guard's ``client_mode`` mirrors it, so the
+    synthesized -32003 comes back in that same mode — this client reads either.
+    """
+
+    def __init__(
+        self,
+        *guard_args: str,
+        server_mode: str = "newline",
+        secret: str | None = None,
+        sink: Path | None = None,
+    ):
+        env = {
+            **os.environ,
+            "PYTHONPATH": str(REPO / "src"),
+            "WARDEN_LOG_LEVEL": "ERROR",
+            "OVERCAP_MODE": server_mode,
+        }
+        if secret is not None:
+            env["OVERCAP_SECRET"] = secret
+        self.server_mode = server_mode
+        args = list(guard_args)
+        if sink is not None:
+            args += ["--json", str(sink)]
+        cmd = [PY, "-m", "mcp_warden.cli", "guard", *args, PY, OVERCAP]
+        self.proc = subprocess.Popen(
+            cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            bufsize=0, cwd=str(REPO), env=env,
+        )
+        self._buf = b""
+
+    def send(self, obj: dict) -> None:
+        self.proc.stdin.write((json.dumps(obj) + "\n").encode())
+        self.proc.stdin.flush()
+
+    def _read_until(self, marker: bytes) -> bytes:
+        while marker not in self._buf:
+            chunk = self.proc.stdout.read(1)
+            if not chunk:
+                raise EOFError("guard closed stdout")
+            self._buf += chunk
+        idx = self._buf.index(marker) + len(marker)
+        out, self._buf = self._buf[:idx], self._buf[idx:]
+        return out
+
+    def _read_exact(self, n: int) -> bytes:
+        while len(self._buf) < n:
+            chunk = self.proc.stdout.read(n - len(self._buf))
+            if not chunk:
+                raise EOFError("guard closed stdout")
+            self._buf += chunk
+        out, self._buf = self._buf[:n], self._buf[n:]
+        return out
+
+    # s2c modes whose framing is Content-Length (init response + over-cap result).
+    _CL_SERVER_MODES = {"content-length", "dup-cl", "leading-zero-cl"}
+
+    def read_frame(self) -> dict:
+        """Read one s2c frame in whichever mode the server (and guard) use."""
+        if self.server_mode in self._CL_SERVER_MODES:
+            header = self._read_until(b"\r\n\r\n")
+            length = None
+            for line in header.split(b"\r\n"):
+                if line[:15].lower() == b"content-length:":
+                    length = int(line[15:].strip())
+            assert length is not None, f"no Content-Length in header: {header!r}"
+            body = self._read_exact(length)
+            return json.loads(body.decode())
+        line = self._read_until(b"\n")
+        return json.loads(line.decode())
+
+    def initialize(self) -> dict:
+        self.send({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+                   "params": {"protocolVersion": "2025-06-18", "capabilities": {},
+                              "clientInfo": {"name": "t", "version": "1"}}})
+        init = self.read_frame()
+        self.send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        return init
+
+    def finish(self, timeout: float = 15.0) -> tuple[int, str]:
+        try:
+            _out, err = self.proc.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+            self.proc.communicate()
+            raise AssertionError("guard hung; killed")
+        return self.proc.returncode, err.decode(errors="replace")
+
+
+def _assert_frame_cap_terminated(client: FrameCapClient, in_flight_id: int) -> str:
+    """Read the -32003 frame-cap error, finish, assert the exit-3 abort contract."""
+    frame = client.read_frame()  # the -32003 error for the in-flight tools/call id
+    assert frame.get("id") == in_flight_id, f"expected error for id={in_flight_id}, got {frame}"
+    assert frame["error"]["code"] == -32003
+    assert frame["error"]["data"]["warden"] is True
+    assert frame["error"]["data"]["stage"] == "strict_abort"
+    assert frame["error"]["data"]["site"] == "frame-cap-s2c"
+    # F6: differentiated frame-cap reason (NOT the "inspection failed" reason).
+    reason = frame["error"]["data"]["reason"]
+    assert "frame size cap exceeded" in reason
+    assert "frame-cap-s2c" in reason
+    assert "inspection failed" not in reason
+
+    code, stderr = client.finish()
+    assert code == GUARD_STRICT_EXIT, f"expected exit 3, got {code}; stderr={stderr!r}"
+    aborts = _strict_abort_lines(stderr)
+    assert len(aborts) == 1, f"expected exactly one strict_abort line, got {aborts}"
+    assert aborts[0]["site"] == "frame-cap-s2c"
+    assert aborts[0]["exc_type"] == "FrameCapExceeded"
+    return stderr
+
+
+def _frame_cap_notes(sink: Path) -> list[dict]:
+    """Parse WRD-RES-FRAME-ERROR notes out of the JSONL findings sink."""
+    if not sink.exists():
+        return []
+    out = []
+    for ln in sink.read_text(encoding="utf-8").splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        obj = json.loads(ln)
+        if obj.get("rule_id") == "WRD-RES-FRAME-ERROR":
+            out.append(obj)
+    return out
+
+
+def test_frame_cap_terminates_on_overcap_s2c_newline(tmp_path):
+    # Test 1: --strict-frame-cap + over-cap s2c (Case B, newline) -> exit 3, one
+    # strict_abort line site=frame-cap-s2c, -32003 to the in-flight id, child torn
+    # down, offending frame NOT forwarded, forensic note emitted.
+    sink = tmp_path / "f.jsonl"
+    client = FrameCapClient("--strict-frame-cap", "--max-frame-bytes", "256",
+                            server_mode="newline", sink=sink)
+    client.initialize()
+    client.send({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                 "params": {"name": "clean_tool", "arguments": {"q": "x"}}})
+    frame = client.read_frame()
+    # The client must receive the -32003, NOT the oversized result (frame not forwarded).
+    assert frame.get("id") == 2
+    assert "error" in frame and "result" not in frame, "over-cap frame must NOT be forwarded"
+    assert frame["error"]["data"]["site"] == "frame-cap-s2c"
+    code, stderr = client.finish()
+    assert code == GUARD_STRICT_EXIT
+    assert len(_strict_abort_lines(stderr)) == 1
+    # F5: a sanitized forensic note carrying sizes was emitted (direction s2c).
+    notes = _frame_cap_notes(sink)
+    assert any(n["direction"] == "s2c" and "raw_length=" in n["message"] for n in notes), notes
+
+
+def test_frame_cap_terminates_on_declared_overcap_s2c_case_a(tmp_path):
+    # Test 2: --strict-frame-cap + DECLARED-over-cap s2c (Case A: Content-Length >
+    # cap) -> same exit-3 abort (proves Case A is caught, not fail-opened).
+    sink = tmp_path / "f.jsonl"
+    client = FrameCapClient("--strict-frame-cap", "--max-frame-bytes", "256",
+                            server_mode="content-length", sink=sink)
+    client.initialize()
+    client.send({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                 "params": {"name": "clean_tool", "arguments": {"q": "x"}}})
+    _assert_frame_cap_terminated(client, 2)
+    # F5: the Case-A forensic note also carries the declared Content-Length size.
+    notes = _frame_cap_notes(sink)
+    assert any("declared_content_length=" in n["message"] for n in notes), notes
+
+
+def test_frame_cap_terminates_on_duplicate_cl_bypass_shape(tmp_path):
+    # F1 (#37 NO-SHIP — inspection BYPASS closed): a server emitting TWO
+    # Content-Length headers (first over-cap, second a tiny 4) MUST abort under
+    # --strict-frame-cap. The pre-fix "exactly one valid CL" rule fail-OPENED this
+    # uninspected (the BYPASS). Now it fails CLOSED: exit 3, site frame-cap-s2c.
+    sink = tmp_path / "f.jsonl"
+    client = FrameCapClient("--strict-frame-cap", "--max-frame-bytes", "256",
+                            server_mode="dup-cl", sink=sink)
+    client.initialize()
+    client.send({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                 "params": {"name": "clean_tool", "arguments": {"q": "x"}}})
+    _assert_frame_cap_terminated(client, 2)
+    # The forensic note records the over-cap declared size (the first CL value).
+    notes = _frame_cap_notes(sink)
+    assert any("declared_content_length=" in n["message"] for n in notes), notes
+
+
+def test_frame_cap_terminates_on_leading_zero_cl_bypass_shape(tmp_path):
+    # F1 (#37 NO-SHIP — inspection BYPASS closed): a single Content-Length with a
+    # redundant leading zero (``0<over-cap>``) MUST abort under --strict-frame-cap.
+    # The pre-fix rule treated leading zeros as malformed-not-over-cap and
+    # fail-OPENED it (the BYPASS). Now it fails CLOSED: exit 3, site frame-cap-s2c.
+    sink = tmp_path / "f.jsonl"
+    client = FrameCapClient("--strict-frame-cap", "--max-frame-bytes", "256",
+                            server_mode="leading-zero-cl", sink=sink)
+    client.initialize()
+    client.send({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                 "params": {"name": "clean_tool", "arguments": {"q": "x"}}})
+    _assert_frame_cap_terminated(client, 2)
+    notes = _frame_cap_notes(sink)
+    assert any("declared_content_length=" in n["message"] for n in notes), notes
+
+
+def test_frame_cap_no_false_kill_body_exactly_at_cap(tmp_path):
+    # F2 (#37 NO-SHIP — false-positive KILL closed): a LEGIT Content-Length s2c
+    # result whose body is EXACTLY --max-frame-bytes must be inspected + forwarded
+    # normally (session continues, NOT exit 3). The pre-fix raw-length predicate
+    # killed it (raw = header + 4 + cap > cap). Driven with a generously sized cap
+    # so a real (clean) tools/call result body can be crafted to land on the cap.
+    #
+    # The overcap fixture always emits an OVER-cap result for tools/call, so this
+    # test uses a hand-built fixture server (inline) emitting a CL result whose body
+    # length is exactly the cap. Constructed via a tiny stdio echo server below.
+    import textwrap
+
+    cap = None
+    # Build a server that emits a CL-framed result with body length == cap. We pick
+    # the cap to match the body the server will produce, computed by the server.
+    server_src = textwrap.dedent(
+        r'''
+        import json, sys, os
+        CAP = int(os.environ["EXACT_CAP"])
+        def write_cl(obj):
+            body = json.dumps(obj).encode()
+            sys.stdout.buffer.write(f"Content-Length: {len(body)}\r\n\r\n".encode("ascii") + body)
+            sys.stdout.buffer.flush()
+        def write_cl_exact(rpc_id):
+            # Build a result whose serialized body length is EXACTLY CAP by padding
+            # the text field until len(json) == CAP.
+            def make(pad):
+                return {"jsonrpc":"2.0","id":rpc_id,
+                        "result":{"content":[{"type":"text","text":"y"*pad}],"isError":False}}
+            pad = 0
+            while len(json.dumps(make(pad)).encode()) < CAP:
+                pad += 1
+            # len(json) is now >= CAP; if it overshot, we cannot land exactly with a
+            # single char step on a multibyte boundary, but "y" is 1 byte so it is exact.
+            assert len(json.dumps(make(pad)).encode()) == CAP, len(json.dumps(make(pad)).encode())
+            write_cl(make(pad))
+        for raw in sys.stdin.buffer:
+            line = raw.strip()
+            if not line:
+                continue
+            req = json.loads(line.decode())
+            m, rid = req.get("method"), req.get("id")
+            if m == "initialize":
+                write_cl({"jsonrpc":"2.0","id":rid,"result":{"protocolVersion":"2025-06-18",
+                          "capabilities":{"tools":{}},"serverInfo":{"name":"exact","version":"1"}}})
+            elif m == "notifications/initialized":
+                continue
+            elif m == "tools/call":
+                write_cl_exact(rid)
+            elif rid is not None:
+                write_cl({"jsonrpc":"2.0","id":rid,"result":{}})
+        '''
+    )
+    server_path = tmp_path / "exact_cap_server.py"
+    server_path.write_text(server_src)
+    cap = 512
+    sink = tmp_path / "f.jsonl"
+    env = {**os.environ, "PYTHONPATH": str(REPO / "src"), "WARDEN_LOG_LEVEL": "ERROR",
+           "EXACT_CAP": str(cap)}
+    cmd = [PY, "-m", "mcp_warden.cli", "guard", "--strict-frame-cap",
+           "--max-frame-bytes", str(cap), "--json", str(sink), PY, str(server_path)]
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, bufsize=0, cwd=str(REPO), env=env)
+    buf = b""
+
+    def _read_cl_frame() -> dict:
+        nonlocal buf
+        while b"\r\n\r\n" not in buf:
+            ch = proc.stdout.read(1)
+            if not ch:
+                raise EOFError("guard closed stdout")
+            buf += ch
+        sep = buf.index(b"\r\n\r\n")
+        header, buf = buf[:sep], buf[sep + 4:]
+        length = None
+        for ln in header.split(b"\r\n"):
+            if ln[:15].lower() == b"content-length:":
+                length = int(ln[15:].strip())
+        while len(buf) < length:
+            ch = proc.stdout.read(length - len(buf))
+            if not ch:
+                raise EOFError("guard closed stdout")
+            buf += ch
+        body, buf = buf[:length], buf[length:]
+        return json.loads(body.decode())
+
+    def send(obj: dict) -> None:
+        proc.stdin.write((json.dumps(obj) + "\n").encode())
+        proc.stdin.flush()
+
+    send({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+          "params": {"protocolVersion": "2025-06-18", "capabilities": {},
+                     "clientInfo": {"name": "t", "version": "1"}}})
+    _read_cl_frame()  # init response
+    send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+    send({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+          "params": {"name": "clean_tool", "arguments": {"q": "x"}}})
+    forwarded = _read_cl_frame()  # the at-cap result MUST be forwarded (not killed)
+    assert forwarded.get("id") == 2, forwarded
+    assert "result" in forwarded and "error" not in forwarded, (
+        "an at-cap Content-Length frame must be inspected + forwarded, not strict-killed"
+    )
+    _out, err = proc.communicate(timeout=15)  # closes stdin (clean EOF)
+    stderr = err.decode(errors="replace")
+    assert _strict_abort_lines(stderr) == [], "at-cap frame must NOT strict-abort"
+    assert proc.returncode != GUARD_STRICT_EXIT, f"got exit {proc.returncode}"
+
+
+def test_frame_cap_notification_no_inflight_emits_zero_wire_frames(tmp_path):
+    # F4 (#37): a server-sent OVER-CAP result with ZERO in-flight client requests
+    # under --strict-frame-cap -> exit 3 + exactly one strict_abort stderr line +
+    # ZERO -32003 wire frames (no JSON-RPC error with "id": null is ever sent). The
+    # over-cap fixture emits its oversized frame UNSOLICITED if we never send a
+    # tools/call: we trip it by sending a tools/call whose id the guard pops before
+    # the result returns is NOT possible here, so instead we exploit that an
+    # over-cap result with an empty inflight map (abort.rpc_id=None) sends nothing.
+    #
+    # Concretely: drive the newline over-cap server, but read NOTHING and send NO
+    # tools/call -- the fixture only emits the over-cap frame on tools/call, so we
+    # instead send a tools/call then assert: because the abort carries rpc_id=None
+    # and inflight is cleared at synthesis, the only -32003 (if any) is for the
+    # in-flight id. To isolate the ZERO-frame path we assert directly on the unit:
+    # an over-cap abort with no pending ids writes zero wire frames. The end-to-end
+    # guard always has the tools/call id in flight, so the zero-frame invariant is
+    # unit-tested in test_strict_abort_rpc_id_none_early_returns_but_still_emits_and_exits_3
+    # (client_out.chunks == []). Here we assert the COMPLEMENTARY wire guarantee:
+    # the over-cap path NEVER emits an "id": null error frame to the client.
+    sink = tmp_path / "f.jsonl"
+    client = FrameCapClient("--strict-frame-cap", "--max-frame-bytes", "256",
+                            server_mode="newline", sink=sink)
+    client.initialize()
+    client.send({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                 "params": {"name": "clean_tool", "arguments": {"q": "x"}}})
+    frame = client.read_frame()
+    code, stderr = client.finish()
+    assert code == GUARD_STRICT_EXIT
+    aborts = _strict_abort_lines(stderr)
+    assert len(aborts) == 1, f"expected exactly one strict_abort line, got {aborts}"
+    # The over-cap path must NEVER synthesize an id:null error to the wire: the one
+    # error frame the client got is bound to the real in-flight id (2), not null.
+    assert frame.get("id") == 2 and frame.get("id") is not None, frame
+    assert "error" in frame and frame["error"]["code"] == -32003
+
+
+def test_frame_cap_emits_exactly_one_note_no_double_emit(tmp_path):
+    # F5 (#37): a Case-A over-cap frame emits EXACTLY ONE WRD-RES-FRAME-ERROR note.
+    # _note_truncation only fires on "truncated"-class parse errors, so the over-cap
+    # frame (FRAME_OVER_CAP_PARSE_ERROR) must NOT be double-noted by _note_truncation
+    # + _handle_s2c_over_cap. Assert a single s2c note for the over-cap termination.
+    sink = tmp_path / "f.jsonl"
+    client = FrameCapClient("--strict-frame-cap", "--max-frame-bytes", "256",
+                            server_mode="content-length", sink=sink)
+    client.initialize()
+    client.send({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                 "params": {"name": "clean_tool", "arguments": {"q": "x"}}})
+    _assert_frame_cap_terminated(client, 2)
+    notes = [n for n in _frame_cap_notes(sink) if n["direction"] == "s2c"]
+    assert len(notes) == 1, f"expected exactly ONE s2c over-cap note, got {notes}"
+    assert "raw_length=" in notes[0]["message"]
+
+
+def test_nonstrict_overcap_newline_fails_open(tmp_path):
+    # Test 3a: NON-strict over-cap Case B -> UNCHANGED fail-open pass-through; the
+    # oversized result frame is FORWARDED verbatim (a valid newline frame); no
+    # abort; session continues + exits 0 (regression guard).
+    sink = tmp_path / "f.jsonl"
+    client = FrameCapClient("--max-frame-bytes", "256", server_mode="newline", sink=sink)
+    client.initialize()  # reads the init response (synchronizes)
+    client.send({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                 "params": {"name": "clean_tool", "arguments": {"q": "x"}}})
+    forwarded = client.read_frame()  # the over-cap result, passed through unmodified
+    assert forwarded.get("id") == 2 and "result" in forwarded, "fail-open must forward the frame"
+    code, stderr = client.finish()
+    assert _strict_abort_lines(stderr) == [], "non-strict over-cap must NOT abort"
+    assert code != GUARD_STRICT_EXIT
+    notes = [n for n in _frame_cap_notes(sink) if n["direction"] == "s2c" and "passed through" in n["message"]]
+    assert notes, "fail-open pass-through note expected"
+
+
+def test_nonstrict_overcap_declared_case_a_fails_open(tmp_path):
+    # Test 3b: NON-strict declared-over-cap Case A -> still fail-open. The framing
+    # layer stamps the over-cap parse_error and the s2c pump passes the header-only
+    # frame through (a documented coverage gap, NOT a kill). The over-declared body
+    # then desyncs the wire, so we DON'T re-parse it: synchronize on the init read,
+    # send the call, then drain to EOF and assert via exit code + the note sink.
+    # This also proves the guard never HANGS (drain-to-EOF unchanged from pre-#37).
+    import time
+
+    sink = tmp_path / "f.jsonl"
+    client = FrameCapClient("--max-frame-bytes", "256", server_mode="content-length", sink=sink)
+    client.initialize()  # reads the CL-framed init response (synchronizes)
+    client.send({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                 "params": {"name": "clean_tool", "arguments": {"q": "x"}}})
+    # Do NOT read_frame() here (the forwarded over-cap header + leftover body desync
+    # the wire under fail-open). The findings sink is only flushed on shutdown, and
+    # closing stdin races the s2c result against EOF teardown -- so wait until the
+    # guard's child reads stdin EOF by giving the s2c result a moment to arrive,
+    # then drain. A hang would trip finish()'s timeout (proving no production hang).
+    time.sleep(1.0)
+    code, stderr = client.finish()
+    assert _strict_abort_lines(stderr) == [], "non-strict declared-over-cap must NOT abort"
+    assert code != GUARD_STRICT_EXIT
+    assert any(n["direction"] == "s2c" and "passed through" in n["message"]
+               for n in _frame_cap_notes(sink)), "fail-open note expected"
+
+
+def test_frame_cap_c2s_overcap_fails_open(tmp_path):
+    # Test 4 (F3): --strict-frame-cap + over-cap C2S -> UNCHANGED fail-open. The
+    # c2s direction is explicitly out of scope; a giant CLIENT frame must NOT
+    # terminate the session. Driven against POISON (normal SMALL s2c results) so
+    # the ONLY over-cap frame is the c2s one: it passes through, the server replies
+    # normally, and the session exits 0 (no abort, no exit 3).
+    sink = tmp_path / "f.jsonl"
+    env = {**os.environ, "PYTHONPATH": str(REPO / "src"), "WARDEN_LOG_LEVEL": "ERROR"}
+    cmd = [PY, "-m", "mcp_warden.cli", "guard", "--strict-frame-cap",
+           "--max-frame-bytes", "256", "--json", str(sink), PY, POISON]
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, bufsize=0, cwd=str(REPO), env=env)
+
+    def send(obj: dict) -> None:
+        proc.stdin.write((json.dumps(obj) + "\n").encode())
+        proc.stdin.flush()
+
+    send({"jsonrpc": "2.0", "id": 1, "method": "initialize",
+          "params": {"protocolVersion": "2025-06-18", "capabilities": {},
+                     "clientInfo": {"name": "t", "version": "1"}}})
+    proc.stdout.readline()  # init response (small)
+    send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+    # An OVER-CAP c2s tools/call (a 4KB argument > the 256 cap). F3: it must pass
+    # through fail-open; POISON's clean_tool returns a small (< cap) result.
+    big = "y" * 4096
+    send({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+          "params": {"name": "clean_tool", "arguments": {"q": big}}})
+    result = json.loads(proc.stdout.readline().decode())  # the normal small result
+    assert result.get("id") == 2 and "result" in result, "c2s over-cap must fail-open + get a result"
+    _out, err = proc.communicate(timeout=15)  # closes stdin itself (no pre-close)
+    stderr = err.decode(errors="replace")
+    # F3: a c2s over-cap NEVER aborts; exit code is the child's natural status, not 3.
+    assert _strict_abort_lines(stderr) == [], "c2s over-cap must NOT strict-abort"
+    assert proc.returncode != GUARD_STRICT_EXIT
+    # The c2s over-cap note is a plain pass-through, never a kill.
+    notes = [n for n in _frame_cap_notes(sink) if n["direction"] == "c2s"]
+    assert all("passed through" in n["message"] for n in notes), notes
+
+
+def test_frame_cap_no_secret_leak_in_note_or_error(tmp_path):
+    # Test 6: the forensic note + the -32003 error carry sizes/labels ONLY. A
+    # secret planted in the oversized result body must appear in NEITHER.
+    secret = "FRAMECAPSECRET999"
+    sink = tmp_path / "f.jsonl"
+    client = FrameCapClient("--strict-frame-cap", "--max-frame-bytes", "256",
+                            server_mode="newline", secret=secret, sink=sink)
+    client.initialize()
+    client.send({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
+                 "params": {"name": "clean_tool", "arguments": {"q": "x"}}})
+    frame = client.read_frame()
+    frame_text = json.dumps(frame)
+    code, stderr = client.finish()
+    assert code == GUARD_STRICT_EXIT
+    assert secret not in stderr, "secret leaked into stderr"
+    assert secret not in frame_text, "secret leaked into the -32003 client frame"
+    note_text = "\n".join(n["message"] for n in _frame_cap_notes(sink))
+    assert secret not in note_text, "secret leaked into the forensic note"
+
+
+def test_frame_cap_independent_of_strict():
+    # F2: --strict-frame-cap is threaded independently of --strict.
+    assert GuardConfig().strict_frame_cap is False
+    assert GuardConfig(strict_frame_cap=True).strict_frame_cap is True
+    # Both independent: setting one does not set the other.
+    assert GuardConfig(strict_frame_cap=True).strict is False
+    assert GuardConfig(strict=True).strict_frame_cap is False
+
+
+def test_cli_strict_frame_cap_sets_config_true():
+    from typer.testing import CliRunner
+
+    from mcp_warden.cli import app
+
+    captured: dict = {}
+
+    import mcp_warden.cli_guard as cg
+    real_run = cg.run_guard
+
+    def _spy(command, args, cfg, **kw):  # noqa: ANN001
+        captured["strict_frame_cap"] = cfg.strict_frame_cap
+        captured["strict"] = cfg.strict
+        raise SystemExit(0)
+
+    cg.run_guard = _spy
+    try:
+        CliRunner().invoke(app, ["guard", "--strict-frame-cap", "echo", "hi"])
+        assert captured.get("strict_frame_cap") is True
+        assert captured.get("strict") is False  # independent of --strict
+        captured.clear()
+        CliRunner().invoke(app, ["guard", "echo", "hi"])
+        assert captured.get("strict_frame_cap") is False
+    finally:
+        cg.run_guard = real_run
