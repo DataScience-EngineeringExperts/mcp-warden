@@ -3,27 +3,102 @@
 [![CI](https://github.com/ernestprovo23/mcp-warden/actions/workflows/integrity-gate.yml/badge.svg)](https://github.com/ernestprovo23/mcp-warden/actions/workflows/integrity-gate.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![GitHub Action](https://img.shields.io/badge/GitHub%20Action-mcp--warden-2088FF?logo=githubactions&logoColor=white)](https://github.com/ernestprovo23/mcp-warden/blob/main/action.yml)
+[![Latest release](https://img.shields.io/github/v/release/ernestprovo23/mcp-warden?display_name=tag&sort=semver)](https://github.com/ernestprovo23/mcp-warden/releases)
 
-**CI-first MCP supply-chain integrity gate.** Pin the *declared* tool / resource /
-prompt surface of an [MCP](https://modelcontextprotocol.io) server, then fail CI
-when that surface drifts from an approved baseline.
+**mcp-warden is the lockfile and CI gate for MCP servers: it pins an MCP server's
+declared tool/resource/prompt surface into a signed `warden.lock`, then fails CI
+when that surface drifts from the approved baseline.**
 
-> mcp-warden is an **MCP supply-chain integrity gate, not a full agent firewall.**
-> v0.1 verifies that a server's *declared* surface has not changed since a human
-> approved it, and flags dangerous capability shapes and leaked secrets in that
-> surface. **v0.2 added runtime tool-result inspection** (`guard` proxy + `inspect`
-> analyzer): control/ANSI escapes, echoed secrets, configured exfil domains
-> (deterministic) plus a curated prompt-injection phrase list (fuzzy, log-only).
-> **v0.3 is the first release that actively blocks by default**: the deterministic
-> tier (ANSI, secret-echo, exfil-domain, the `tools/list_changed` drift gate when
-> `--lock` is supplied, and argument-policy denials when `--policy` is supplied)
-> **blocks out of the box**, each individually opt-OUT-able via `--no-block-<category>`
-> (and `--audit-only` restores full shadow in one flag); the fuzzy injection tier
-> stays opt-in. v0.3 also hardens the proxy lifecycle (cancel/progress passthrough,
-> server-crash + client-disconnect teardown). It still does **not** defend behavioral
-> attacks (`T-BEHAVE`). See [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md),
-> [`docs/THREAT_MODEL_V2.md`](docs/THREAT_MODEL_V2.md), and
+If you already follow the published guidance — *pin versions, hash tool
+definitions, alert on drift* — mcp-warden is the deterministic tool that does it.
+
+**The mental model (analogy ladder):**
+
+- **`package-lock.json` / `Cargo.lock`** — a committed, reproducible lock of what
+  you depend on. `warden.lock` is that, for an MCP server's *declared surface*.
+- **`gitleaks` in CI** — a deterministic, exit-non-zero gate wired into the
+  pipeline. `mcp-warden check` is that, for MCP surface drift (and ships the same
+  SARIF → code-scanning integration).
+- **`Dependabot` / pin-then-review** — a human approves an upstream change before
+  it lands. `pin --approve` + the drift gate force a human in the loop on any MCP
+  rug-pull.
+
+> **Scope honesty — mcp-warden is an MCP supply-chain integrity gate, not a full
+> agent firewall.** It verifies the *declared* surface returned by `tools/list` /
+> `resources/list` / `prompts/list`; it does **not** defend behavioral attacks
+> (`T-BEHAVE`) and makes no compliance/regulatory claim. The v0.3 `guard` proxy
+> adds runtime *result* inspection (ANSI/control escapes, echoed secrets, exfil
+> domains — deterministic, default-block), but definition-integrity is the core
+> job. Read the limits first:
+> [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md),
+> [`docs/THREAT_MODEL_V2.md`](docs/THREAT_MODEL_V2.md),
 > [`docs/GUARD_PROXY_V3.md`](docs/GUARD_PROXY_V3.md).
+
+---
+
+## 60-second quickstart
+
+Copy-paste runnable against the fixtures shipped in this repo. Requires Python ≥ 3.11.
+
+```bash
+# 1. Install (from a clone of this repo)
+uv venv .venv
+uv pip install --python .venv/bin/python -e ".[dev]"
+
+# 2. Pin a server's declared surface and approve it (TOFU baseline) -> writes the lock
+.venv/bin/mcp-warden pin python tests/fixtures/clean_server.py \
+    --approve --approver you@example.com \
+    --lock warden.lock
+
+# 3. Check the same surface against the lock -> exit 0 (no drift)
+.venv/bin/mcp-warden check python tests/fixtures/clean_server.py --lock warden.lock
+
+# 4. Prove the gate fires: a rug-pulled server drifts -> DRIFT DETECTED, exit 1
+.venv/bin/mcp-warden check python tests/fixtures/mutated_server.py --lock warden.lock
+```
+
+Then wire it into CI with the official GitHub Action (point `server-cmd` at *your*
+server's launch argv, commit `warden.lock`):
+
+```yaml
+# .github/workflows/mcp-integrity.yml
+permissions:
+  contents: read
+  security-events: write   # only needed when upload-sarif: true (the default)
+
+jobs:
+  mcp-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ernestprovo23/mcp-warden@v0
+        with:
+          server-cmd: "node ./build/index.js"
+          lock: "warden.lock"
+```
+
+The Action runs `check`, fails the build on any drift, and (by default) uploads a
+SARIF report to GitHub code scanning. Full input table is in
+[GitHub Action](#github-action-one-step-drop-in) below.
+
+---
+
+## Where mcp-warden fits — complements, not substitutes
+
+MCP security splits into three different jobs that run at different times. They are
+**complementary layers**; running mcp-warden *alongside* a scanner and/or a gateway
+closes gaps none of them cover alone.
+
+| Category | Example | When it runs | What it locks down | Use it when… |
+|----------|---------|--------------|--------------------|--------------|
+| **Static tool-poisoning scanner** | [mcp-scan](https://github.com/invariantlabs-ai/mcp-scan) | pin-time / pre-flight | suspicious *content* in tool definitions (injection-style descriptions, known-bad patterns) | you want to catch a poisoned definition the first time you see it |
+| **Runtime gateway / proxy** | ContextForge, Lunar MCPX, TrueFoundry, Docker MCP Gateway | every live request | runtime mediation — auth, rate limits, request/response policy on calls in flight | you need to mediate or police live traffic between agent and server |
+| **Lockfile + CI gate** | **mcp-warden** | CI / pre-commit | *drift* — the declared surface changing after a human approved it (rug-pull / silent redefinition) | you want a reproducible, human-approved baseline that fails the build when the surface changes |
+
+mcp-warden does not replace a scanner or a gateway — it adds the missing **drift
+gate**: a signed baseline plus a deterministic CI check that the surface you
+approved is the surface you still run.
 
 ---
 
