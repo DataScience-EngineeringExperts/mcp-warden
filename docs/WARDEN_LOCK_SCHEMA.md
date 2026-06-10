@@ -19,6 +19,12 @@ declarations consumed by `guard`/`inspect` (`RESULT_INSPECTION.md`, `GUARD_PROXY
 
 ## 1. File format and location
 
+> **Vendor-neutral format reference.** The vendor-neutral format is
+> [`docs/SPEC.md`](SPEC.md) ("MCP Lock Format v1"); this document is the mcp-warden
+> implementation of it. SPEC.md is the format source of truth; the sections below add the
+> mcp-warden-specific algorithm detail (capability tokens, structural schema diff,
+> provenance, inspection policy) that satisfies that format.
+
 - **Filename:** `warden.lock` (committed to the consuming repo).
 - **Encoding:** UTF-8, JSON, **pretty-printed with 2-space indent** for human/PR review.
   *The pretty-printed file is for humans.* All **hashing** uses the canonical form in §3,
