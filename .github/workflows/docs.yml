@@ -1,0 +1,81 @@
+name: Docs
+
+# Builds the mkdocs-material documentation site.
+#   - On every PR: `mkdocs build --strict` is the gate (no broken internal
+#     links, no warnings). It does NOT deploy.
+#   - On push to main: build, then deploy to GitHub Pages.
+#
+# All third-party actions are pinned to a full 40-char commit SHA with a version
+# comment (enforced by tests/test_workflow_pins.py).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Least-privilege by default; the deploy job widens scope locally.
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Job 1: strict build — the PR gate. Runs on PRs and on main.
+  # Fails the build on any broken internal link or mkdocs warning.
+  # --------------------------------------------------------------------------
+  build:
+    name: mkdocs build --strict
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.11"
+
+      - name: Install mkdocs-material
+        run: pip install "mkdocs-material==9.7.6"
+
+      - name: Build site (strict)
+        run: mkdocs build --strict --site-dir site
+
+      - name: Upload Pages artifact
+        # Only needed on main, where the deploy job consumes it. Harmless on PRs
+        # (artifact is just not deployed), and keeps the build job self-contained.
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
+        with:
+          path: site
+
+  # --------------------------------------------------------------------------
+  # Job 2: deploy to GitHub Pages — only on push to main.
+  #
+  # NOTE: this requires GitHub Pages to be enabled for the repo with the
+  # "GitHub Actions" source (Settings -> Pages). Until that one-time enable is
+  # done, this job will fail on main but the PR gate (job 1) is unaffected.
+  # --------------------------------------------------------------------------
+  deploy:
+    name: Deploy to GitHub Pages
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v5

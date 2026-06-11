@@ -8,8 +8,12 @@ dist/
 
 # Environments
 .venv/
+.venv-docs/
 venv/
 .env
+
+# mkdocs build output
+site/
 
 # Tooling caches
 .pytest_cache/

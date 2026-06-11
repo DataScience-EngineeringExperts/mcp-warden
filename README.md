@@ -98,7 +98,10 @@ closes gaps none of them cover alone.
 
 mcp-warden does not replace a scanner or a gateway — it adds the missing **drift
 gate**: a signed baseline plus a deterministic CI check that the surface you
-approved is the surface you still run.
+approved is the surface you still run. For the full, sourced breakdown of how
+these layers complement each other and when to use which, see the
+[**comparison page**](https://ernestprovo23.github.io/mcp-warden/comparison/)
+on the docs site.
 
 ---
 

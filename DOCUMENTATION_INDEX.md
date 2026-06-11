@@ -54,6 +54,27 @@ the example workflows + re-checks the committed pinned-server locks on every run
 | [`examples/pinned-servers/`](examples/pinned-servers/) | Three real, openly-available MCP servers (`server-everything`, `server-memory`, `server-sequential-thinking`) each pinned to a committed `warden.lock` via a pinned launcher ref, with a per-server README (exact `pin` argv + sample `check`) |
 | [`.github/workflows/examples.yml`](.github/workflows/examples.yml) | CI: yamllint the example workflows + re-run `check` against every committed example lock |
 
+## Documentation site (`docs-site/` — Issues #47 / #48)
+
+Education-first, task-focused guides (mkdocs-material) where mcp-warden is the
+implementation detail. Built with `mkdocs build --strict` on every PR and deployed
+to GitHub Pages on `main`. The security-contract specs under `docs/` remain the
+source of truth; these pages explain and link them. Every page carries a
+scope-honesty box and makes no compliance/regulatory claim.
+
+| Artifact | Purpose |
+|----------|---------|
+| [`mkdocs.yml`](mkdocs.yml) | Site config (material theme, nav, no analytics/tracking) |
+| [`docs-site/index.md`](docs-site/index.md) | Home — mental model + where to start |
+| [`docs-site/quickstart.md`](docs-site/quickstart.md) | Install → pin → check → Action in under 5 minutes |
+| [`docs-site/tool-poisoning.md`](docs-site/tool-poisoning.md) | What is MCP tool poisoning; what mcp-warden does / does-not do |
+| [`docs-site/rug-pull.md`](docs-site/rug-pull.md) | What is an MCP rug pull; how the drift gate catches it |
+| [`docs-site/pin-in-ci.md`](docs-site/pin-in-ci.md) | Pin MCP servers in CI (GitHub Actions + GitLab); links `examples/` |
+| [`docs-site/checklist.md`](docs-site/checklist.md) | Vendor-neutral MCP security checklist; names the tool per layer |
+| [`docs-site/lock-format.md`](docs-site/lock-format.md) | The MCP Lock Format; links `docs/SPEC.md` as source of truth |
+| [`docs-site/comparison.md`](docs-site/comparison.md) | Honest mcp-warden vs mcp-scan vs gateways — complementary layers (Issue #48) |
+| [`.github/workflows/docs.yml`](.github/workflows/docs.yml) | CI: `mkdocs build --strict` PR gate; deploy to Pages on `main` |
+
 ## Security contract (`docs/` — source of truth, do not duplicate)
 
 | Doc | Defines |

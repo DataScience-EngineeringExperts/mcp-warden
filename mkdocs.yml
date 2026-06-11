@@ -1,0 +1,73 @@
+site_name: mcp-warden
+site_description: >-
+  Task-focused guides for pinning an MCP server's declared tool/resource/prompt
+  surface into a signed lock and failing CI when that surface drifts.
+site_url: https://ernestprovo23.github.io/mcp-warden/
+repo_url: https://github.com/ernestprovo23/mcp-warden
+repo_name: ernestprovo23/mcp-warden
+edit_uri: edit/main/docs-site/
+docs_dir: docs-site
+
+# No analytics / tracking is configured anywhere in this site (intentional).
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.top
+    - navigation.sections
+    - content.code.copy
+    - content.code.annotate
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.details
+  - tables
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - Concepts:
+      - What is MCP tool poisoning: tool-poisoning.md
+      - What is an MCP rug pull: rug-pull.md
+  - How-to:
+      - Pin MCP servers in CI: pin-in-ci.md
+      - MCP security checklist: checklist.md
+  - Reference:
+      - The MCP Lock Format: lock-format.md
+      - Comparison vs scanners & gateways: comparison.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/ernestprovo23/mcp-warden
+      name: mcp-warden on GitHub
