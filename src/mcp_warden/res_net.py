@@ -9,6 +9,9 @@ and path-qualified) and the deterministic URL/host extractors used by
 from __future__ import annotations
 
 import re
+from typing import Any
+
+from .net_rules import SSRF_NETWORKS, parse_ip
 
 #: Seed exfil denylist (RESULT_INSPECTION.md §3.3). Org-extensible at runtime.
 SEED_EXFIL_DENYLIST: tuple[str, ...] = (
@@ -59,6 +62,17 @@ _URL_RE = re.compile(
 
 #: A bare dotted host-like token (no scheme/path) for exact denylist token match.
 _BARE_HOST_RE = re.compile(r"(?<![A-Za-z0-9._/-])([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)")
+
+#: An ``[...]`` bracketed IPv6 literal (catches bracketed forms ``_bare_host_tokens``
+#: misses, since those have no dots). Candidate only — ``parse_ip`` is the validator.
+_BRACKET_IPV6_RE = re.compile(r"\[([0-9A-Fa-f:]+)\]")
+
+#: A conservative bare-IPv6 candidate: a run of hex groups joined by colons (>= 2
+#: colons, so dotted IPv4 tokens are not picked up). NOT a validity check — every
+#: candidate is handed to ``parse_ip``, which returns None for non-IPs, so
+#: ``ipaddress`` is the sole arbiter of validity (``::1``/``fe80::1``/``fc00::1``
+#: all match; a stray ``a:b`` does not because parse_ip rejects it).
+_BARE_IPV6_RE = re.compile(r"(?<![:.\w])([0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,})(?![:.\w])")
 
 
 def _host_from_authority(authority: str) -> str:
@@ -147,4 +161,67 @@ def match_exfil(
         for domain in denylist:
             if host_matches_domain(token, domain):
                 hits.add(domain)
+    return sorted(hits)
+
+
+def _ipv6_candidates(text: str) -> list[str]:
+    """Yield bare + bracketed IPv6-shaped candidate tokens (validity deferred).
+
+    ``_bare_host_tokens`` only catches DOTTED tokens (bare IPv4), so colon-only
+    IPv6 (``::1``) and bracketed IPv6 (``[::1]``) are gathered here. Candidates
+    are NOT validated — ``parse_ip`` is the sole arbiter (returns None for
+    non-IPs), so over-broad candidates are harmless.
+
+    Args:
+        text: The inspected result text.
+
+    Returns:
+        Candidate IPv6 token strings (zone-id ``%...`` stripped if present).
+    """
+    out: list[str] = []
+    for m in _BRACKET_IPV6_RE.finditer(text):
+        out.append(m.group(1))
+    for m in _BARE_IPV6_RE.finditer(text):
+        out.append(m.group(1))
+    return [c.split("%", 1)[0] for c in out]
+
+
+def match_ip_literals(
+    text: str,
+    networks: list[tuple[Any, str]],
+) -> list[tuple[str, str]]:
+    """Return raw IP literals in ``text`` that fall in a deny ``networks`` range.
+
+    Pure + deterministic (NO DNS, no IO). Catches the evasion where an exfil
+    destination is a raw private/loopback/metadata IP rather than a denylisted
+    hostname (RESULT_INSPECTION.md §3.4, ``WRD-RES-EXFIL-IP-LITERAL``). IP
+    literals are gathered from three deterministic sources — ``scheme://``
+    authorities, bare dotted IPv4 tokens, and bare/bracketed IPv6 tokens — then
+    parsed by :func:`mcp_warden.net_rules.parse_ip` (non-IPs drop out). The
+    metadata IP ``169.254.169.254`` is covered by the ``169.254.0.0/16``
+    link-local range; no special-casing.
+
+    Args:
+        text: The inspected result text.
+        networks: ``(ip_network, label)`` deny ranges, tried IN ORDER (first
+            containing network wins). Pass ``SSRF_NETWORKS``.
+
+    Returns:
+        A sorted, de-duplicated list of ``(matched_ip_str, range_label)`` for
+        every literal that falls in a deny range.
+    """
+    hits: set[tuple[str, str]] = set()
+    candidates: list[str] = []
+    for host, _path, _full in extract_urls(text):
+        candidates.append(host)
+    candidates.extend(_bare_host_tokens(text))
+    candidates.extend(_ipv6_candidates(text))
+    for candidate in candidates:
+        ip = parse_ip(candidate)
+        if ip is None:
+            continue
+        for net, label in networks:
+            if ip in net:
+                hits.add((str(ip), label))
+                break
     return sorted(hits)

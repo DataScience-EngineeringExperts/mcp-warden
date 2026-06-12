@@ -122,6 +122,28 @@ def test_audit_only_disables_blocking():
     assert ansi and ansi[0].action == "shadowed"
 
 
+# --- WRD-RES-EXFIL-IP-LITERAL category posture (#11 PR-1) ----------------------
+
+
+def test_exfil_ip_literal_blocks_by_default():
+    # Deterministic + default-on, exactly like the other BLOCK-tier result rules.
+    assert GuardConfig().category_enabled("WRD-RES-EXFIL-IP-LITERAL") is True
+
+
+def test_exfil_ip_literal_opt_out_demotes():
+    assert GuardConfig(no_block_exfil_ip_literal=True).category_enabled("WRD-RES-EXFIL-IP-LITERAL") is False
+
+
+def test_exfil_ip_literal_audit_only_demotes():
+    assert GuardConfig(audit_only=True).category_enabled("WRD-RES-EXFIL-IP-LITERAL") is False
+
+
+def test_exfil_ip_literal_no_block_deterministic_fold_demotes():
+    # --no-block-deterministic folds into no_block_exfil_ip_literal in cli_guard;
+    # the resulting config (simulated here) demotes the category, like every other.
+    assert GuardConfig(no_block_exfil_ip_literal=True).category_enabled("WRD-RES-EXFIL-IP-LITERAL") is False
+
+
 # --- framing: both modes round-trip ------------------------------------------
 
 

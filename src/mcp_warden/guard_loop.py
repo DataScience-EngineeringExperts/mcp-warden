@@ -85,6 +85,7 @@ class GuardConfig:
     no_block_ansi: bool = False
     no_block_secret_echo: bool = False
     no_block_exfil_domain: bool = False
+    no_block_exfil_ip_literal: bool = False
     no_block_list_changed: bool = False
     no_block_policy: bool = False
     block_inject_phrase: bool = False
@@ -114,6 +115,7 @@ class GuardConfig:
         "WRD-RES-ANSI": "no_block_ansi",
         "WRD-RES-SECRET-ECHO": "no_block_secret_echo",
         "WRD-RES-EXFIL-DOMAIN": "no_block_exfil_domain",
+        "WRD-RES-EXFIL-IP-LITERAL": "no_block_exfil_ip_literal",
     }
 
     def category_enabled(self, rule_id: str) -> bool:

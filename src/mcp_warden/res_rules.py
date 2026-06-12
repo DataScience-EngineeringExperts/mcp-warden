@@ -13,9 +13,11 @@ import re
 from .res_net import (  # noqa: F401
     SEED_EXFIL_DENYLIST,
     SEED_EXFIL_PATH_QUALIFIED,
+    SSRF_NETWORKS,
     extract_urls,
     host_matches_domain,
     match_exfil,
+    match_ip_literals,
 )
 
 # --- WRD-RES-ANSI: codepoint allowlist (RESULT_INSPECTION.md §3.1) ------------

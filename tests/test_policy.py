@@ -157,6 +157,50 @@ def test_eval_http_dns_name_not_resolved(tmp_path):
     assert any(v.constraint == "POL-HTTP-DNS-UNRESOLVED" for v in verdicts)
 
 
+# --- eval: http SSRF — IPv6 literals (DR5 / #11 audit coverage) ----------------
+
+
+def test_eval_http_ssrf_ipv6_loopback_bracketed_denied(tmp_path):
+    # http://[::1]:8080/x — bracketed IPv6 loopback, with a port.
+    p = _write(tmp_path, "version: 1\n")
+    policy, _ = load_policy(p)
+    verdicts = evaluate_call(policy, "call_api", {"url": "http://[::1]:8080/x"}, ["http_request"])
+    assert overall_denied(verdicts)
+    assert verdicts[0].constraint == "deny_private"
+    assert "IPv6 loopback" in verdicts[0].reason
+
+
+def test_eval_http_ssrf_ipv6_ula_denied(tmp_path):
+    # http://[fc00::1]/x — IPv6 unique-local (fc00::/7).
+    p = _write(tmp_path, "version: 1\n")
+    policy, _ = load_policy(p)
+    verdicts = evaluate_call(policy, "call_api", {"url": "http://[fc00::1]/x"}, ["http_request"])
+    assert overall_denied(verdicts)
+    assert verdicts[0].constraint == "deny_private"
+    assert "IPv6 ULA" in verdicts[0].reason
+
+
+def test_eval_http_ssrf_ipv6_link_local_scoped_denied(tmp_path):
+    # Scoped IPv6 link-local. The bracketed-URL form percent-encodes the zone-id
+    # (%25), and the bare host form passes the zone-id through; BOTH must deny.
+    p = _write(tmp_path, "version: 1\n")
+    policy, _ = load_policy(p)
+    for url in ("http://[fe80::1%25eth0]/x", "fe80::1%eth0"):
+        verdicts = evaluate_call(policy, "call_api", {"url": url}, ["http_request"])
+        assert overall_denied(verdicts), url
+        assert verdicts[0].constraint == "deny_private", url
+        assert "IPv6 link-local" in verdicts[0].reason, url
+
+
+def test_eval_http_ssrf_ipv6_loopback_bare_url_denied(tmp_path):
+    # http://[::1]/x — bare-ish bracketed loopback, no port.
+    p = _write(tmp_path, "version: 1\n")
+    policy, _ = load_policy(p)
+    verdicts = evaluate_call(policy, "call_api", {"url": "http://[::1]/x"}, ["http_request"])
+    assert overall_denied(verdicts)
+    assert verdicts[0].constraint == "deny_private"
+
+
 def test_eval_http_allow_hosts(tmp_path):
     p = _write(
         tmp_path,

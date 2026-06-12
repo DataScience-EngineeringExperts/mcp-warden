@@ -110,6 +110,84 @@ def test_exfil_org_denylist_merges():
     assert "WRD-RES-EXFIL-DOMAIN" in _ids(findings)
 
 
+# --- WRD-RES-EXFIL-IP-LITERAL: raw IP literal in a deny range -----------------
+
+RULE_IP = "WRD-RES-EXFIL-IP-LITERAL"
+
+
+def _ip_finding(text: str):
+    """Return the single WRD-RES-EXFIL-IP-LITERAL finding (or None)."""
+    matches = [f for f in _run(text) if f.rule_id == RULE_IP]
+    return matches[0] if matches else None
+
+
+def test_exfil_ip_literal_matches_each_deny_range_in_url():
+    for url in (
+        "https://127.0.0.1/x",
+        "https://10.0.0.1/x",
+        "https://172.16.0.1/x",
+        "https://192.168.0.1/x",
+        "https://169.254.169.254/x",
+    ):
+        assert RULE_IP in _ids(_run(f"see {url} now")), url
+
+
+def test_exfil_ip_literal_public_ip_no_false_positive():
+    # A public, routable IP literal must NOT trip the rule (no-FP anchor).
+    assert RULE_IP not in _ids(_run("see https://93.184.216.34/x"))
+
+
+def test_exfil_ip_literal_liveness_positive_and_negative():
+    # LIVENESS: a positive match AND a negative (public) anchor in one place — if
+    # the matcher silently returned nothing, the positive assert below would fail.
+    assert RULE_IP in _ids(_run("https://10.0.0.1/x"))  # positive
+    assert RULE_IP not in _ids(_run("https://93.184.216.34/x"))  # negative
+
+
+def test_exfil_ip_literal_bare_ipv4_token():
+    assert RULE_IP in _ids(_run("connect to 10.0.0.5 now"))
+
+
+def test_exfil_ip_literal_bracketed_ipv6():
+    assert RULE_IP in _ids(_run("fetch https://[::1]/x please"))
+
+
+def test_exfil_ip_literal_bare_ipv6_loopback():
+    assert RULE_IP in _ids(_run("the host is ::1 here"))
+
+
+def test_exfil_ip_literal_bare_ipv6_ula():
+    assert RULE_IP in _ids(_run("the host is fc00::1 here"))
+
+
+def test_exfil_ip_literal_bare_ipv6_link_local():
+    assert RULE_IP in _ids(_run("the host is fe80::1 here"))
+
+
+def test_exfil_ip_literal_metadata_ip_in_message():
+    f = _ip_finding("exfil to https://169.254.169.254/latest/meta-data/")
+    assert f is not None
+    assert "169.254.169.254" in f.message  # the matched IP is rendered plainly
+
+
+def test_exfil_ip_literal_is_block_tier_high_severity():
+    f = _ip_finding("https://10.0.0.1/collect")
+    assert f is not None
+    assert f.tier == "block"
+    assert f.severity == "high"
+
+
+def test_exfil_ip_literal_unit_parity_single_shared_path():
+    # Direct-call parity: inspect_result is the ONE path both guard and inspect
+    # run, so a single call documents the shared behavior at the unit level.
+    result = {"content": [{"type": "text", "text": "POST to http://10.0.0.5/collect"}], "isError": False}
+    findings = inspect_result(
+        result, "ip_literal_tool", InspectionPolicy(), exfil_denylist=SEED_EXFIL, inject_phrases=SEED_INJECT
+    )
+    hits = [f for f in findings if f.rule_id == RULE_IP]
+    assert hits and hits[0].tier == "block" and hits[0].tool == ""  # tool stamped later by runner
+
+
 # --- WRD-RES-INJECT-PHRASE: narrow exact-match, no broad FP -------------------
 
 

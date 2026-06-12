@@ -31,6 +31,7 @@ def _run_recording_session(tmp_path: Path) -> tuple[Path, Path]:
         client.call_and_get(4, "exfil_tool")
         client.call_and_get(5, "inject_tool")
         client.call_and_get(6, "clean_tool")
+        client.call_and_get(7, "ip_literal_tool")
     finally:
         client.close()
     return trace, sink
@@ -71,6 +72,10 @@ def test_guard_and_inspect_agree_on_findings(tmp_path):
     inspect_set = _result_keys(inspect_findings)
     assert guard_set, "guard produced result findings"
     assert guard_set == inspect_set, f"parity mismatch: guard={guard_set} inspect={inspect_set}"
+
+    # The new BLOCK rule must appear in BOTH sides (proves end-to-end parity for it).
+    assert any(k[0] == "WRD-RES-EXFIL-IP-LITERAL" for k in guard_set), guard_set
+    assert any(k[0] == "WRD-RES-EXFIL-IP-LITERAL" for k in inspect_set), inspect_set
 
 
 def test_inspect_exit_nonzero_on_block_tier(tmp_path):

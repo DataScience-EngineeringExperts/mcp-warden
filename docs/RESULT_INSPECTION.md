@@ -195,6 +195,37 @@ is scanned for **host literals** belonging to the **exfil denylist**. Matching i
 - **Tier:** BLOCK-deterministic. **Severity:** `high`.
 - **SARIF:** `ruleId: WRD-RES-EXFIL-DOMAIN`, `level: error`.
 
+### 3.4 `WRD-RES-EXFIL-IP-LITERAL` — a private/loopback/metadata IP literal in a result
+
+**Threat:** A tool result names a raw IP literal pointing at an internal, loopback, or cloud
+metadata address (e.g. `http://10.0.0.5/collect`, `https://169.254.169.254/…`). This is the
+evasion where an exfil/callback destination is given as a **raw IP** instead of a denylisted
+**hostname**, so `WRD-RES-EXFIL-DOMAIN` (host-string match) does not see it. (`T-RESULT`
+vector: exfil/SSRF IP.)
+
+**Match definition (exact, deterministic — NO DNS).** IP literals are extracted
+deterministically from three sources and parsed by `ipaddress`:
+
+1. `scheme://host[:port]/…` authorities (IPv4 + bracketed/scoped IPv6);
+2. bare dotted IPv4 tokens (`10.0.0.5`);
+3. bare and bracketed IPv6 tokens (`::1`, `[::1]`, `fc00::1`, `fe80::1`) — which the dotted
+   bare-host scan does not catch.
+
+Each candidate is handed to `ipaddress.ip_address`; non-IP candidates are dropped (no
+hand-rolled IP validity). A parsed IP **matches** if it falls in any `SSRF_NETWORKS` deny
+range (the same `POLICY_MODEL.md` §2.3 table the argument policy uses): the
+loopback / RFC1918 / link-local / IPv6 loopback-ULA-link-local ranges. The cloud-metadata IP
+`169.254.169.254` is covered by `169.254.0.0/16` (link-local) — no special case. **Public,
+routable IPs do not match** (no false positive on a legitimate result that cites a public
+address). The match is **pure** (no network, no resolution) and the finding lists the matched
+IP(s) and range label(s) **plainly** (IPs are not secrets).
+
+- **No DNS, ever.** This rule matches **raw IP literals only**. A hostname that *resolves* to
+  a private IP is **not** caught here — DNS-name resolution of result-borne hosts remains out
+  of scope (see §7), tracked as a residual (issue #11 PR-2).
+- **Tier:** BLOCK-deterministic. **Severity:** `high`.
+- **SARIF:** `ruleId: WRD-RES-EXFIL-IP-LITERAL`, `level: error`.
+
 ---
 
 ## 4. MONITOR tier (fuzzy) — rules
@@ -320,7 +351,7 @@ artifact. There is no way to relax a check at runtime without a lock edit.
 |------|-----|
 | Decoding/scanning image/audio/blob/base64 content | Unbounded cost + new parsers = new attack surface. Surface coverage gap via `WRD-RES-UNINSPECTABLE` instead. |
 | Broad/fuzzy injection regex, NLP intent classification | The v0.1 CUT stands. Only the narrow exact-phrase denylist ships (monitor-only). |
-| DNS resolution of result-borne hosts | No network from the inspector. Exfil match is on the **literal host string**, not a resolved IP. (Mirrors `POLICY_MODEL.md` §2.3 no-DNS rule.) |
+| DNS resolution of result-borne **hostnames** | No network from the inspector. Exfil-domain match is on the **literal host string**, not a resolved IP. (Mirrors `POLICY_MODEL.md` §2.3 no-DNS rule.) NOTE: raw **IP literals** in results ARE now matched deterministically against the SSRF deny ranges (`WRD-RES-EXFIL-IP-LITERAL`, §3.4) — no DNS needed for those. Resolving a *hostname* to its IP stays out of scope (issue #11 PR-2). |
 | Cross-call / conversational correlation ("this result + that later call = exfil chain") | Stateful behavioral reasoning = `T-BEHAVE`, out of scope (`THREAT_MODEL_V2.md`). |
 | Blocking by default for the MONITOR (fuzzy) tier | **Still NOT adopted in v0.3.** No field false-positive data exists for `WRD-RES-INJECT-PHRASE`, so it remains monitor-only / opt-in. (Only the **deterministic** tier became default-block in v0.3.) |
 
@@ -333,6 +364,7 @@ artifact. There is no way to relax a check at runtime without a lock edit.
 | `WRD-RES-ANSI` | BLOCK-deterministic | high | error | **YES (default-on)** | opt-OUT `--no-block-ansi` |
 | `WRD-RES-SECRET-ECHO` | BLOCK-deterministic | critical/high (mirrors `WRD-SEC-*`) | error | **YES (default-on)** | opt-OUT `--no-block-secret-echo` |
 | `WRD-RES-EXFIL-DOMAIN` | BLOCK-deterministic | high | error | **YES (default-on)** | opt-OUT `--no-block-exfil-domain` / `--allow-exfil-domain` |
+| `WRD-RES-EXFIL-IP-LITERAL` | BLOCK-deterministic | high | error | **YES (default-on)** | opt-OUT `--no-block-exfil-ip-literal` |
 | `WRD-RES-INJECT-PHRASE` | MONITOR-fuzzy | medium | warning | **NO — monitor-only / opt-in** | opt-IN `--block-inject-phrase` |
 | `WRD-RES-URL` | MONITOR (note) | low | note | no (never blocks) | — |
 | `WRD-RES-UNINSPECTABLE` | MONITOR (note) | low | note | no (never blocks) | — |
@@ -349,8 +381,9 @@ artifact. There is no way to relax a check at runtime without a lock edit.
 1. **One catalog, two runners.** `guard` and `inspect` import and run the **identical**
    rule implementation. No rule may exist in one and not the other.
 2. **The tier partition is fixed.** BLOCK-deterministic ∈ {`WRD-RES-ANSI`,
-   `WRD-RES-SECRET-ECHO`, `WRD-RES-EXFIL-DOMAIN`}. MONITOR-fuzzy = {`WRD-RES-INJECT-PHRASE`}.
-   Notes never block. Do not move a rule between tiers.
+   `WRD-RES-SECRET-ECHO`, `WRD-RES-EXFIL-DOMAIN`, `WRD-RES-EXFIL-IP-LITERAL`}.
+   MONITOR-fuzzy = {`WRD-RES-INJECT-PHRASE`}. Notes never block. Do not move a rule between
+   tiers.
 3. **`WRD-RES-SECRET-ECHO` reuses `CHECKS.md` `WRD-SEC-*` patterns + the `first4 + "…" +
    (len=N)` redaction verbatim.** No re-defining secret patterns or redaction here.
 4. **`WRD-RES-ANSI` is parser-free:** any disallowed codepoint (§3.1) is the match. ESC

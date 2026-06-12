@@ -6,7 +6,7 @@ fires here fires identically in both — non-negotiable #1.
 
 Tier partition (fixed, §2):
   * BLOCK-deterministic: ``WRD-RES-ANSI``, ``WRD-RES-SECRET-ECHO``,
-    ``WRD-RES-EXFIL-DOMAIN``.
+    ``WRD-RES-EXFIL-DOMAIN``, ``WRD-RES-EXFIL-IP-LITERAL``.
   * MONITOR-fuzzy: ``WRD-RES-INJECT-PHRASE`` (narrow curated exact-phrase).
   * Notes (never block): ``WRD-RES-URL``, ``WRD-RES-UNINSPECTABLE``,
     ``WRD-RES-FRAME-ERROR``, ``WRD-RES-LOCK-INVALID``.
@@ -31,7 +31,9 @@ TIER_BLOCK = "block"
 TIER_MONITOR = "monitor"
 TIER_NOTE = "note"
 
-BLOCK_RULES = frozenset({"WRD-RES-ANSI", "WRD-RES-SECRET-ECHO", "WRD-RES-EXFIL-DOMAIN"})
+BLOCK_RULES = frozenset(
+    {"WRD-RES-ANSI", "WRD-RES-SECRET-ECHO", "WRD-RES-EXFIL-DOMAIN", "WRD-RES-EXFIL-IP-LITERAL"}
+)
 
 #: Severity -> SARIF level (CHECKS.md §2), mirrored for WRD-RES-*.
 _SEVERITY_LEVEL = {"critical": "error", "high": "error", "medium": "warning", "low": "note"}
@@ -192,6 +194,7 @@ def inspect_result(
         findings.extend(res_catalog.inspect_ansi(text, tool, idx, policy))
         findings.extend(res_catalog.inspect_secret_echo(text, tool, idx, policy))
         findings.extend(res_catalog.inspect_exfil(text, tool, idx, exfil_denylist))
+        findings.extend(res_catalog.inspect_exfil_ip_literal(text, tool, idx))
         findings.extend(res_catalog.inspect_url_note(text, tool, idx, policy, exfil_denylist))
         findings.extend(res_catalog.inspect_inject(text, tool, idx, inject_phrases))
 

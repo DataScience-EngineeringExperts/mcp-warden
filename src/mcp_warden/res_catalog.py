@@ -125,6 +125,23 @@ def inspect_exfil(text: str, tool: str, idx: int, denylist: tuple[str, ...] | li
     ]
 
 
+def inspect_exfil_ip_literal(text: str, tool: str, idx: int) -> list["ResultFinding"]:
+    """WRD-RES-EXFIL-IP-LITERAL (DR3): raw IP literal in a deny range (SSRF_NETWORKS)."""
+    hits = res_rules.match_ip_literals(text, res_rules.SSRF_NETWORKS)
+    if not hits:
+        return []
+    return [
+        _RF(
+            rule_id="WRD-RES-EXFIL-IP-LITERAL",
+            severity="high",
+            tier=TIER_BLOCK,
+            message=f"tools/{tool}: result references private/loopback/metadata IP literal(s): "
+            + ", ".join(f"{ip} ({label})" for ip, label in hits),
+            block_index=idx,
+        )
+    ]
+
+
 def inspect_url_note(
     text: str,
     tool: str,

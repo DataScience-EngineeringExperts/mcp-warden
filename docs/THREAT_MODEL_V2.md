@@ -85,7 +85,7 @@ This table is the v0.2 contract addition. It sits alongside `THREAT_MODEL.md` §
 |----|--------------------------|---------|--------------|
 | DR1 | ANSI/control-escape injection in a result | `WRD-RES-ANSI`: any disallowed codepoint (incl. ESC `U+001B`) is a match; strip-on-block | Only inspects text/`resource`-text blocks; image/audio/blob not decoded (`WRD-RES-UNINSPECTABLE` note) |
 | DR2 | Echo of a known secret pattern in a result | `WRD-RES-SECRET-ECHO`: reuses `WRD-SEC-*` patterns + redaction on result text | Custom/short secret formats may evade the same patterns they evade at definition time; entropy is heuristic |
-| DR3 | Exfil/callback domain in a result | `WRD-RES-EXFIL-DOMAIN`: exact host/subdomain match against curated + org denylist | Denylist is finite; a novel exfil host not on the list passes; no DNS resolution |
+| DR3 | Exfil/callback domain **or raw IP literal** in a result | `WRD-RES-EXFIL-DOMAIN`: exact host/subdomain match against curated + org denylist. `WRD-RES-EXFIL-IP-LITERAL`: raw private/loopback/metadata IP literal (IPv4 + IPv6) in an `SSRF_NETWORKS` deny range → BLOCK (closes the raw-IP-literal evasion deterministically, no DNS) | Denylist is finite; a novel exfil *host* not on the list passes. The raw-IP-literal gap is now CLOSED; **DNS-name resolution** of result-borne hosts (a hostname that resolves to a private IP) remains a documented residual — issue #11 PR-2 |
 | DR4 | Mid-session tool-surface swap (runtime `MCP-DRIFT`) | `guard` `tools/list_changed` gate vs `warden.lock` (`--block-list-changed`) | Requires `--lock`; only catches a *list change*, not a silent per-call surface variance |
 | DR5 | Live dangerous-call argument (SSRF, shell, destructive SQL, path escape) | runtime enforcement of the v0.1 argument policy on live `tools/call` requests (`POLICY_MODEL.md`) | No DNS resolution at runtime (DNS-name hosts still note-only — v0.3) |
 
@@ -155,8 +155,10 @@ The v0.1 cuts (`THREAT_MODEL.md` §6) **all stand.** v0.2 adds these:
    surface; coverage gap recorded via `WRD-RES-UNINSPECTABLE`.
 3. **Cross-call / conversational correlation.** Stateful behavioral reasoning is `T-BEHAVE`
    territory; not built.
-4. **DNS resolution from the proxy.** No network from `guard`/`inspect`; exfil + SSRF match
-   on literal host strings only (resolution-time SSRF is a v0.3 concern).
+4. **DNS resolution from the proxy.** No network from `guard`/`inspect`. Exfil-domain + SSRF
+   match on literal host strings; raw **IP literals** in results ARE now matched against the
+   SSRF deny ranges (DR3 / `WRD-RES-EXFIL-IP-LITERAL`), with no resolution. Resolving a
+   *hostname* to its IP (resolution-time SSRF) stays out — issue #11 PR-2.
 5. **Default-blocking the MONITOR (fuzzy) tier.** **Still cut in v0.3.** No field
    false-positive data exists for `WRD-RES-INJECT-PHRASE`, so it stays monitor-only / opt-in;
    only the deterministic tier became default-block in v0.3.
