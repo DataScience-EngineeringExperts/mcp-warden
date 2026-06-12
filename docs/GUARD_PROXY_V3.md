@@ -311,6 +311,13 @@ client-visible safety** as POSIX, accepting only the orphan-freedom relaxation:
 4. **No silent parity claim.** Any `guard --version` / help text that lists platform support
    MUST mark Windows **experimental**. Docs/marketing implying Windows lifecycle parity are a
    defect (consistent with the v0.1/v0.2 credibility discipline).
+5. **Refuse-by-default on a non-POSIX platform (v1.0).** Because the §3.2 degradations are a
+   *runtime-protection* gap, `guard` does **not** silently start off-POSIX: at startup it emits a
+   LOUD, structured stderr warning naming the reduced §3.2 guarantees, then **exits `2`** (the
+   standard `cli_guard` config/usage code, distinct from drift `check` `1` and strict/frame-cap `3`)
+   UNLESS `--allow-degraded-platform` is passed — with the flag the same warning prints and `guard`
+   proceeds with the best-effort lifecycle. The warning redacts server identity to `argv[0]` + a
+   redacted arg count; the POSIX path is unaffected (gate inert, flag a no-op).
 
 ### 3.4 Must-not-deviate (§3)
 
@@ -318,9 +325,11 @@ client-visible safety** as POSIX, accepting only the orphan-freedom relaxation:
    error codes, and redaction **all hold** on Windows — only §2 lifecycle guarantees degrade.
 2. On child exit, the `-32002` pending-id synthesis **still happens** on Windows (never hang).
 3. Child teardown is **job-object best-effort**; orphan-freedom is **NOT asserted** when a job
-   object is unavailable — and that degradation is logged (`WRD-RES-WIN-LIFECYCLE`), never
-   hidden.
+   object is unavailable — and that degradation is logged (`WRD-RES-WIN-LIFECYCLE`), never hidden.
 4. **No parity claim.** Windows is EXPERIMENTAL in code, help text, and docs.
+5. **No silent start off-POSIX.** `guard` refuses (exit `2`, distinct from drift `1` /
+   strict/frame-cap `3`) without `--allow-degraded-platform`; with the flag it proceeds only after
+   the loud, redacted §3.3.5 warning.
 
 ---
 

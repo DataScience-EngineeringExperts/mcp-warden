@@ -17,6 +17,11 @@ from rich.table import Table
 from . import res_rules
 from .emit_res import build_result_sarif, result_findings_to_jsonl, result_sarif_to_json
 from .guard import run_guard
+from .guard_lifecycle import (
+    GUARD_PLATFORM_REFUSE_EXIT,
+    is_degraded_platform,
+    platform_refusal_message,
+)
 from .guard_loop import GuardConfig
 from .inspector import TraceError, analyze_trace, exit_code_for
 from .lockfile import read_lock
@@ -119,9 +124,38 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         record: Optional[Path] = typer.Option(None, "--record", help="Record observed frames for later inspect"),
         max_frame_bytes: int = typer.Option(8 * 1024 * 1024, "--max-frame-bytes", help="Per-frame memory cap"),
         max_inflight: int = typer.Option(1024, "--max-inflight", help="Request-correlation map bound"),
+        allow_degraded_platform: bool = typer.Option(
+            False,
+            "--allow-degraded-platform",
+            help=(
+                "Knowingly run guard on a NON-POSIX platform (EXPERIMENTAL) where the "
+                "subprocess-lifecycle guarantees are reduced (process-group isolation, "
+                "signal forwarding, orphan-free teardown). Without this flag, guard REFUSES "
+                "to start on a non-POSIX platform (exit 2) rather than run with a false sense "
+                "of full runtime protection. POSIX platforms ignore this flag entirely. "
+                "See GUARD_PROXY_V3.md §3."
+            ),
+        ),
     ) -> None:
         """Run the transparent stdio guard proxy (v0.3: deterministic tier blocks by default)."""
         command, args = _split(server_cmd)
+        # Non-POSIX platform gate (GUARD_PROXY_V3.md §3.3): runtime lifecycle
+        # guarantees are reduced off-POSIX, so guard must NOT silently run with a
+        # false sense of full protection. Emit a LOUD, redacted, structured warning
+        # naming each reduced guarantee; then REFUSE (exit 2) unless the operator
+        # opted in with --allow-degraded-platform, in which case we proceed AFTER the
+        # warning. On POSIX this whole block is inert (is_degraded_platform() is
+        # False), so the POSIX path is byte-for-byte unchanged.
+        if is_degraded_platform():
+            err_console.print(platform_refusal_message(command, args), highlight=False)
+            if not allow_degraded_platform:
+                err_console.print(
+                    "[red]error:[/red] refusing to run guard on a non-POSIX platform without "
+                    "--allow-degraded-platform (runtime protection would be degraded; "
+                    "see GUARD_PROXY_V3.md §3)",
+                    highlight=False,
+                )
+                raise typer.Exit(code=GUARD_PLATFORM_REFUSE_EXIT)
         _warn_deprecated(
             err_console,
             block_ansi=block_ansi,

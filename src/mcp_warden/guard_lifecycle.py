@@ -36,6 +36,109 @@ TERM_GRACE_S = 3.0
 
 _IS_POSIX = os.name == "posix"
 
+#: Dedicated exit code for refusing to run ``guard`` on a non-POSIX platform
+#: WITHOUT ``--allow-degraded-platform`` (GUARD_PROXY_V3.md §3.3). A
+#: platform-refusal is a config/usage refusal, so it reuses the established
+#: config-error code ``2`` (``GUARD_FATAL_EXIT`` / every ``cli_guard`` config
+#: ``typer.Exit(code=2)``). It is DISTINCT from confirmed-drift (``check`` exit
+#: ``1``) and from the strict / frame-cap abort (``3``, ``GUARD_STRICT_EXIT``),
+#: so "exit 1 == confirmed drift" and "exit 3 == strict/frame-cap abort" stay
+#: unambiguous.
+GUARD_PLATFORM_REFUSE_EXIT = 2
+
+#: The flag that lets an operator knowingly proceed on a degraded (non-POSIX)
+#: platform. Affirmative ``--allow-*`` form, matching the sole other affirmative
+#: opt-in flag ``--allow-exfil-domain`` (GUARD_PROXY_V3.md §4.2 naming scheme).
+ALLOW_DEGRADED_PLATFORM_FLAG = "--allow-degraded-platform"
+
+#: The exact runtime guarantees that are reduced on a non-POSIX platform
+#: (GUARD_PROXY_V3.md §3.2). Named precisely so the operator knows what is NOT
+#: protected — NOT a vague "experimental" hand-wave.
+DEGRADED_GUARANTEES: tuple[str, ...] = (
+    "process-group isolation: the child is NOT placed in its own process group "
+    "/ job object (no start_new_session)",
+    "child teardown: terminate-only on client disconnect/EOF -- NO "
+    "SIGTERM->grace->SIGKILL process-group teardown, so orphaned children / "
+    "grandchildren are POSSIBLE (orphan-freedom is NOT asserted)",
+    "signal forwarding: SIGINT/SIGTERM/SIGHUP are NOT forwarded to the child "
+    "process group",
+)
+
+
+def is_degraded_platform() -> bool:
+    """Return True when ``guard`` runs with reduced lifecycle guarantees (non-POSIX).
+
+    Pure read of :data:`_IS_POSIX` (itself ``os.name == "posix"``). Tests simulate
+    a non-POSIX host by monkeypatching this module's ``_IS_POSIX`` — the same
+    ``os.name`` gate every other lifecycle primitive in this module already uses.
+
+    Returns:
+        ``True`` on a non-POSIX platform (degraded lifecycle), ``False`` on POSIX.
+    """
+    return not _IS_POSIX
+
+
+def _redact_server_identity(command: str, args: list[str]) -> str:
+    """Render the server launch argv for a human message WITHOUT leaking secrets.
+
+    Mirrors the redaction contract of :func:`mcp_warden.precommit._redact_server`
+    (code-audit binding B3): the server argv may carry API keys/tokens passed as
+    CLI args, and the project forbids printing ``server.command`` / ``server.args``
+    (cf. ``SAFE_PROVENANCE_FIELDS``). Guard stderr is captured to client logs and
+    scrollback, so the platform warning echoes ONLY the executable name
+    (``argv[0]``) plus a redacted count of the remaining args -- never the args
+    themselves. Kept local (not imported from ``precommit``) so the guard runtime
+    has no dependency on the check-only pre-commit module.
+
+    Args:
+        command: ``argv[0]`` of the server launch.
+        args: The remaining server argv (NEVER rendered; only counted).
+
+    Returns:
+        ``command`` alone when there are no args, else
+        ``"<command> …(<n> arg(s) redacted)"``.
+    """
+    if not args:
+        return command
+    n = len(args)
+    return f"{command} …({n} arg{'s' if n != 1 else ''} redacted)"
+
+
+def platform_refusal_message(command: str, args: list[str]) -> str:
+    """Build the LOUD, structured non-POSIX warning naming each reduced guarantee.
+
+    Emitted to stderr at ``guard`` startup on a non-POSIX platform (refuse path
+    AND proceed-with-flag path). Names EXACTLY which §3.2 lifecycle guarantees are
+    reduced so a user can never falsely believe they have full runtime protection.
+    The server identity is rendered ONLY via :func:`_redact_server_identity`
+    (argv[0] + redacted arg count) so a secret-bearing argv never reaches stderr
+    (binding: redaction).
+
+    Args:
+        command: ``argv[0]`` of the server launch (for the redacted identity line).
+        args: The remaining server argv (counted + redacted, never rendered).
+
+    Returns:
+        A multi-line, all-caps-headed warning string (no trailing newline).
+    """
+    server = _redact_server_identity(command, args)
+    lines = [
+        "================================================================",
+        "WARNING: mcp-warden guard on a NON-POSIX platform (EXPERIMENTAL).",
+        "Runtime process/signal protection is DEGRADED. You do NOT have the",
+        "full guard runtime-protection model on this platform. Reduced:",
+    ]
+    for guarantee in DEGRADED_GUARANTEES:
+        lines.append(f"  - {guarantee}")
+    lines.append(f"server: {server}")
+    lines.append(
+        "Frame inspection, default-block posture, secret redaction and the "
+        "-32002 pending-id synthesis STILL hold; only the §2 subprocess-"
+        "lifecycle guarantees degrade (GUARD_PROXY_V3.md §3)."
+    )
+    lines.append("================================================================")
+    return "\n".join(lines)
+
 
 def exit_code_for_child(returncode: int | None) -> int:
     """Translate an anyio child returncode to the client-visible exit code.
