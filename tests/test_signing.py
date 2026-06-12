@@ -25,7 +25,7 @@ from typer.testing import CliRunner
 
 from mcp_warden import cli_sign, signing
 from mcp_warden.cli import app
-from mcp_warden.cli_sign import SIDECAR_NAME, SIGNED_PROVENANCE_VERSION
+from mcp_warden.cli_sign import SIDECAR_NAME, SIGNED_PROVENANCE_VERSION, _sidecar_name_for
 from mcp_warden.lockfile import build_lock, read_lock, write_lock
 from mcp_warden.models import CapturedSurface, CapturedTool
 from mcp_warden.signing import build_statement
@@ -331,9 +331,10 @@ def test_pin_sign_leaves_overall_digest_unchanged(tmp_path, monkeypatch):
     assert r1.exit_code == 0, r1.output
     unsigned_digest = read_lock(unsigned_lock).overall_digest
 
-    # Signed pin of the same server.
+    # Signed pin of the same server (use the default lock name so the expected
+    # sidecar name is the canonical default "warden.lock.sigstore").
     _install_fake_signer(monkeypatch)
-    signed_lock = tmp_path / "signed.lock"
+    signed_lock = tmp_path / "warden.lock"
     r2 = runner.invoke(app, ["pin", "python", CLEAN, "--lock", str(signed_lock), "--sign"])
     assert r2.exit_code == 0, r2.output
     signed = read_lock(signed_lock)
@@ -341,14 +342,17 @@ def test_pin_sign_leaves_overall_digest_unchanged(tmp_path, monkeypatch):
     # Signature is out-of-digest: the digest must be byte-identical.
     assert signed.overall_digest == unsigned_digest
 
-    # The sidecar was written next to the lock.
-    assert (tmp_path / SIDECAR_NAME).exists()
-    assert (tmp_path / SIDECAR_NAME).read_text() == '{"fake":"signed-bundle"}'
+    # The sidecar was written next to the lock with the DERIVED name.
+    expected_sidecar = tmp_path / _sidecar_name_for(signed_lock)
+    assert expected_sidecar.exists()
+    assert expected_sidecar.read_text() == '{"fake":"signed-bundle"}'
+    # When the lock is named "warden.lock" the derived name == the canonical default.
+    assert expected_sidecar.name == SIDECAR_NAME
 
     # The out-of-digest pointer attestation is present + bumped provenance_version.
     pointers = [a for a in signed.pin.attestations if a.method == "sigstore-keyless"]
     assert len(pointers) == 1
-    assert pointers[0].signature_bundle == SIDECAR_NAME
+    assert pointers[0].signature_bundle == _sidecar_name_for(signed_lock)
     assert pointers[0].bound_digest == signed.overall_digest
     assert signed.pin.provenance_version == SIGNED_PROVENANCE_VERSION
 
@@ -491,6 +495,86 @@ def test_sign_statement_invalid_token_fails_closed():
         pytest.skip("sigstore extra not installed")
     with pytest.raises(signing.SigningError):
         signing.sign_statement(build_statement("sha256:" + "a" * 64), "not-a-jwt")
+
+
+# --- sidecar name derivation (root-cause regression tests for #16 fix) --------
+
+
+def test_sidecar_name_default_lock():
+    """Default lock name produces the canonical default sidecar name."""
+    assert _sidecar_name_for(Path("warden.lock")) == "warden.lock.sigstore"
+    assert _sidecar_name_for(Path("/some/dir/warden.lock")) == "warden.lock.sigstore"
+
+
+def test_sidecar_name_non_default_lock():
+    """Non-default lock name (e.g. e2e.warden.lock) derives the correct sidecar name.
+
+    Root-cause regression: the old _sidecar_path_for used a fixed constant
+    'warden.lock.sigstore' regardless of the lock filename, so a pin with
+    --lock e2e.warden.lock wrote the sidecar as 'warden.lock.sigstore' instead of
+    'e2e.warden.lock.sigstore'. The CI workflow then ran `test -f e2e.warden.lock.sigstore`
+    and failed, producing a silent exit-1 (the pin table was already printed before
+    the test ran, so no error message appeared in the log).
+    """
+    assert _sidecar_name_for(Path("e2e.warden.lock")) == "e2e.warden.lock.sigstore"
+    assert _sidecar_name_for(Path("/work/e2e.warden.lock")) == "e2e.warden.lock.sigstore"
+
+
+def test_pin_sign_sidecar_colocated_with_non_default_lock(tmp_path, monkeypatch):
+    """pin --sign with a non-default --lock name writes the sidecar next to that lock.
+
+    Regression test: before the fix, pin --lock e2e.warden.lock --sign wrote the
+    sidecar as 'warden.lock.sigstore' (fixed constant), not 'e2e.warden.lock.sigstore'.
+    """
+    _install_fake_signer(monkeypatch)
+    e2e_lock = tmp_path / "e2e.warden.lock"
+    result = runner.invoke(app, ["pin", "python", CLEAN, "--lock", str(e2e_lock), "--sign"])
+    assert result.exit_code == 0, result.output
+    # The sidecar MUST be next to the lock with the DERIVED name.
+    assert (tmp_path / "e2e.warden.lock.sigstore").exists(), (
+        "sidecar 'e2e.warden.lock.sigstore' not found; was it written as 'warden.lock.sigstore'?"
+    )
+    # The OLD wrong path must NOT exist.
+    assert not (tmp_path / "warden.lock.sigstore").exists(), (
+        "old fixed-constant sidecar 'warden.lock.sigstore' was created instead of the correct name"
+    )
+    # Pointer attestation in the lock should also carry the derived name.
+    signed = read_lock(e2e_lock)
+    pointers = [a for a in signed.pin.attestations if a.method == "sigstore-keyless"]
+    assert len(pointers) == 1
+    assert pointers[0].signature_bundle == "e2e.warden.lock.sigstore"
+
+
+# --- signing failure is LOUD (error on stderr, non-zero exit) -------------------
+
+
+def test_sign_failure_is_loud(tmp_path, monkeypatch):
+    """A sign failure MUST print a structured error to stderr AND exit non-zero.
+
+    The root-cause incident showed a silent exit-1: the pin table was printed to
+    stdout but no error appeared in the CI log. This test asserts that ANY
+    signing failure always emits '[red]signing failed:[/red]' to stderr before
+    the non-zero exit, so the operator knows WHY it failed.
+    """
+    _stub_sigstore_available(monkeypatch)
+
+    def noisy_boom(statement, token):
+        raise signing.SigningError("no ambient OIDC credential available; id-token permission missing")
+
+    monkeypatch.setattr(cli_sign, "sign_statement", noisy_boom)
+    lock_path = tmp_path / "warden.lock"
+    result = runner.invoke(
+        app,
+        ["pin", "python", CLEAN, "--lock", str(lock_path), "--sign"],
+        catch_exceptions=False,
+    )
+    assert result.exit_code != 0, "a signing failure must exit non-zero"
+    # The error marker must appear somewhere in the combined output so the
+    # operator can see WHY it failed.
+    combined = result.output
+    assert "signing failed" in combined.lower(), (
+        f"signing failure was silent — no 'signing failed' in output:\n{combined!r}"
+    )
 
 
 # --- committed offline fixture (SKIPS until a real bundle is dropped in) ------

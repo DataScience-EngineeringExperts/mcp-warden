@@ -38,9 +38,10 @@ from .signing import (
     verify_statement,
 )
 
-#: Fixed sidecar filename for the signature bundle, written/loaded next to the
-#: lock. ``check --verify`` ALWAYS uses this fixed name (or ``--offline-bundle``),
-#: never the lock's pointer field. Renaming this is a breaking change.
+#: Default sidecar filename when the lock is named ``warden.lock``. Exported for
+#: backward-compatibility and tests. Callers MUST use :func:`_sidecar_name_for`
+#: to derive the actual sidecar filename from a (potentially non-default) lock path
+#: instead of referencing this constant directly.
 SIDECAR_NAME = "warden.lock.sigstore"
 
 #: ``provenance_version`` value stamped on a signed lock (additive bump 1 -> 2,
@@ -57,9 +58,27 @@ def _now_rfc3339() -> str:
     return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _sidecar_name_for(lock_path: Path) -> str:
+    """Derive the sidecar filename from ``lock_path``.
+
+    The sidecar is always ``<lock_filename>.sigstore``, co-located with the lock.
+    For example::
+
+        warden.lock        ->  warden.lock.sigstore
+        e2e.warden.lock    ->  e2e.warden.lock.sigstore
+        /tmp/a.lock        ->  a.lock.sigstore  (in /tmp/)
+
+    Using a fixed constant (SIDECAR_NAME = "warden.lock.sigstore") regardless of
+    the lock's filename was the root-cause bug: when ``--lock e2e.warden.lock`` is
+    passed, the sidecar was written to ``warden.lock.sigstore`` but callers (and
+    the CI workflow) looked for ``e2e.warden.lock.sigstore``.
+    """
+    return Path(lock_path).name + ".sigstore"
+
+
 def _sidecar_path_for(lock_path: Path) -> Path:
     """The FIXED sidecar path next to ``lock_path`` (never an attacker pointer)."""
-    return Path(os.path.dirname(os.path.abspath(lock_path))) / SIDECAR_NAME
+    return Path(os.path.dirname(os.path.abspath(lock_path))) / _sidecar_name_for(lock_path)
 
 
 def sign_after_pin(
@@ -112,9 +131,12 @@ def sign_after_pin(
     # overall_digest is left byte-identical (provenance is excluded from the digest).
     signed = lock_doc.model_copy(deep=True)
     actor = os.environ.get("WARDEN_ACTOR") or "sigstore-keyless"
+    # Use the DERIVED sidecar name (from lock_path.name), not the constant, so
+    # non-default lock names (e.g. e2e.warden.lock) get the correct pointer.
+    sidecar_name = _sidecar_name_for(lock_path)
     pointer = make_sigstore_pointer_attestation(
         bound_digest=signed.overall_digest,
-        signature_bundle=SIDECAR_NAME,
+        signature_bundle=sidecar_name,
         actor=actor,
         now=_now_rfc3339(),
     )
