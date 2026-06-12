@@ -30,6 +30,7 @@ from .checks import run_checks
 from .cli_diff import register as register_diff_command
 from .cli_guard import register as register_guard_commands
 from .cli_lock import register as register_lock_commands
+from .cli_sign import sign_after_pin, verify_lock_signature
 from .emitters import build_sarif, findings_to_jsonl, sarif_to_json
 from .lockfile import (
     DEFAULT_LOCK_NAME,
@@ -78,6 +79,10 @@ def pin(
     json_out: bool = typer.Option(False, "--json", help="Emit findings as JSONL to stdout"),
     sarif: Optional[Path] = typer.Option(None, "--sarif", help="Write SARIF report to this path"),
     timeout: float = typer.Option(30.0, "--timeout", help="Capture timeout (seconds)"),
+    sign: bool = typer.Option(False, "--sign", help="Sigstore-sign overall_digest (requires mcp-warden[sigstore])"),
+    identity_token: Optional[str] = typer.Option(
+        None, "--identity-token", help="Explicit OIDC token for signing (default: ambient/CI OIDC)"
+    ),
 ) -> None:
     """Pin an MCP server's declared surface into ``warden.lock`` (TOFU baseline)."""
     command, args = _split_server_cmd(server_cmd)
@@ -101,6 +106,13 @@ def pin(
         err_console.print(f"[red]error:[/red] could not write lock: {exc}")
         raise typer.Exit(code=2) from exc
 
+    # #16 (opt-in): Sigstore-sign overall_digest. Fails CLOSED — on any signing
+    # error the command exits non-zero and leaves no half-written sidecar. The
+    # signature/bundle/pointer are all OUTSIDE overall_digest, so signing does NOT
+    # change the digest of the lock written above.
+    if sign:
+        lock_doc = sign_after_pin(lock_doc, lock, identity_token, err_console)
+
     if sarif is not None:
         sarif.write_text(sarif_to_json(build_sarif(findings)), encoding="utf-8")
     if json_out:
@@ -111,13 +123,40 @@ def pin(
 
 @app.command()
 def check(
-    server_cmd: list[str] = typer.Argument(..., help="MCP server launch argv (must match the pinned launch)"),
+    server_cmd: Optional[list[str]] = typer.Argument(
+        None, help="MCP server launch argv (must match the pinned launch); omit with --verify"
+    ),
     lock: Path = typer.Option(Path(DEFAULT_LOCK_NAME), "--lock", help="Baseline lock path"),
     json_out: bool = typer.Option(False, "--json", help="Emit findings+drift as JSONL to stdout"),
     sarif: Optional[Path] = typer.Option(None, "--sarif", help="Write SARIF report to this path"),
     timeout: float = typer.Option(30.0, "--timeout", help="Capture timeout (seconds)"),
+    verify: bool = typer.Option(
+        False, "--verify", help="Verify the lock's Sigstore signature (requires mcp-warden[sigstore])"
+    ),
+    certificate_identity: Optional[str] = typer.Option(
+        None, "--certificate-identity", help="Expected signer identity (required with --verify)"
+    ),
+    certificate_oidc_issuer: Optional[str] = typer.Option(
+        None, "--certificate-oidc-issuer", help="Expected OIDC issuer (required with --verify)"
+    ),
+    offline_bundle: Optional[Path] = typer.Option(
+        None, "--offline-bundle", help="Explicit bundle path (default: warden.lock.sigstore next to the lock)"
+    ),
 ) -> None:
-    """Re-capture and verify a server against ``warden.lock``; fail on drift."""
+    """Re-capture and verify a server against ``warden.lock``; fail on drift.
+
+    With ``--verify`` the command ALSO/INSTEAD verifies the lock's Sigstore
+    signature (a no-server-spawn cryptographic check). ``--verify`` requires
+    ``--certificate-identity`` and ``--certificate-oidc-issuer`` and exits 0 only
+    on a clean verify; ANY failure (bad signature, identity mismatch, missing/
+    malformed bundle, TUF/network error) exits non-zero (fail closed).
+    """
+    if verify:
+        verify_lock_signature(
+            lock, certificate_identity, certificate_oidc_issuer, offline_bundle, console, err_console
+        )
+        return
+
     command, args = _split_server_cmd(server_cmd)
 
     try:

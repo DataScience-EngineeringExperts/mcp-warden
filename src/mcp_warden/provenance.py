@@ -90,6 +90,39 @@ def make_approver_attestation(approver: str, bound_digest: str, *, now: str, not
     )
 
 
+def make_sigstore_pointer_attestation(
+    bound_digest: str, signature_bundle: str, *, actor: str, now: str
+) -> Attestation:
+    """Build the #16 out-of-digest Sigstore pointer :class:`Attestation`.
+
+    This is an INFORMATIONAL pointer appended to ``pin.attestations`` after a
+    ``pin --sign``: it records that a Sigstore signature over the lock's
+    ``overall_digest`` exists, and names the sidecar file holding the bundle. It
+    is NOT a trust anchor — ``check --verify`` ignores this attestation entirely
+    and re-derives everything from the lock's own ``overall_digest`` plus the
+    bundle at a FIXED sidecar path. The ``bound_digest`` here is convenience
+    metadata, NOT a security check (an attacker can forge it; verify never reads
+    it). Stored OUTSIDE ``overall_digest`` like all provenance.
+
+    Args:
+        bound_digest: The lock's ``overall_digest`` VERBATIM (with ``sha256:``).
+        signature_bundle: RELATIVE sidecar filename (e.g. ``"warden.lock.sigstore"``).
+        actor: Self-asserted principal recorded on the attestation.
+        now: RFC 3339 UTC timestamp.
+
+    Returns:
+        The pointer :class:`Attestation` (``role="signer"``, ``method="sigstore-keyless"``).
+    """
+    return Attestation(
+        actor=actor,
+        role="signer",
+        method="sigstore-keyless",
+        created_at=now,
+        bound_digest=bound_digest,
+        signature_bundle=signature_bundle,
+    )
+
+
 def rotate_provenance(
     lock: WardenLock,
     *,

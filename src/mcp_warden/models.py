@@ -210,7 +210,9 @@ class Attestation(BaseModel):
     Attributes:
         actor: Who attests (identity string). Self-asserted (CRIT-3).
         role: ``"approver"`` | ``"pinner"`` | future roles.
-        method: ``"manual"`` today; ``"cosign-keyless"`` etc. land in #16.
+        method: ``"manual"`` for human approvals; ``"sigstore-keyless"`` for the
+            #16 out-of-digest pointer attestation that records a Sigstore
+            signature over the lock's ``overall_digest``.
         created_at: RFC 3339 UTC timestamp of the attestation.
         bound_digest: The ``overall_digest`` this attestation binds to,
             **VERBATIM** — i.e. ``sha256:<64 lowercase hex>`` WITH the
@@ -229,6 +231,13 @@ class Attestation(BaseModel):
     created_at: str
     bound_digest: str
     note: str | None = None
+    #: #16: for a ``method="sigstore-keyless"`` pointer attestation, the RELATIVE
+    #: sidecar filename (e.g. ``"warden.lock.sigstore"``) where the signature
+    #: bundle lives. This pointer is INFORMATIONAL ONLY and is **never** trusted by
+    #: ``check --verify`` (which loads the bundle from a FIXED path next to the
+    #: lock); an attacker editing it changes nothing about verification. Out of
+    #: ``overall_digest`` like the rest of the ``pin`` block.
+    signature_bundle: str | None = None
 
     @field_validator("note")
     @classmethod

@@ -1,0 +1,76 @@
+# =============================================================================
+# Sigstore offline-fixture signer (#16)
+#
+# !!! NEVER RENAME OR MOVE THIS FILE !!!
+#
+# The committed offline fixture's signer identity is PINNED to this exact path:
+#     https://github.com/ernestprovo23/mcp-warden/.github/workflows/sigstore-fixture.yml@refs/heads/main
+# (issuer https://token.actions.githubusercontent.com). The offline-fixture test
+# (tests/test_signing.py::test_offline_fixture_verifies_when_present) and
+# docs/SIGNING.md both hard-code this path. Renaming/moving this file changes the
+# certificate SAN and silently breaks offline fixture verification.
+#
+# Purpose: this workflow signs a stable test fixture with the workflow's ambient
+# OIDC and uploads the (lock + bundle) as an artifact. To refresh the committed
+# offline fixture, run this workflow on main, download the artifact, and drop its
+# contents into tests/fixtures/signed/ (see docs/SIGNING.md "Refreshing the
+# offline fixture").
+# =============================================================================
+name: Sigstore offline fixture
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/sigstore-fixture.yml"
+      - "src/mcp_warden/signing.py"
+      - "src/mcp_warden/cli_sign.py"
+
+jobs:
+  sign-fixture:
+    name: Sign offline fixture
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # REQUIRED for ambient OIDC -> Fulcio
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install mcp-warden with the sigstore extra
+        run: pip install -e ".[dev,sigstore]"
+
+      - name: Sign the fixture server's overall_digest (ambient OIDC)
+        run: |
+          mkdir -p fixture-out
+          mcp-warden pin python tests/fixtures/clean_server.py \
+            --lock fixture-out/warden.lock --sign
+          test -f fixture-out/warden.lock.sigstore
+
+      # Self-check: verify what we just signed against THIS workflow's identity so
+      # a broken run never publishes a bad fixture.
+      - name: Verify the freshly-signed fixture (own identity)
+        run: |
+          mcp-warden check \
+            --lock fixture-out/warden.lock \
+            --verify \
+            --certificate-identity \
+              "https://github.com/ernestprovo23/mcp-warden/.github/workflows/sigstore-fixture.yml@${GITHUB_REF}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
+
+      - name: Upload signed fixture (lock + bundle)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: mcp-warden-signed-fixture
+          path: |
+            fixture-out/warden.lock
+            fixture-out/warden.lock.sigstore
+          if-no-files-found: error

@@ -25,6 +25,10 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "hypothesis>=6.100.0",
 ]
+# #16: Sigstore keyless signing + verification of warden.lock. OPT-IN — the base
+# install stays sigstore-free. Pinned to the 4.3.x line the implementation was
+# verified against (signing.py warns at runtime if installed outside this window).
+sigstore = ["sigstore>=4.3.0,<5"]
 
 [project.scripts]
 mcp-warden = "mcp_warden.cli:app"
