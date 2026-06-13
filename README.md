@@ -201,7 +201,7 @@ and a **mutated** (rug-pulled) one. The end-to-end flow:
 change, server-identity change). Tool `inputSchema` changes are **structurally
 diffed**: each security-relevant mutation is reported per-fact and deterministically
 classified by severity (`docs/WARDEN_LOCK_SCHEMA.md` §6.2). A normalized schema
-skeleton is stored in the lock (`schema_version` 2); pre-skeleton (v1) locks fall
+skeleton is stored in the lock (`schema_version` 3); pre-skeleton (v1) locks fall
 back to a single high-severity `schema-modified` until re-pinned. The SARIF report
 (`ruleId` == the `WRD-*` / `WRD-DRIFT-*` check ID) uploads straight to GitHub code
 scanning.
