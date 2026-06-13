@@ -56,7 +56,7 @@ without GitHub Advanced Security.
 
 ```yaml
 - name: Install mcp-warden
-  run: pip install mcpwarden       # PyPI dist `mcpwarden`; CLI command `mcp-warden`
+  run: pip install mcp-warden-cli       # PyPI dist `mcp-warden-cli`; CLI command `mcp-warden`
 
 - name: MCP integrity gate
   run: |
@@ -95,7 +95,7 @@ mcp-integrity:
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   before_script:
-    - pip install mcpwarden       # PyPI dist `mcpwarden`; CLI command `mcp-warden`
+    - pip install mcp-warden-cli       # PyPI dist `mcp-warden-cli`; CLI command `mcp-warden`
   script:
     - mcp-warden check node ./build/index.js --lock warden.lock --sarif warden.sarif
   artifacts:

@@ -17,7 +17,7 @@ mcp-integrity:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   before_script:
-    - pip install "mcpwarden==1.0.0"   # PyPI dist name is `mcpwarden`; the CLI command stays `mcp-warden`
+    - pip install "mcp-warden-cli==1.0.0"   # PyPI dist name is `mcp-warden-cli`; the CLI command stays `mcp-warden`
   script:
     # Re-capture the server surface and diff it against the committed lock.
     # Exit 0 = clean, 1 = drift (job fails), 2 = capture/IO error (job fails).

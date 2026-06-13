@@ -47,7 +47,7 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install mcp-warden
-        run: pip install mcpwarden   # PyPI dist `mcpwarden`; CLI command `mcp-warden`
+        run: pip install mcp-warden-cli   # PyPI dist `mcp-warden-cli`; CLI command `mcp-warden`
       - name: Re-pin surface (writes warden.lock for review)
         run: |
           mcp-warden pin node ./build/index.js \

@@ -11,10 +11,11 @@ an MCP server's declared tool/resource/prompt surface into a signed `warden.lock
 then fails CI when that surface drifts from the approved baseline.** v1 covers
 **stdio-transport** servers; HTTP/SSE transport is a documented v1.x roadmap item.
 
-> ⚠️ **Install `mcpwarden`, not `mcp-warden`.** The PyPI name `mcp-warden` is an
-> **unrelated package by a different author** — it is not this project. The correct
-> install is `pip install mcpwarden` (the CLI command is still `mcp-warden`). Or use
-> the [GitHub Action](#github-action-one-step-drop-in) / a git-pinned install.
+> ⚠️ **Install `mcp-warden-cli`, not `mcp-warden`.** The PyPI name `mcp-warden` is
+> an **unrelated package by a different author** — it is not this project. The
+> correct install is `pip install mcp-warden-cli` (the CLI command is still
+> `mcp-warden`). Or use the [GitHub Action](#github-action-one-step-drop-in) / a
+> git-pinned install.
 
 If you already follow the published guidance — *pin versions, hash tool
 definitions, alert on drift* — mcp-warden is the deterministic tool that does it.
@@ -155,12 +156,12 @@ result-inspection catalog is defined once and run identically by `guard` (live) 
 
 Requires Python ≥ 3.11.
 
-> ⚠️ On PyPI the distribution name is **`mcpwarden`** (one token), not `mcp-warden`
-> — that name belongs to an unrelated package. The CLI command stays `mcp-warden`.
+> ⚠️ On PyPI the distribution name is **`mcp-warden-cli`**, not `mcp-warden` —
+> that name belongs to an unrelated package. The CLI command stays `mcp-warden`.
 
 ```bash
-# from PyPI (distribution name `mcpwarden`):
-pip install mcpwarden
+# from PyPI (distribution name `mcp-warden-cli`):
+pip install mcp-warden-cli
 
 # the CLI is then available as:
 mcp-warden --help
@@ -272,7 +273,7 @@ Three steps to add mcp-warden as a CI integrity gate:
 **1. Pin once** (run locally, commit the result):
 
 ```bash
-pip install mcpwarden    # PyPI dist name is `mcpwarden`; the command is `mcp-warden`
+pip install mcp-warden-cli    # PyPI dist name is `mcp-warden-cli`; the command is `mcp-warden`
 # Pin your server and record an approval
 mcp-warden pin node ./build/index.js \
     --approve --approver you@example.com \
@@ -284,7 +285,7 @@ git add warden.lock && git commit -m "chore: pin MCP surface baseline"
 
 ```yaml
 - name: Install mcp-warden
-  run: pip install mcpwarden       # PyPI dist `mcpwarden`; CLI command `mcp-warden`
+  run: pip install mcp-warden-cli       # PyPI dist `mcp-warden-cli`; CLI command `mcp-warden`
 
 - name: MCP integrity gate (pass path — exits 0 when surface matches lock)
   run: |

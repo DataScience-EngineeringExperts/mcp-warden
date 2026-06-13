@@ -1,9 +1,12 @@
 [project]
-# PyPI DISTRIBUTION name is `mcpwarden` (one token): the name `mcp-warden` is
-# already taken on PyPI by an unrelated package, so we publish as `mcpwarden`.
-# The CLI command and the GitHub repo stay `mcp-warden` — install `mcpwarden`,
-# then run `mcp-warden ...`. See README impostor warning + CHANGELOG.
-name = "mcpwarden"
+# PyPI DISTRIBUTION name is `mcp-warden-cli`: the name `mcp-warden` is already
+# taken on PyPI by an unrelated package, and PyPI rejects `mcpwarden` as "too
+# similar" to it (its anti-typosquat guard strips separators, collapsing both to
+# `mcpwarden`). `mcp-warden-cli` normalizes to letters-only `mcpwardencli`, which
+# is distinct, so it is accepted. The CLI command and the GitHub repo stay
+# `mcp-warden` — install `mcp-warden-cli`, then run `mcp-warden ...`. See README
+# impostor warning + CHANGELOG.
+name = "mcp-warden-cli"
 version = "1.0.0"
 description = "CI-first MCP supply-chain integrity gate: pin and verify the declared tool/resource/prompt surface of an MCP server, plus runtime tool-result inspection (guard/inspect)."
 readme = "README.md"

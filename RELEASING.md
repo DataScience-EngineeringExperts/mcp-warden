@@ -6,14 +6,16 @@ Two names matter and they are deliberately different:
 
 | Thing | Value |
 |-------|-------|
-| PyPI distribution name (what `pip install` uses) | `mcpwarden` |
+| PyPI distribution name (what `pip install` uses) | `mcp-warden-cli` |
 | CLI command (what users type) | `mcp-warden` |
 | GitHub repository | `ernestprovo23/mcp-warden` |
 
-Install is therefore `pip install mcpwarden`, but the command stays `mcp-warden`.
-The PyPI name `mcp-warden` is an unrelated package by another author; under PyPI
-name normalization `mcpwarden` and `mcp-warden` are distinct, so there is no
-collision.
+Install is therefore `pip install mcp-warden-cli`, but the command stays `mcp-warden`.
+The PyPI name `mcp-warden` is an unrelated package by another author. PyPI rejects
+`mcpwarden` as "too similar" to it — PyPI's anti-typosquat guard strips separators,
+so `mcpwarden` and `mcp-warden` collapse to the same string. `mcp-warden-cli`
+normalizes to letters-only `mcpwardencli`, which is distinct, so it is accepted and
+does not collide.
 
 The publish + signing automation lives in
 [`.github/workflows/release.yml`](.github/workflows/release.yml). That workflow is
@@ -31,17 +33,17 @@ the very first upload is already OIDC-published.
 
 ### Recommended path — "pending publisher" (zero prior upload required)
 
-1. Log in to <https://pypi.org> as the account that will own `mcpwarden`.
+1. Log in to <https://pypi.org> as the account that will own `mcp-warden-cli`.
 2. Go to **Account → Publishing** (<https://pypi.org/manage/account/publishing/>).
 3. Under **Add a new pending publisher**, fill in **exactly**:
-   - **PyPI Project Name**: `mcpwarden`
+   - **PyPI Project Name**: `mcp-warden-cli`
    - **Owner**: `ernestprovo23`
    - **Repository name**: `mcp-warden`
    - **Workflow name**: `release.yml`
    - **Environment name**: *(leave blank — the workflow does not use a GitHub
      deployment environment; if you later add one, set it here and add
      `environment:` to the `pypi-publish` job)*
-4. Save. PyPI now holds the project name `mcpwarden` and will create it on the
+4. Save. PyPI now holds the project name `mcp-warden-cli` and will create it on the
    first successful OIDC upload from `release.yml`.
 
 A "pending publisher" reserves the name and lets the FIRST release be OIDC-published
@@ -52,8 +54,8 @@ A "pending publisher" reserves the name and lets the FIRST release be OIDC-publi
 If you would rather seed the project manually first:
 
 1. Build locally: `python -m build` (produces `dist/*.tar.gz` + `dist/*.whl`).
-2. `twine upload dist/*` with a temporary PyPI API token (creates `mcpwarden`).
-3. Then go to **Manage project → Publishing** on the new `mcpwarden` project and add
+2. `twine upload dist/*` with a temporary PyPI API token (creates `mcp-warden-cli`).
+3. Then go to **Manage project → Publishing** on the new `mcp-warden-cli` project and add
    the Trusted Publisher with the same owner/repo/workflow values as above.
 4. Revoke the temporary token.
 
@@ -64,7 +66,7 @@ If you would rather seed the project manually first:
 
 The workflow has a manual `workflow_dispatch` path that publishes to TestPyPI for a
 dry run. To use it, repeat step 2–4 above on <https://test.pypi.org> (separate
-account + separate pending publisher for `mcpwarden`). This is optional and only
+account + separate pending publisher for `mcp-warden-cli`). This is optional and only
 needed if you want to rehearse the publish without touching production PyPI.
 
 ---
@@ -115,11 +117,11 @@ Do this on a clean checkout of `main` with all v1 PRs merged.
 
 1. **Install from PyPI** (give the CDN a minute):
    ```bash
-   pip install mcpwarden
+   pip install mcp-warden-cli
    mcp-warden --version
    ```
-   The version must print `1.0.0`. Note the install name is `mcpwarden`, the command
-   is `mcp-warden`.
+   The version must print `1.0.0`. Note the install name is `mcp-warden-cli`, the
+   command is `mcp-warden`.
 
 2. **Verify the Sigstore bundle.** On the GitHub Release page, confirm there is a
    `.sigstore` (bundle) asset next to each `.tar.gz`/`.whl`. The `sign` job already
@@ -127,15 +129,15 @@ Do this on a clean checkout of `main` with all v1 PRs merged.
    re-verify any artifact locally:
    ```bash
    pip install sigstore
-   sigstore verify identity dist/mcpwarden-1.0.0-py3-none-any.whl \
-     --bundle mcpwarden-1.0.0-py3-none-any.whl.sigstore \
+   sigstore verify identity dist/mcp_warden_cli-1.0.0-py3-none-any.whl \
+     --bundle mcp_warden_cli-1.0.0-py3-none-any.whl.sigstore \
      --cert-identity \
        "https://github.com/ernestprovo23/mcp-warden/.github/workflows/release.yml@refs/tags/v1.0.0" \
      --cert-oidc-issuer "https://token.actions.githubusercontent.com"
    ```
    (Download the `.whl` and its `.sigstore` bundle from the Release assets first.)
 
-3. **Confirm the PyPI page.** Visit <https://pypi.org/project/mcpwarden/> and check:
+3. **Confirm the PyPI page.** Visit <https://pypi.org/project/mcp-warden-cli/> and check:
    - version `1.0.0` is listed;
    - the project URLs (homepage / repository) point at `ernestprovo23/mcp-warden`;
    - "Publisher" shows the Trusted Publisher (OIDC), not a token upload.
@@ -153,7 +155,7 @@ PyPI uploads are **immutable** — you cannot overwrite a published version. If 
 release is broken:
 
 - **Yank** the bad version (keeps existing pins working, hides it from new
-  installs): on <https://pypi.org/project/mcpwarden/> → **Manage → Releases →
+  installs): on <https://pypi.org/project/mcp-warden-cli/> → **Manage → Releases →
   Options → Yank**. Yanking is reversible.
 - **Ship a fix-forward release** (`1.0.1`) following section 1 again. This is the
   preferred remedy — never try to re-upload `1.0.0`.

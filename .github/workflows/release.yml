@@ -6,7 +6,7 @@
 # This workflow does NOTHING until BOTH of the following are true:
 #   (a) a GitHub *Release* is published (a pushed git tag ALONE does not trigger
 #       it — the trigger is `release: published`, the explicit human gesture), AND
-#   (b) the `mcpwarden` PyPI project + its Trusted Publisher (OIDC) are configured
+#   (b) the `mcp-warden-cli` PyPI project + its Trusted Publisher (OIDC) are configured
 #       by the owner (see RELEASING.md "One-time PyPI setup").
 #
 # Until (a) AND (b) hold, merging this file changes nothing at runtime: no tag is
@@ -96,7 +96,7 @@ jobs:
   #
   # No API token, no stored secret: pypa/gh-action-pypi-publish mints a short-lived
   # OIDC token from this job's `id-token: write` and exchanges it for a PyPI upload
-  # token. PyPI must have a Trusted Publisher (pending or active) for `mcpwarden`
+  # token. PyPI must have a Trusted Publisher (pending or active) for `mcp-warden-cli`
   # pointing at owner=ernestprovo23, repo=mcp-warden, workflow=release.yml — see
   # RELEASING.md. Until that exists, this job fails CLOSED (publish denied), it
   # never falls back to anything insecure.

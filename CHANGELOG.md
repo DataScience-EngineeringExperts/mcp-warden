@@ -5,9 +5,11 @@ All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-> **Naming note.** The PyPI **distribution** name is `mcpwarden` (one token) — the
-> name `mcp-warden` is an unrelated package by a different author. The **CLI command**
-> and the GitHub repo stay `mcp-warden`: `pip install mcpwarden`, then run `mcp-warden`.
+> **Naming note.** The PyPI **distribution** name is `mcp-warden-cli` — the name
+> `mcp-warden` is an unrelated package by a different author, and PyPI rejects
+> `mcpwarden` as "too similar" to it (separator-stripping collapses both to the same
+> string). The **CLI command** and the GitHub repo stay `mcp-warden`:
+> `pip install mcp-warden-cli`, then run `mcp-warden`.
 
 ## Scope (v1)
 
@@ -39,7 +41,7 @@ v1-strong foundation. Highlights of the 0.3.0 → 1.0.0 arc:
 ### Added
 
 - **Sigstore keyless signing + verification** of `warden.lock` via `pin --sign` and
-  `check --verify` (opt-in `mcpwarden[sigstore]` extra). The tool now signs its own
+  `check --verify` (opt-in `mcp-warden-cli[sigstore]` extra). The tool now signs its own
   release artifacts, not just others' locks. (#16)
 - **Deterministic structural JSON-Schema diffing** for tool `inputSchema` changes:
   each security-relevant mutation (required dropped, enum widened/removed, type
@@ -81,9 +83,11 @@ v1-strong foundation. Highlights of the 0.3.0 → 1.0.0 arc:
 
 ### Changed
 
-- **Distribution rename to `mcpwarden`.** The PyPI distribution name is now `mcpwarden`
-  because `mcp-warden` is taken on PyPI by an unrelated package. The CLI command
-  (`mcp-warden`) and repo are unchanged. (#55)
+- **Distribution name `mcp-warden-cli`.** The PyPI distribution name is `mcp-warden-cli`
+  because `mcp-warden` is taken on PyPI by an unrelated package, and PyPI rejects
+  `mcpwarden` as "too similar" to it (separator-stripping collapses both to the same
+  string). `mcp-warden-cli` normalizes to letters-only `mcpwardencli`, which is
+  distinct. The CLI command (`mcp-warden`) and repo are unchanged. (#55)
 - README repositioned around the lockfile / CI-gate category claim, with the
   stdio-transport scope surfaced in the opening paragraph and a "Who it's for"
   use-cases section (author-flagship first). (#45, #49, #55)
@@ -92,7 +96,7 @@ v1-strong foundation. Highlights of the 0.3.0 → 1.0.0 arc:
 
 - `redact_secret` never discloses more than half of a detected secret. (#38)
 - Removed the install hazard: every `pip install mcp-warden` snippet (README, docs
-  site, example workflows) now installs `mcpwarden`. The README carries a prominent
+  site, example workflows) now installs `mcp-warden-cli`. The README carries a prominent
   impostor-warning banner. (#55)
 - Corrected the `SPEC.md` worked-example `schema_version` from `1` to `3` to match the
   live `SCHEMA_VERSION`. (#56)
