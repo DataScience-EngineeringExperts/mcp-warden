@@ -75,18 +75,37 @@ What it does, in order (all fail **closed**):
 
 1. Builds + writes the lock as usual.
 2. Builds the statement from `overall_digest`, Sigstore-signs it.
-3. Atomically writes the bundle to the **fixed sidecar** `warden.lock.sigstore`
-   next to the lock (`Bundle.to_json()`).
+3. Atomically writes the bundle to the **fixed sidecar** `<lockname>.sigstore`
+   next to the lock (`warden.lock.sigstore` for the default lock name —
+   see "Sidecar naming" below) (`Bundle.to_json()`).
 4. Appends an **out-of-digest pointer attestation** to the lock:
    `{role:"signer", method:"sigstore-keyless", bound_digest:<overall_digest>,
-   signature_bundle:"warden.lock.sigstore"}` and bumps `pin.provenance_version`
+   signature_bundle:"<lockname>.sigstore"}` and bumps `pin.provenance_version`
    1 → 2 (additive, OUTSIDE `overall_digest`).
 
-> **The `signature_bundle` pointer field is INFORMATIONAL ONLY.** It always holds
-> the fixed value `"warden.lock.sigstore"` and is never written as a tampered or
+> **The `signature_bundle` pointer field is INFORMATIONAL ONLY.** It holds the
+> derived sidecar filename (see below) and is never written as a tampered or
 > relative path. `check --verify` **ignores** this field entirely and always loads
 > the bundle from the fixed sidecar path next to the lock (or `--offline-bundle`).
 > Trusting the pointer for pathing would be a vulnerability — so verify does not.
+
+### Sidecar naming — `<lockname>.sigstore` (not a fixed constant)
+
+The sidecar filename is **derived from the lock's filename**, not a hardcoded
+constant: it is always `<lock filename>.sigstore`, co-located with the lock. For the
+default `--lock warden.lock` that resolves to `warden.lock.sigstore` (the name used
+throughout this doc), but a non-default lock name carries through:
+
+| `--lock` | sidecar written / verified |
+|----------|----------------------------|
+| `warden.lock` (default) | `warden.lock.sigstore` |
+| `e2e.warden.lock` | `e2e.warden.lock.sigstore` |
+| `/tmp/a.lock` | `/tmp/a.lock.sigstore` |
+
+Both `pin --sign` and `check --verify` use this same derivation (`cli_sign._sidecar_name_for`),
+so a lock pinned under a custom name verifies against the matching custom sidecar
+with no `--offline-bundle` needed. (Using the fixed constant regardless of lock name
+was the #53 root-cause bug, now fixed.)
 
 Sign **atomicity invariant** (Fix 3): the on-disk state is ALWAYS consistent —
 either BOTH the pointer-bearing lock AND its sidecar are present, or NEITHER. The

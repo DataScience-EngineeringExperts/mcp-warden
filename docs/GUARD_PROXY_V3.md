@@ -49,34 +49,33 @@ The v0.2 frame discipline is: **one reader per direction, one complete frame at 
 `notifications/progress` (also `s2c`) or a `notifications/cancelled` (client→server, `c2s`)
 arrives for that same call. Normative interleaving rules:
 
-- **Per-direction sequencing is preserved, never cross-coupled.** Each direction's reader
-  pulls complete frames in order and forwards each as soon as its own handling completes. A
-  progress notification that arrives **after** a result on the same `s2c` stream is forwarded
-  **after** that result; one that arrives **before** is forwarded **before**. Order on the wire
-  is the order on the stream — `guard` never reorders within a direction.
+- **Per-direction sequencing is preserved, never cross-coupled.** Each direction's reader pulls
+  complete frames in order and forwards each as soon as its own handling completes; order on the
+  wire is the order on the stream — a progress notification that arrives after/before a result on
+  the same `s2c` stream is forwarded after/before it. `guard` never reorders within a direction.
 - **Inspection of a `tools/call` result MUST NOT stall a later control frame indefinitely.**
-  Result inspection is **incremental and bounded** (`GUARD_PROXY.md` §2.5, `--max-frame-bytes`);
-  it completes (forward, redact, or error-replace) before the reader pulls the next `s2c`
-  frame, so a following progress notification is delayed only by the bounded inspection of the
-  one frame ahead of it — never blocked on it. There is **no** unbounded wait.
-- **A `c2s` cancellation is independent of `s2c` result inspection.** They are different
-  directions, read by different direction-tasks. A cancel on `c2s` is forwarded to the server
-  immediately, regardless of whether `guard` is mid-inspection of a result on `s2c`. The two
-  tasks share the event loop, not a buffer; neither blocks the other.
+  Result inspection is **incremental and bounded** (`GUARD_PROXY.md` §2.5, `--max-frame-bytes`)
+  and completes (forward, redact, or error-replace) before the reader pulls the next `s2c` frame,
+  so a following progress notification waits only on the one bounded frame ahead of it — never an
+  unbounded wait.
+- **A `c2s` cancellation is independent of `s2c` result inspection.** Different directions, read
+  by different direction-tasks: a `c2s` cancel is forwarded to the server immediately regardless
+  of any in-flight `s2c` result inspection. The two tasks share the event loop, not a buffer;
+  neither blocks the other.
 - **Blocking a result does not consume or suppress its progress/cancel frames.** If `guard`
-  error-replaces a `tools/call` result (§7 of the base doc), any `notifications/progress` for
-  that request that were already forwarded stay forwarded, and any `notifications/cancelled`
-  the client sends still reaches the server. `guard` neutralizes **only** the one result frame
-  it matched; it never retroactively touches the related control frames.
+  error-replaces a `tools/call` result (§7 of the base doc), already-forwarded
+  `notifications/progress` stay forwarded and any `notifications/cancelled` the client sends still
+  reaches the server. `guard` neutralizes **only** the one matched result frame; it never
+  retroactively touches the related control frames.
 
 ### 1.3 Correlation note (no special-casing the id)
 
 `guard` already keeps a bounded `id → method` map (`GUARD_PROXY.md` §4.4). Progress
-notifications carry a `progressToken` and cancellations a request `id`; `guard` **does not**
-need to correlate these to gate them — they are forwarded unconditionally by method, before any
-id lookup. The correlation map is for `tools/call` result inspection only; it is never a
-precondition for forwarding a control frame. (If the map has evicted an id, the control frame
-still passes — fail-open on correlation, consistent with §4.4.)
+notifications carry a `progressToken` and cancellations a request `id`, but `guard` **does not**
+correlate these to gate them — they are forwarded unconditionally by method, before any id
+lookup. The correlation map is for `tools/call` result inspection only; it is never a
+precondition for forwarding a control frame (an evicted id still passes — fail-open on
+correlation, consistent with §4.4).
 
 ### 1.4 Must-not-deviate (§1)
 
@@ -123,16 +122,15 @@ Required behavior:
    }
    ```
 
-   These synthetic errors are **transport** errors, not policy blocks; `code = -32002`
-   distinguishes them from the `-32001` block code (`GUARD_PROXY.md` §7.4). `data.warden: true`
-   keeps them attributable.
+   These are **transport** errors, not policy blocks; `code = -32002` distinguishes them from the
+   `-32001` block code (`GUARD_PROXY.md` §7.4) and `data.warden: true` keeps them attributable.
 2. **Then close the client-facing pipes cleanly and exit with the child's exit code** (or the
-   conventional `128 + signum` when the child died on a signal), preserving the v0.2 rule that
-   the client sees the real server's exit status (`GUARD_PROXY.md` §2.6). The synthetic errors
-   are flushed **before** the pipes close so the client receives them.
-3. **No partial/poisoned result is forwarded.** If the child died mid-frame (a partial result
-   was being read), that partial frame is discarded per §2.3 (truncated-frame rule); the id
-   gets the §2.1 synthetic error, not a half-frame.
+   conventional `128 + signum` when the child died on a signal), preserving the v0.2 rule that the
+   client sees the real server's exit status (`GUARD_PROXY.md` §2.6). The synthetic errors are
+   flushed **before** the pipes close so the client receives them.
+3. **No partial/poisoned result is forwarded.** If the child died mid-frame, that partial frame is
+   discarded per §2.3 (truncated-frame rule) and the id gets the §2.1 synthetic error, not a
+   half-frame.
 
 ### 2.2 Client disconnects / EOF
 
@@ -142,10 +140,9 @@ The client closes its end (EOF on `guard`'s stdin) or the client-facing pipe bre
 Required behavior:
 
 1. **Tear down the child via its process group** — send `SIGTERM` to the child's process group
-   (`GUARD_PROXY.md` §2.6 created it with `start_new_session`), allow a short bounded grace
-   period (implementation-defined, e.g. a few seconds), then `SIGKILL` the group if it has not
-   exited. This guarantees **no orphaned children** and no orphaned grandchildren the server
-   may have spawned.
+   (`GUARD_PROXY.md` §2.6 created it with `start_new_session`), allow a short bounded grace period
+   (implementation-defined, e.g. a few seconds), then `SIGKILL` the group if it has not exited.
+   This guarantees **no orphaned children** and no orphaned grandchildren the server may have spawned.
 2. **No synthetic responses are owed to a gone client** — there is no client to receive them;
    `guard` simply drains/abandons in-flight state and reaps the child.
 3. **Exit cleanly** with the child's exit code if it exited in grace, else a `guard` transport
@@ -164,9 +161,9 @@ Required behavior:
    `WRD-RES-FRAME-ERROR` note is logged (`RESULT_INSPECTION.md` §5.3) — this is a framing error,
    so it is **fail-open**: nothing is blocked, the partial is simply dropped.
 2. **Direction-appropriate teardown.** A truncated frame at server EOF is handled as §2.1
-   (server-side teardown: synthesize errors for genuinely-pending ids, exit with child code). A
-   truncated frame at client EOF is handled as §2.2 (client-side teardown). The truncation
-   itself never escalates to a policy block.
+   (server-side teardown: synthesize errors for genuinely-pending ids, exit with child code); at
+   client EOF it is handled as §2.2 (client-side teardown). The truncation itself never escalates
+   to a policy block.
 3. **Deterministic, bounded.** The partial-frame buffer is bounded by `--max-frame-bytes`
    (§2.4); a never-terminating frame cannot grow memory without bound before EOF or the cap
    trips.
@@ -178,24 +175,22 @@ exceeds `--max-frame-bytes` (default 8 MiB, `GUARD_PROXY.md` §2.5).
 
 Required behavior — **defined failure, fail-open** (the asymmetric-failure rule):
 
-1. **The over-cap frame is passed through unmodified** with a `WRD-RES-FRAME-ERROR` note. It is
-   **not** buffered fully in memory beyond the cap for inspection, and it is **not** blocked —
-   availability over inspection, exactly as `GUARD_PROXY.md` §2.5 / §9 require. Inspection is
-   skipped for that frame because it could not be bounded-scanned; the note records the coverage
-   gap.
-2. **The session continues.** An oversized frame is a resource-limit event, not a policy
-   verdict, so it never tears down the session and never blocks. This is the single most
-   load-bearing fail-open case: a malicious server MUST NOT be able to break a session (or force
-   a fail-closed block) merely by emitting a huge frame (`THREAT_MODEL_V2.md` §3.3, T-AVAIL).
+1. **The over-cap frame is passed through unmodified** with a `WRD-RES-FRAME-ERROR` note — not
+   buffered fully in memory beyond the cap, and **not** blocked (availability over inspection, as
+   `GUARD_PROXY.md` §2.5 / §9 require). Inspection is skipped because the frame could not be
+   bounded-scanned; the note records the coverage gap.
+2. **The session continues.** An oversized frame is a resource-limit event, not a policy verdict,
+   so it never tears down the session and never blocks. This is the most load-bearing fail-open
+   case: a malicious server MUST NOT break a session (or force a fail-closed block) merely by
+   emitting a huge frame (`THREAT_MODEL_V2.md` §3.3, T-AVAIL).
 3. **Streaming, not full-buffer.** Implementations forward the over-cap frame by streaming its
-   bytes through (within the framing mode's length contract) rather than materializing the whole
-   frame; the cap bounds the **inspection** buffer, not the forward path.
+   bytes (within the framing mode's length contract) rather than materializing the whole frame;
+   the cap bounds the **inspection** buffer, not the forward path.
 
 > **Why fail-open here and fail-closed on policy:** a frame `guard` cannot fully inspect is an
-> *inspector limitation*, and the v0.2 contract chose availability when the inspector cannot
-> do its job. A frame `guard` **can** inspect and that **matches a policy/result rule** is a
-> *verdict*, and verdicts in a default-blocking category are enforced (v0.3 §5). The two are
-> never conflated.
+> *inspector limitation* (the v0.2 contract chose availability when the inspector cannot do its
+> job); a frame `guard` **can** inspect that **matches a policy/result rule** is a *verdict*, and
+> verdicts in a default-blocking category are enforced (v0.3 §5). The two are never conflated.
 
 > **Residual risk — the padded-frame inspection bypass (`THREAT_MODEL_V2.md` T-CAP-PAD):**
 > because over-cap frames are forwarded un-inspected by default, an attacker controlling the
@@ -220,8 +215,8 @@ server padding a `tools/call` result past the cap to skip inspection. Normative 
    (`WRD-RES-FRAME-ERROR`, direction `s2c`, **sizes only** — `raw_length` and, for Case A, the
    declared `Content-Length`; never body/secret bytes) then **raises before any send**.
 4. **No client hangs.** The abort carries no rpc_id (the over-cap frame is not partial-parsed for
-   its id), so the `-32003` is synthesized to **ALL** in-flight ids. Cost: a deep pipeline
-   resolves every in-flight call at once — the trade for a clean teardown over a silent bypass.
+   its id), so the `-32003` is synthesized to **ALL** in-flight ids — a deep pipeline resolves
+   every in-flight call at once, the trade for a clean teardown over a silent bypass.
 5. **Differentiated `-32003` (F6).** A frame-cap abort is a *size-cap* termination, so its
    `data.reason` is distinct (`session terminated: frame size cap exceeded at frame-cap-s2c
    (non-retriable)`) vs. the inspection-error `inspection failed at <site> ...`; the structured
@@ -233,17 +228,17 @@ to admit it (widens the per-frame memory cap for **all** frames).
 ### 2.5 Ordering of teardown vs. in-flight inspection
 
 If a lifecycle event (§2.1–§2.4) fires while a `tools/call` result is mid-inspection, the
-in-flight inspection is **abandoned** (its frame is discarded, not forwarded half-inspected)
-and the lifecycle path takes over. A half-inspected result is never emitted: the relevant id
-gets the §2.1 synthetic transport error instead. This preserves "no partial/poisoned result is
-ever forwarded."
+in-flight inspection is **abandoned** (its frame is discarded, not forwarded half-inspected) and
+the lifecycle path takes over. A half-inspected result is never emitted — the relevant id gets
+the §2.1 synthetic transport error instead — preserving "no partial/poisoned result is ever
+forwarded."
 
 ### 2.6 Reserved transport-error code + redaction
 
 - mcp-warden reserves JSON-RPC error code **`-32002`** for **transport/lifecycle** synthetic
-  errors (server-exit, truncation-at-EOF teardown), distinct from `-32001` (policy/result
-  blocks, `GUARD_PROXY.md` §7.4). Both carry `data.warden: true`. Both are in the
-  implementation-defined server-error range `-32000..-32099`.
+  errors (server-exit, truncation-at-EOF teardown), distinct from `-32001` (policy/result blocks,
+  `GUARD_PROXY.md` §7.4). Both carry `data.warden: true` and sit in the implementation-defined
+  server-error range `-32000..-32099`.
 - Any secret value that would otherwise appear in a lifecycle `data.reason` MUST be redacted
   per the `CHECKS.md` rule (`first4 + "…" + "(len=N)"`). Lifecycle reasons should not normally
   contain secrets, but the redaction guarantee is unconditional.
@@ -269,53 +264,50 @@ ever forwarded."
 ## 3. Windows — explicitly EXPERIMENTAL (normative degradation)
 
 Windows has **no POSIX process groups** and a **different signal model** (no `SIGTERM`/`SIGHUP`
-to a process group; `CTRL_BREAK_EVENT` / `CTRL_C_EVENT` to a console process group, plus job
-objects for tree teardown). v0.3 therefore does **not** claim parity. The frame-discipline,
-inspection, and default-block contract (§1, §5 of the base doc) are **transport-agnostic and do
-hold** on Windows — what degrades is the **subprocess-lifecycle** guarantees of §2.
+to a process group; `CTRL_BREAK_EVENT` / `CTRL_C_EVENT` plus job objects for tree teardown), so
+v0.3 does **not** claim parity. The frame-discipline, inspection, and default-block contract
+(§1, §5 of the base doc) are **transport-agnostic and do hold** on Windows — what degrades is the
+**subprocess-lifecycle** guarantees of §2.
 
 ### 3.1 What holds on Windows
 
 - All **frame handling** (§2.1–§2.5 of the base doc), the **default-block / opt-out posture**
-  (base §5), **result inspection**, **argument policy**, and the **cancellation/progress
-  passthrough** (§1 here) are platform-independent and apply on Windows.
-- **Reserved error codes** (`-32001` block, `-32002` transport) and **secret redaction** apply
-  identically.
+  (base §5), **result inspection**, **argument policy**, the **cancellation/progress passthrough**
+  (§1 here), the **reserved error codes** (`-32001` block, `-32002` transport), and **secret
+  redaction** are platform-independent and apply identically on Windows.
 
 ### 3.2 What degrades on Windows (no parity claim)
 
 - **Child teardown uses a Job Object**, not a POSIX process group. `guard` SHOULD assign the
-  child to a job object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` so the child tree is reaped
-  when `guard` exits. Where a job object cannot be created, tree-reaping is **best-effort** and
-  the orphan-free guarantee of §2.2 is **NOT asserted**.
+  child to a job object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` so the child tree is reaped when
+  `guard` exits; where a job object cannot be created, tree-reaping is **best-effort** and the
+  orphan-free guarantee of §2.2 is **NOT asserted**.
 - **Signal forwarding is approximate.** `guard` translates `SIGINT`/`SIGTERM` to
-  `CTRL_BREAK_EVENT` / `CTRL_C_EVENT` to the child's console group on a best-effort basis;
-  `SIGHUP` has no Windows analogue. Graceful drain-then-kill (§2.2) reduces to a job-object
-  terminate after the bounded grace period.
+  `CTRL_BREAK_EVENT` / `CTRL_C_EVENT` to the child's console group best-effort (`SIGHUP` has no
+  Windows analogue); graceful drain-then-kill (§2.2) reduces to a job-object terminate after the
+  bounded grace period.
 
 ### 3.3 Fail-safe behavior on Windows (normative)
 
 When a lifecycle guarantee cannot be met on Windows, `guard` degrades **toward the same
 client-visible safety** as POSIX, accepting only the orphan-freedom relaxation:
 
-1. **Pending-request synthesis still happens.** On child exit (§2.1), `guard` MUST still emit
-   the `-32002` synthetic error for every pending id and flush before closing — this is pure
-   JSON-RPC and is platform-independent. A Windows client is **never** left hanging on a dead
-   server.
+1. **Pending-request synthesis still happens.** On child exit (§2.1), `guard` MUST still emit the
+   `-32002` synthetic error for every pending id and flush before closing — pure JSON-RPC,
+   platform-independent. A Windows client is **never** left hanging on a dead server.
 2. **Truncated/oversized-frame handling is identical** (§2.3, §2.4) — fail-open, never hang,
    never block. These do not depend on the signal model.
 3. **Teardown is best-effort, and a residual child is possible.** If the job object is
-   unavailable, a child may briefly survive `guard`'s exit. `guard` MUST log a `low`
-   `WRD-RES-WIN-LIFECYCLE` note recording that orphan-freedom was best-effort, so operators
-   know the §2.2 guarantee was degraded on this run. `guard` MUST NOT pretend success.
-4. **No silent parity claim.** Any `guard --version` / help text that lists platform support
-   MUST mark Windows **experimental**. Docs/marketing implying Windows lifecycle parity are a
-   defect (consistent with the v0.1/v0.2 credibility discipline).
+   unavailable a child may briefly survive `guard`'s exit; `guard` MUST log a `low`
+   `WRD-RES-WIN-LIFECYCLE` note recording that orphan-freedom was best-effort (so operators know
+   the §2.2 guarantee was degraded this run) and MUST NOT pretend success.
+4. **No silent parity claim.** Any `guard --version` / help text that lists platform support MUST
+   mark Windows **experimental**. Docs/marketing implying Windows lifecycle parity are a defect.
 5. **Refuse-by-default on a non-POSIX platform (v1.0).** Because the §3.2 degradations are a
    *runtime-protection* gap, `guard` does **not** silently start off-POSIX: at startup it emits a
    LOUD, structured stderr warning naming the reduced §3.2 guarantees, then **exits `2`** (the
-   standard `cli_guard` config/usage code, distinct from drift `check` `1` and strict/frame-cap `3`)
-   UNLESS `--allow-degraded-platform` is passed — with the flag the same warning prints and `guard`
+   `cli_guard` config/usage code, distinct from drift `check` `1` and strict/frame-cap `3`) UNLESS
+   `--allow-degraded-platform` is passed — with the flag the same warning prints and `guard`
    proceeds with the best-effort lifecycle. The warning redacts server identity to `argv[0]` + a
    redacted arg count; the POSIX path is unaffected (gate inert, flag a no-op).
 
@@ -426,20 +418,18 @@ change behavior, so v0.2 scripts keep working.
 
 > **Availability trade-off (state it plainly):** strict mode chooses **integrity over
 > availability**. By default `guard` fails **OPEN** on an internal inspection error (emits a
-> `WRD-RES-FRAME-ERROR` note and passes the frame through, §2.7). `--strict` instead **terminates
+> `WRD-RES-FRAME-ERROR` note and passes the frame through, §2.7); `--strict` instead **terminates
 > the whole session non-zero** the instant an inspection cannot complete, so an un-inspectable
-> message never silently passes. The cost is that an internal inspection bug (or a deliberately
-> malformed frame that trips a rule) ends the session rather than degrading to pass-through.
-> Default stays fail-open to preserve the current contract.
+> message never silently passes. Default stays fail-open to preserve the current contract.
 >
-> **What `--strict` terminates on (state it plainly):** strict does NOT only fire on malicious
-> inputs. It terminates on *any* inspection that cannot complete — that explicitly includes
-> **inspection bugs** (a crash inside `inspect_result()` / `evaluate_call()` / `diverges_from_lock()`)
-> and **policy configuration errors** (a malformed or self-contradictory argument policy that makes
-> the eval raise). A legitimate session can therefore be killed by a guard-internal bug or a bad
-> policy file, not just by a hostile server. That false-positive kill is the deliberate
-> integrity-over-availability trade-off: when the analyzer cannot vouch for a frame, strict refuses
-> to let it pass rather than guessing. Run default (fail-open) if availability outranks integrity.
+> **What `--strict` terminates on (state it plainly):** *any* inspection that cannot complete —
+> not only malicious inputs. That explicitly includes **inspection bugs** (a crash inside
+> `inspect_result()` / `evaluate_call()` / `diverges_from_lock()`) and **policy configuration
+> errors** (a malformed/self-contradictory argument policy that makes the eval raise), so a
+> legitimate session can be killed by a guard-internal bug or a bad policy file, not just a
+> hostile server. That false-positive kill is the deliberate trade-off: when the analyzer cannot
+> vouch for a frame, strict refuses to let it pass. Run default (fail-open) if availability
+> outranks integrity.
 
 ### 5.1 The TIGHT scope — exactly the inspection layer (3 + 1 sites)
 

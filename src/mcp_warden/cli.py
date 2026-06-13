@@ -24,6 +24,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from . import __version__
 from .capture import CaptureError, capture_surface_sync
 from .check_core import run_check_full
 from .checks import run_checks
@@ -54,6 +55,27 @@ app.add_typer(policy_app, name="policy")
 
 console = Console()
 err_console = Console(stderr=True)
+
+
+def _version_callback(value: bool) -> None:
+    """Print ``mcp-warden <version>`` and exit 0 (eager ``--version`` handler)."""
+    if value:
+        console.print(f"mcp-warden {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def _root(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        help="Show the mcp-warden version and exit.",
+        callback=_version_callback,
+        is_eager=True,
+    ),
+) -> None:
+    """CI-first MCP supply-chain integrity gate."""
+
 
 # v0.2 runtime commands (guard/inspect) + the #19 `lock` sub-app live in their
 # own modules to keep this file under the LOC budget; register them here.
@@ -140,7 +162,7 @@ def check(
         None, "--certificate-oidc-issuer", help="Expected OIDC issuer (required with --verify)"
     ),
     offline_bundle: Optional[Path] = typer.Option(
-        None, "--offline-bundle", help="Explicit bundle path (default: warden.lock.sigstore next to the lock)"
+        None, "--offline-bundle", help="Explicit bundle path (default: <lockname>.sigstore next to the lock)"
     ),
 ) -> None:
     """Re-capture and verify a server against ``warden.lock``; fail on drift.
