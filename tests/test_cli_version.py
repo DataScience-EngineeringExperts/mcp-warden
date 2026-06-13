@@ -16,6 +16,11 @@ from mcp_warden.cli import app
 
 runner = CliRunner()
 
+#: Force a wide terminal so rich/typer does not line-wrap the help table (which
+#: would split the ``--version`` token across lines under a narrow CI terminal).
+#: Matches the established convention in ``tests/test_diff.py``.
+_WIDE = {"COLUMNS": "1000"}
+
 
 def test_version_flag_prints_version_and_exits_zero() -> None:
     """``--version`` prints ``mcp-warden <version>`` and exits 0."""
@@ -26,8 +31,8 @@ def test_version_flag_prints_version_and_exits_zero() -> None:
 
 
 def test_version_flag_listed_in_help() -> None:
-    """``--help`` advertises the ``--version`` flag."""
-    result = runner.invoke(app, ["--help"])
+    """``--help`` advertises the ``--version`` flag (wide terminal: no wrap)."""
+    result = runner.invoke(app, ["--help"], env=_WIDE)
     assert result.exit_code == 0, result.output
     assert "--version" in result.output
 
