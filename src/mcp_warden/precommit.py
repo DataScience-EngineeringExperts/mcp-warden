@@ -71,7 +71,7 @@ _NO_SERVER_MSG = (
     "Configure the server command via `args:` in .pre-commit-config.yaml, using\n"
     "the `--` separator to mark where the server launch argv begins, e.g.:\n\n"
     "  - repo: https://github.com/ernestprovo23/mcp-warden\n"
-    "    rev: v1.0.0\n"
+    "    rev: v1.0.1\n"
     "    hooks:\n"
     "      - id: mcp-warden-check\n"
     "        args: [--lock, warden.lock, --, python, ./server.py]\n"

@@ -325,7 +325,7 @@ Add this to your `.pre-commit-config.yaml` (a complete, copy-pasteable example):
 ```yaml
 repos:
   - repo: https://github.com/ernestprovo23/mcp-warden
-    rev: v1.0.0                       # pin to a release tag (supply-chain hygiene)
+    rev: v1.0.1                       # pin to a release tag (supply-chain hygiene)
     hooks:
       - id: mcp-warden-check
         # Everything after `--` is your MCP server launch argv.

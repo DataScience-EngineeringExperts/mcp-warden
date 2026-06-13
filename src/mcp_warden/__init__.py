@@ -7,7 +7,7 @@ surface drifts from an approved baseline. It operates on **definitions**, never
 on runtime tool behavior or tool results. See ``docs/THREAT_MODEL.md``.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 #: Lock schema version. Bumped 2 → 3 for #29 (in-document ``$ref`` resolution in
 #: ``schema_diff.extract_skeleton``). Following refs changes the skeleton of any
 #: ref-using tool → its ``entry_digest`` and the ``overall_digest`` (which embeds
