@@ -107,6 +107,16 @@ scope-honesty box and makes no compliance/regulatory claim.
 
 ---
 
+## Release engineering
+
+| Doc | Purpose |
+|-----|---------|
+| [`RELEASING.md`](RELEASING.md) | Operator runbook: one-time PyPI Trusted-Publisher (OIDC) setup, cut-a-release checklist, post-release verification, rollback/yank. PyPI dist name is `mcpwarden`; CLI/repo stay `mcp-warden`. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Keep-a-Changelog history (0.3.0 → 1.0.0) with explicit in/out-of-scope. *(Added by the CHANGELOG PR.)* |
+| [`.github/workflows/release.yml`](.github/workflows/release.yml) | Publish-on-Release workflow: build sdist+wheel → publish to PyPI via OIDC Trusted Publishing (no stored token) → Sigstore-keyless sign the artifacts and attach bundles to the Release. Inert until a Release is published AND the `mcpwarden` Trusted Publisher exists. |
+
+---
+
 ## Source layout
 
 | Module | Responsibility | Spec anchor |

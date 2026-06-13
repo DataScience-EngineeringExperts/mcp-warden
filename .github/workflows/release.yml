@@ -1,0 +1,188 @@
+# =============================================================================
+# Release & publish workflow (v1.0 — W1.1 / W1.2 / W2.3)
+#
+# !!! INERT UNTIL CONFIGURED — SAFE TO MERGE !!!
+#
+# This workflow does NOTHING until BOTH of the following are true:
+#   (a) a GitHub *Release* is published (a pushed git tag ALONE does not trigger
+#       it — the trigger is `release: published`, the explicit human gesture), AND
+#   (b) the `mcpwarden` PyPI project + its Trusted Publisher (OIDC) are configured
+#       by the owner (see RELEASING.md "One-time PyPI setup").
+#
+# Until (a) AND (b) hold, merging this file changes nothing at runtime: no tag is
+# cut here, no version is bumped here, nothing is published here. Cutting v1.0.0 is
+# then a single tag + GitHub Release away (the full runbook is in RELEASING.md).
+#
+# What it does WHEN a Release is published:
+#   build         — builds sdist + wheel, uploads them as workflow artifacts.
+#   pypi-publish  — publishes those artifacts to PyPI via OIDC Trusted Publishing
+#                   (NO API token, NO stored secret). On a manual workflow_dispatch
+#                   with publish-target=testpypi it targets TestPyPI instead.
+#   sign          — signs the sdist + wheel with Sigstore keyless (ambient OIDC ->
+#                   Fulcio, same trust model as sigstore-fixture.yml / integrity-gate.yml)
+#                   and attaches the .sigstore bundles to the GitHub Release assets.
+#                   This is the "heal thyself" fix: the tool that signs everyone
+#                   else's locks now signs its own release artifacts.
+#
+# Pin discipline: every `uses:` is pinned to a full 40-char commit SHA with a
+# `# vX.Y.Z` comment (enforced by tests/test_workflow_pins.py). The actions/* and
+# sigstore SHAs are the SAME pins already used by the other workflows in this repo.
+# =============================================================================
+name: Release
+
+on:
+  # Primary, safe trigger: only fires once a GitHub Release is *published*.
+  # A pushed tag by itself does NOT publish a Release and therefore does NOT
+  # trigger this workflow.
+  release:
+    types: [published]
+
+  # Manual escape hatch for a dry run to TestPyPI (no Release required, no signing,
+  # no production PyPI). Nice-to-have; kept deliberately simple.
+  workflow_dispatch:
+    inputs:
+      publish-target:
+        description: "Where to publish on a manual run"
+        required: true
+        default: "testpypi"
+        type: choice
+        options:
+          - testpypi
+          - none
+
+# Least-privilege at the top level; each job widens scope locally only as needed.
+permissions:
+  contents: read
+
+jobs:
+  # --------------------------------------------------------------------------
+  # Job 1: build sdist + wheel and publish them as workflow artifacts so the
+  # publish and sign jobs consume the exact same bytes (no rebuild drift).
+  # --------------------------------------------------------------------------
+  build:
+    name: Build sdist + wheel
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install build frontend
+        run: python -m pip install --upgrade "build==1.2.2.post1"
+
+      - name: Build sdist + wheel
+        run: python -m build --sdist --wheel --outdir dist/
+
+      - name: Show built artifacts
+        run: ls -l dist/
+
+      - name: Upload dist artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  # --------------------------------------------------------------------------
+  # Job 2: publish to PyPI via OIDC Trusted Publishing.
+  #
+  # No API token, no stored secret: pypa/gh-action-pypi-publish mints a short-lived
+  # OIDC token from this job's `id-token: write` and exchanges it for a PyPI upload
+  # token. PyPI must have a Trusted Publisher (pending or active) for `mcpwarden`
+  # pointing at owner=ernestprovo23, repo=mcp-warden, workflow=release.yml — see
+  # RELEASING.md. Until that exists, this job fails CLOSED (publish denied), it
+  # never falls back to anything insecure.
+  #
+  # On a `release: published` run -> production PyPI.
+  # On a manual `workflow_dispatch` with publish-target=testpypi -> TestPyPI only.
+  # publish-target=none short-circuits (build + artifacts only).
+  # --------------------------------------------------------------------------
+  pypi-publish:
+    name: Publish to PyPI (OIDC Trusted Publishing)
+    needs: build
+    runs-on: ubuntu-latest
+    # id-token: write is scoped to THIS job only (never granted at workflow top level).
+    permissions:
+      id-token: write   # REQUIRED for OIDC Trusted Publishing — mints the token
+      contents: read
+    # Skip entirely on a manual run that opted out of publishing.
+    if: >-
+      github.event_name == 'release' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.publish-target != 'none')
+
+    steps:
+      - name: Download dist artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist/
+
+      # Production PyPI — only on a published Release. Trusted Publishing (OIDC).
+      - name: Publish to PyPI
+        if: github.event_name == 'release'
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
+        with:
+          packages-dir: dist/
+          # No `password:` — OIDC Trusted Publishing is used (no stored secret).
+
+      # TestPyPI — only on a manual dry run. Same OIDC mechanism, different index.
+      # Requires a SEPARATE Trusted Publisher on test.pypi.org (optional; see RELEASING.md).
+      - name: Publish to TestPyPI (manual dry run)
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish-target == 'testpypi'
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
+        with:
+          packages-dir: dist/
+          repository-url: https://test.pypi.org/legacy/
+
+  # --------------------------------------------------------------------------
+  # Job 3: sign the release artifacts with Sigstore keyless ("heal thyself", W2.3).
+  #
+  # Same keyless trust model as sigstore-fixture.yml / integrity-gate.yml: the
+  # job's ambient OIDC mints a short-lived Fulcio cert (issuer
+  # https://token.actions.githubusercontent.com), signs each dist file, and — on a
+  # `release: published` run — attaches the resulting .sigstore bundle(s) to the
+  # GitHub Release assets (release-signing-artifacts, the action's default).
+  #
+  # We also self-verify (`verify: true`) against THIS workflow's own identity so a
+  # broken run can never publish a bad bundle, mirroring the e2e self-check pattern.
+  #
+  # Only runs for a real published Release (signing release assets requires a
+  # Release to attach to). Skipped on manual TestPyPI dry runs.
+  # --------------------------------------------------------------------------
+  sign:
+    name: Sign release artifacts (Sigstore keyless)
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'release'
+    permissions:
+      id-token: write   # REQUIRED for ambient OIDC -> Fulcio
+      contents: write   # REQUIRED to attach .sigstore bundles to the Release assets
+
+    steps:
+      - name: Download dist artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist
+          path: dist/
+
+      - name: Sign sdist + wheel and attach bundles to the Release
+        uses: sigstore/gh-action-sigstore-python@5b79a39c381910c090341a2c9b0bf022c8b387e1 # v3.4.0
+        with:
+          inputs: ./dist/*.tar.gz ./dist/*.whl
+          # Self-check: verify what we just signed against THIS workflow's own
+          # identity so a broken run never publishes a bad bundle.
+          verify: true
+          verify-cert-identity: "https://github.com/ernestprovo23/mcp-warden/.github/workflows/release.yml@${{ github.ref }}"
+          verify-oidc-issuer: "https://token.actions.githubusercontent.com"
+          # release-signing-artifacts defaults to true: on a release event the
+          # .sigstore bundles are attached to the Release assets automatically.
+          release-signing-artifacts: true
+          upload-signing-artifacts: true
