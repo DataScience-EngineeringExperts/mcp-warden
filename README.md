@@ -6,9 +6,15 @@
 [![GitHub Action](https://img.shields.io/badge/GitHub%20Action-mcp--warden-2088FF?logo=githubactions&logoColor=white)](https://github.com/ernestprovo23/mcp-warden/blob/main/action.yml)
 [![Latest release](https://img.shields.io/github/v/release/ernestprovo23/mcp-warden?display_name=tag&sort=semver)](https://github.com/ernestprovo23/mcp-warden/releases)
 
-**mcp-warden is the lockfile and CI gate for MCP servers: it pins an MCP server's
-declared tool/resource/prompt surface into a signed `warden.lock`, then fails CI
-when that surface drifts from the approved baseline.**
+**mcp-warden is the lockfile and CI gate for stdio-transport MCP servers: it pins
+an MCP server's declared tool/resource/prompt surface into a signed `warden.lock`,
+then fails CI when that surface drifts from the approved baseline.** v1 covers
+**stdio-transport** servers; HTTP/SSE transport is a documented v1.x roadmap item.
+
+> ⚠️ **Install `mcpwarden`, not `mcp-warden`.** The PyPI name `mcp-warden` is an
+> **unrelated package by a different author** — it is not this project. The correct
+> install is `pip install mcpwarden` (the CLI command is still `mcp-warden`). Or use
+> the [GitHub Action](#github-action-one-step-drop-in) / a git-pinned install.
 
 If you already follow the published guidance — *pin versions, hash tool
 definitions, alert on drift* — mcp-warden is the deterministic tool that does it.
@@ -105,6 +111,25 @@ on the docs site.
 
 ---
 
+## Who it's for
+
+Adoption compounds the way `package-lock.json` did — authors adopt, consumers benefit
+automatically — so the use cases are sequenced by leverage:
+
+- **MCP server author (flagship).** Pin your *own* server's surface, commit `warden.lock`,
+  fail any PR that alters it without re-approval, and ship the signed lock alongside
+  releases as a **badge of trust** — you own the server + CI, so no auth/availability friction.
+- **Server consumer / app team.** Pin a third-party server you depend on; CI (or the
+  pre-commit hook) fails when upstream silently redefines its surface — the core rug-pull defense.
+- **Security / platform engineer.** Run the [Action](#github-action-one-step-drop-in)
+  across a fleet; SARIF → code scanning; signed locks = auditable human-approval evidence.
+- **Incident responder / auditor.** `inspect` an offline trace and `warden diff` a suspect
+  lock against a known-good baseline — no live server required.
+- **Agent-framework integrator** *(post-launch).* Enforce that only warden-locked servers
+  register in a LangGraph-style orchestrator — one integration locks an entire downstream ecosystem.
+
+---
+
 ## What it does
 
 mcp-warden operates entirely on **definitions** — the `(name, description,
@@ -130,12 +155,21 @@ result-inspection catalog is defined once and run identically by `guard` (live) 
 
 Requires Python ≥ 3.11.
 
+> ⚠️ On PyPI the distribution name is **`mcpwarden`** (one token), not `mcp-warden`
+> — that name belongs to an unrelated package. The CLI command stays `mcp-warden`.
+
 ```bash
-# from a clone of this repo
-uv venv .venv
-uv pip install --python .venv/bin/python -e ".[dev]"
+# from PyPI (distribution name `mcpwarden`):
+pip install mcpwarden
 
 # the CLI is then available as:
+mcp-warden --help
+```
+
+```bash
+# or from a clone of this repo (for development):
+uv venv .venv
+uv pip install --python .venv/bin/python -e ".[dev]"
 .venv/bin/mcp-warden --help
 ```
 
@@ -238,7 +272,7 @@ Three steps to add mcp-warden as a CI integrity gate:
 **1. Pin once** (run locally, commit the result):
 
 ```bash
-pip install mcp-warden
+pip install mcpwarden    # PyPI dist name is `mcpwarden`; the command is `mcp-warden`
 # Pin your server and record an approval
 mcp-warden pin node ./build/index.js \
     --approve --approver you@example.com \
@@ -250,7 +284,7 @@ git add warden.lock && git commit -m "chore: pin MCP surface baseline"
 
 ```yaml
 - name: Install mcp-warden
-  run: pip install mcp-warden
+  run: pip install mcpwarden       # PyPI dist `mcpwarden`; CLI command `mcp-warden`
 
 - name: MCP integrity gate (pass path — exits 0 when surface matches lock)
   run: |
