@@ -35,6 +35,13 @@ logic) plus a separate informational provenance section. It never prints raw
 > warning) and fail-closed under `--strict` (exit 2) — CI stays strict. The wrapper normalizes
 > cwd to the git repo root before capturing. See `README.md` §pre-commit hook.
 
+> **`pin --sign` / `check --verify` (Issue #16)** add optional **Sigstore keyless** signing of
+> the lock: `--sign` writes a `<lockname>.sigstore` bundle binding `overall_digest` (survives
+> `lock rotate`); `--verify` recomputes + verifies **fail-closed** (`docs/SIGNING.md`). The
+> release pipeline (`.github/workflows/release.yml`) signs mcp-warden's OWN published artifacts
+> the same way ("heal thyself"). Signing is the optional `mcp-warden-cli[sigstore]` extra — the
+> core gate has no crypto dependency.
+
 ---
 
 ## C1 — System context
@@ -110,8 +117,9 @@ sequenceDiagram
 ```
 
 > `compute_drift` structurally classifies tool `inputSchema` changes via the normalized
-> `schema_skeleton` stored in the lock (`schema_version` 2): each security-relevant mutation
-> is a per-fact `WRD-DRIFT-SCHEMA-*` item (`docs/WARDEN_LOCK_SCHEMA.md` §6.2). v1 locks fall
+> `schema_skeleton` stored in the lock (`schema_version` 3 — skeleton added at v2, in-document
+> `$ref` resolution at v3, #29): each security-relevant mutation is a per-fact
+> `WRD-DRIFT-SCHEMA-*` item (`docs/WARDEN_LOCK_SCHEMA.md` §6.2). v1 locks fall
 > back to a single high-severity `schema-modified` until re-pinned.
 
 ---
@@ -185,8 +193,9 @@ flowchart LR
 - No cross-call/conversational correlation; each frame is inspected independently.
 - No decoding of image/audio/blob/base64 result content (coverage gap recorded as
   `WRD-RES-UNINSPECTABLE`).
-- No network calls / no DNS resolution by checks, policy, or the proxy — exfil + SSRF
-  match on literal host strings only.
+- No network calls / no DNS resolution by checks, policy, or the proxy. Exfil + SSRF match
+  on literal host strings **and (#54, D6) raw IP literals** in result text/args against the
+  SSRF/exfil address ranges (`net_rules`) — deterministic, still no DNS-name resolution.
 - stdio transport only (HTTP/SSE deferred for all of v0.1/v0.2/v0.3).
 - The fuzzy `WRD-RES-INJECT-PHRASE` MONITOR tier is **never default-block**, even in v0.3
   (opt-in only via `--block-inject-phrase`).
