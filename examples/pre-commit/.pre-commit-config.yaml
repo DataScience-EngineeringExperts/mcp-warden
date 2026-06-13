@@ -12,7 +12,7 @@
 repos:
   # --- Variant 1 (minimal): run on every commit ---------------------------
   - repo: https://github.com/ernestprovo23/mcp-warden
-    rev: v1.0.0                       # pin to a release tag (supply-chain hygiene)
+    rev: v1.0.1                       # pin to a release tag (supply-chain hygiene)
     hooks:
       - id: mcp-warden-check
         args: [--lock, warden.lock, --, node, ./build/index.js]
@@ -22,7 +22,7 @@ repos:
   # slow can move the gate to pre-push. Drift still blocks the push (exit 1).
   # Enable with: pre-commit install --hook-type pre-push
   - repo: https://github.com/ernestprovo23/mcp-warden
-    rev: v1.0.0
+    rev: v1.0.1
     hooks:
       - id: mcp-warden-check
         stages: [pre-push]

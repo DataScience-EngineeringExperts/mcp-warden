@@ -32,6 +32,18 @@ CI. The v0.3 `guard` proxy adds deterministic runtime *result* inspection
 
 _No unreleased changes yet._
 
+## [1.0.1] — 2026-06-13
+
+Packaging-metadata point release. No code or behavior changes.
+
+### Added
+
+- Added `[project.urls]` packaging metadata (Homepage / Repository / Documentation /
+  Changelog / Issues) so the PyPI page links back to the canonical repo and docs.
+  The published 1.0.0 page carried no project URLs; for a supply-chain tool that must
+  be distinguishable from the unrelated `mcp-warden` PyPI package, the back-links to
+  the canonical GitHub repo and docs site are part of the trust surface.
+
 ## [1.0.0] — 2026-06-12
 
 First stable release. No new core features over 0.3.0 — v1 is the
@@ -124,5 +136,6 @@ v1-strong foundation. Highlights of the 0.3.0 → 1.0.0 arc:
   declared surface, RFC 8785 (JCS) + SHA-256 canonicalization, SARIF output, and a live
   integrity-gate workflow with committed `clean.warden.lock`.
 
-[Unreleased]: https://github.com/ernestprovo23/mcp-warden/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/ernestprovo23/mcp-warden/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/ernestprovo23/mcp-warden/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/ernestprovo23/mcp-warden/releases/tag/v1.0.0
