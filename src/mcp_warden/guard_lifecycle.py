@@ -35,6 +35,21 @@ logger = logging.getLogger("mcp_warden.guard")
 TERM_GRACE_S = 3.0
 
 _IS_POSIX = os.name == "posix"
+_IS_WINDOWS = os.name == "nt"
+
+# Windows console-ctrl event types (only meaningful on Windows).
+_CTRL_C_EVENT = 0
+_CTRL_BREAK_EVENT = 1
+
+# Windows Job Object limit flag: kill all processes in the job when the last job
+# handle is closed (passive teardown guarantee — child tree dies when guard exits).
+_JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x2000
+_JobObjectExtendedLimitInformation = 9  # enum value for SetInformationJobObject
+
+# Process-id → job-object handle: keeps handles alive so KILL_ON_JOB_CLOSE fires
+# when guard exits (or when win32_release_child removes the entry). Populated by
+# win32_register_child() immediately after spawning the child.
+_WIN_JOBS: dict[int, Any] = {}
 
 #: Dedicated exit code for refusing to run ``guard`` on a non-POSIX platform
 #: WITHOUT ``--allow-degraded-platform`` (GUARD_PROXY_V3.md §3.3). A
@@ -53,15 +68,18 @@ ALLOW_DEGRADED_PLATFORM_FLAG = "--allow-degraded-platform"
 
 #: The exact runtime guarantees that are reduced on a non-POSIX platform
 #: (GUARD_PROXY_V3.md §3.2). Named precisely so the operator knows what is NOT
-#: protected — NOT a vague "experimental" hand-wave.
+#: protected — NOT a vague "experimental" hand-wave. Updated to reflect v0.3+
+#: partial parity: Job Object assignment is now attempted (best-effort) and
+#: CTRL_BREAK_EVENT is sent before falling back to terminate.
 DEGRADED_GUARANTEES: tuple[str, ...] = (
-    "process-group isolation: the child is NOT placed in its own process group "
-    "/ job object (no start_new_session)",
-    "child teardown: terminate-only on client disconnect/EOF -- NO "
-    "SIGTERM->grace->SIGKILL process-group teardown, so orphaned children / "
-    "grandchildren are POSSIBLE (orphan-freedom is NOT asserted)",
-    "signal forwarding: SIGINT/SIGTERM/SIGHUP are NOT forwarded to the child "
-    "process group",
+    "process-group isolation: child is placed in its own console group "
+    "(CREATE_NEW_PROCESS_GROUP); Job Object assignment is best-effort — "
+    "if unavailable, orphan grandchildren from guard crash are POSSIBLE",
+    "child teardown: CTRL_BREAK_EVENT + bounded grace + terminate "
+    "(no POSIX SIGTERM->grace->SIGKILL process-group sweep; orphan-freedom "
+    "is NOT asserted when Job Object is unavailable)",
+    "signal forwarding: SIGINT/SIGTERM translated to CTRL_BREAK_EVENT "
+    "(approximate; SIGHUP has no Windows analogue)",
 )
 
 
@@ -76,6 +94,146 @@ def is_degraded_platform() -> bool:
         ``True`` on a non-POSIX platform (degraded lifecycle), ``False`` on POSIX.
     """
     return not _IS_POSIX
+
+
+# ---------------------------------------------------------------------------
+# Windows-specific lifecycle helpers (best-effort; never called on POSIX)
+# ---------------------------------------------------------------------------
+
+
+def _win32_create_and_assign_job(pid: int) -> Any:
+    """Create a Job Object with KILL_ON_JOB_CLOSE and assign ``pid`` to it.
+
+    Pure ctypes — no pywin32 dependency. Returns the raw job handle (an opaque
+    integer on 64-bit Windows) so the caller can keep it alive, or ``None`` if
+    any step fails (process already in a job, insufficient privileges, etc.).
+
+    Must only be called on Windows (``_IS_WINDOWS`` guard at call sites).
+    """
+    try:
+        import ctypes
+        import ctypes.wintypes
+
+        kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+
+        job = kernel32.CreateJobObjectW(None, None)
+        if not job:
+            return None
+
+        # Build JOBOBJECT_EXTENDED_LIMIT_INFORMATION (JobObjectExtendedLimitInformation=9)
+        # to set JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE in BasicLimitInformation.LimitFlags.
+        class _BasicLimitInfo(ctypes.Structure):
+            _fields_ = [
+                ("PerProcessUserTimeLimit", ctypes.c_int64),
+                ("PerJobUserTimeLimit", ctypes.c_int64),
+                ("LimitFlags", ctypes.c_uint32),
+                ("MinimumWorkingSetSize", ctypes.c_size_t),
+                ("MaximumWorkingSetSize", ctypes.c_size_t),
+                ("ActiveProcessLimit", ctypes.c_uint32),
+                ("Affinity", ctypes.c_size_t),
+                ("PriorityClass", ctypes.c_uint32),
+                ("SchedulingClass", ctypes.c_uint32),
+            ]
+
+        class _IoCounters(ctypes.Structure):
+            _fields_ = [(f, ctypes.c_uint64) for f in (
+                "ReadOperationCount", "WriteOperationCount", "OtherOperationCount",
+                "ReadTransferCount", "WriteTransferCount", "OtherTransferCount",
+            )]
+
+        class _ExtLimitInfo(ctypes.Structure):
+            _fields_ = [
+                ("BasicLimitInformation", _BasicLimitInfo),
+                ("IoInfo", _IoCounters),
+                ("ProcessMemoryLimit", ctypes.c_size_t),
+                ("JobMemoryLimit", ctypes.c_size_t),
+                ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                ("PeakJobMemoryUsed", ctypes.c_size_t),
+            ]
+
+        info = _ExtLimitInfo()
+        info.BasicLimitInformation.LimitFlags = _JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+        ok = kernel32.SetInformationJobObject(
+            job, _JobObjectExtendedLimitInformation,
+            ctypes.byref(info), ctypes.sizeof(info),
+        )
+        if not ok:
+            kernel32.CloseHandle(job)
+            return None
+
+        # Open a handle to the process and assign it to the job.
+        _PROCESS_ALL_ACCESS = 0x1F0FFF
+        proc_handle = kernel32.OpenProcess(_PROCESS_ALL_ACCESS, False, pid)
+        if not proc_handle:
+            kernel32.CloseHandle(job)
+            return None
+        assigned = kernel32.AssignProcessToJobObject(job, proc_handle)
+        kernel32.CloseHandle(proc_handle)
+        if not assigned:
+            kernel32.CloseHandle(job)
+            return None
+
+        return job  # caller must keep this alive; closing it triggers KILL_ON_JOB_CLOSE
+    except Exception as exc:  # noqa: BLE001 - ctypes.windll missing on non-Windows, etc.
+        logger.debug("guard: win32 job object unavailable: %s", exc)
+        return None
+
+
+def win32_register_child(pid: int) -> None:
+    """Assign child ``pid`` to a Job Object; store handle so KILL_ON_JOB_CLOSE fires.
+
+    Called immediately after spawning the child on Windows. If the Job Object
+    cannot be created or assigned (e.g. the child is already in a job), logs a
+    debug note and proceeds without — teardown falls back to CTRL_BREAK + terminate.
+
+    Safe to call on non-Windows: the function is a no-op when ``_IS_WINDOWS`` is
+    False, so callers do not need to guard the call site.
+    """
+    if not _IS_WINDOWS:
+        return
+    handle = _win32_create_and_assign_job(pid)
+    if handle is not None:
+        _WIN_JOBS[pid] = handle
+        logger.debug("guard: win32 job object assigned for child pid=%d", pid)
+    else:
+        logger.debug("guard: win32 job object unavailable for pid=%d; orphan-freedom not asserted", pid)
+
+
+def win32_release_child(pid: int) -> None:
+    """Remove the stored Job Object handle for ``pid`` (best-effort close).
+
+    Dropping the last handle triggers ``JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`` if
+    the child's process tree is still running. Safe to call on non-Windows (no-op).
+    """
+    if not _IS_WINDOWS:
+        return
+    handle = _WIN_JOBS.pop(pid, None)
+    if handle is not None:
+        try:
+            import ctypes
+            ctypes.windll.kernel32.CloseHandle(handle)  # type: ignore[attr-defined]
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("guard: failed to close win32 job handle for pid=%d: %s", pid, exc)
+
+
+def _win32_send_ctrl(pid: int, ctrl_type: int) -> bool:
+    """Send a console-ctrl event to process group ``pid`` (Windows, best-effort).
+
+    ``ctrl_type`` must be :data:`_CTRL_C_EVENT` (0) or :data:`_CTRL_BREAK_EVENT`
+    (1). Requires the child to have been spawned with ``CREATE_NEW_PROCESS_GROUP``
+    so the event targets only the child's group, not guard itself. Returns ``True``
+    on success.
+
+    Safe to call on non-Windows: always returns ``False``.
+    """
+    if not _IS_WINDOWS:
+        return False
+    try:
+        import ctypes
+        return bool(ctypes.windll.kernel32.GenerateConsoleCtrlEvent(ctrl_type, pid))  # type: ignore[attr-defined]
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("guard: GenerateConsoleCtrlEvent failed for pid=%d ctrl=%d: %s", pid, ctrl_type, exc)
+        return False
 
 
 def _redact_server_identity(command: str, args: list[str]) -> str:
@@ -258,7 +416,7 @@ async def teardown_child(proc: Process, *, on_note=None) -> None:
     if _IS_POSIX:
         await _teardown_posix(proc)
     else:
-        _teardown_windows(proc, on_note)
+        await _teardown_windows(proc, on_note)
 
 
 async def _teardown_posix(proc: Process) -> None:
@@ -295,13 +453,45 @@ def _signal_group(proc: Process, signum: int) -> None:
         logger.debug("guard: could not signal child group %s: %s", proc.pid, exc)
 
 
-def _teardown_windows(proc: Process, on_note) -> None:
-    """Windows best-effort teardown; logs the orphan-freedom degradation (§3.3)."""
+async def _teardown_windows(proc: Process, on_note) -> None:
+    """Windows best-effort teardown: CTRL_BREAK_EVENT + grace + terminate (§3.2, §3.3).
+
+    1. Send ``CTRL_BREAK_EVENT`` to the child's console group (approximate SIGTERM).
+    2. Wait up to :data:`TERM_GRACE_S` for a clean exit.
+    3. Fall back to ``proc.terminate()`` if the child is still running.
+
+    Orphan grandchildren are possible if the Job Object could not be assigned at
+    spawn time; the ``WRD-RES-WIN-LIFECYCLE`` note is always emitted so operators
+    can distinguish "job-object-protected teardown" from "terminate-only fallback".
+    """
+    sent_ctrl = _win32_send_ctrl(proc.pid, _CTRL_BREAK_EVENT)
+    if sent_ctrl:
+        with anyio.move_on_after(TERM_GRACE_S):
+            await proc.wait()
+            # Child exited cleanly after CTRL_BREAK — skip terminate.
+            detail = (
+                "child exited on CTRL_BREAK_EVENT; "
+                + ("job object protected" if proc.pid in _WIN_JOBS else "job object unavailable")
+            )
+            _emit_win_note(on_note, detail)
+            return
+
+    # Child did not exit (or CTRL_BREAK was not sent); fall through to terminate.
     try:
         proc.terminate()
     except Exception as exc:  # noqa: BLE001
         logger.debug("guard: windows terminate failed: %s", exc)
-    note = win_lifecycle_note("child teardown is terminate-only; a residual child is possible")
+
+    if sent_ctrl:
+        detail = "child did not exit after CTRL_BREAK_EVENT; terminate called"
+    else:
+        detail = "CTRL_BREAK_EVENT failed; terminate-only fallback; a residual child is possible"
+    _emit_win_note(on_note, detail)
+
+
+def _emit_win_note(on_note, detail: str) -> None:
+    """Emit a WRD-RES-WIN-LIFECYCLE note via ``on_note`` and to the logger."""
+    note = win_lifecycle_note(detail)
     logger.warning("guard: %s", note.message)
     if on_note is not None:
         try:
