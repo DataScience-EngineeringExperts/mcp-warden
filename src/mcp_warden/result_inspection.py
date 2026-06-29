@@ -32,7 +32,13 @@ TIER_MONITOR = "monitor"
 TIER_NOTE = "note"
 
 BLOCK_RULES = frozenset(
-    {"WRD-RES-ANSI", "WRD-RES-SECRET-ECHO", "WRD-RES-EXFIL-DOMAIN", "WRD-RES-EXFIL-IP-LITERAL"}
+    {
+        "WRD-RES-ANSI",
+        "WRD-RES-SECRET-ECHO",
+        "WRD-RES-EXFIL-DOMAIN",
+        "WRD-RES-EXFIL-IP-LITERAL",
+        "WRD-RES-EXFIL-DNS-SSRF",
+    }
 )
 
 #: Severity -> SARIF level (CHECKS.md §2), mirrored for WRD-RES-*.

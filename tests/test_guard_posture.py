@@ -144,6 +144,25 @@ def test_exfil_ip_literal_no_block_deterministic_fold_demotes():
     assert GuardConfig(no_block_exfil_ip_literal=True).category_enabled("WRD-RES-EXFIL-IP-LITERAL") is False
 
 
+# --- WRD-RES-EXFIL-DNS-SSRF category posture (DSE-58) -------------------------
+
+
+def test_exfil_dns_ssrf_blocks_by_default():
+    assert GuardConfig().category_enabled("WRD-RES-EXFIL-DNS-SSRF") is True
+
+
+def test_exfil_dns_ssrf_opt_out_demotes():
+    assert GuardConfig(no_block_exfil_dns_ssrf=True).category_enabled("WRD-RES-EXFIL-DNS-SSRF") is False
+
+
+def test_exfil_dns_ssrf_audit_only_demotes():
+    assert GuardConfig(audit_only=True).category_enabled("WRD-RES-EXFIL-DNS-SSRF") is False
+
+
+def test_exfil_dns_ssrf_no_block_deterministic_demotes():
+    assert GuardConfig(no_block_exfil_dns_ssrf=True).category_enabled("WRD-RES-EXFIL-DNS-SSRF") is False
+
+
 # --- framing: both modes round-trip ------------------------------------------
 
 
