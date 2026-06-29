@@ -187,6 +187,42 @@ def inspect_inject(text: str, tool: str, idx: int, phrases: tuple[str, ...] | li
     ]
 
 
+def inspect_exfil_dns_ssrf(
+    dns_hits: list[tuple[str, str, str]],
+    tool: str,
+    idx: int,
+) -> list["ResultFinding"]:
+    """WRD-RES-EXFIL-DNS-SSRF: a URL hostname resolved to a private/SSRF IP at runtime.
+
+    Closes the bypass where ``WRD-RES-EXFIL-IP-LITERAL`` would miss a destination
+    whose hostname (not a raw IP literal) resolves to a deny-range IP.
+
+    Args:
+        dns_hits: Pre-resolved ``(host, resolved_ip, range_label)`` tuples from
+            :func:`mcp_warden.res_dns.resolve_ssrf_hits`.
+        tool: The tool name (for the finding message).
+        idx: The content-block index.
+
+    Returns:
+        A single block-tier finding when ``dns_hits`` is non-empty, else ``[]``.
+    """
+    if not dns_hits:
+        return []
+    detail = ", ".join(f"{h} -> {ip} ({label})" for h, ip, label in dns_hits)
+    return [
+        _RF(
+            rule_id="WRD-RES-EXFIL-DNS-SSRF",
+            severity="high",
+            tier=TIER_BLOCK,
+            message=(
+                f"tools/{tool}: result URL hostname(s) resolve to "
+                f"private/SSRF IP(s): {detail}"
+            ),
+            block_index=idx,
+        )
+    ]
+
+
 def uninspectable_note(tool: str, idx: int) -> "ResultFinding":
     """WRD-RES-UNINSPECTABLE (§5.2): a content block could not be inspected."""
     return _RF(

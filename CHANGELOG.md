@@ -22,15 +22,25 @@ CI. The v0.3 `guard` proxy adds deterministic runtime *result* inspection
 **Explicitly out of scope in v1 (documented post-1.0 roadmap):**
 
 - **HTTP/SSE transport** — v1 is stdio-only; HTTP/SSE is the headline v1.x item (#9).
-- **DNS-name resolution** of exfil-domain matches (raw-IP-literal handling is the D6
-  work item) and **prompt-injection default-block** (stays opt-in / MONITOR until
-  field false-positive data justifies blocking by default).
+- **Prompt-injection default-block** — stays opt-in / MONITOR until field
+  false-positive data justifies blocking by default.
 - Behavioral-attack defense (`T-BEHAVE`), full agent-firewall mediation, and any
   compliance/regulatory claim. See `docs/THREAT_MODEL.md` for the limits.
 
 ## [Unreleased]
 
-_No unreleased changes yet._
+### Added
+
+- **Runtime DNS resolution SSRF bypass detection (`WRD-RES-EXFIL-DNS-SSRF`)** (#11):
+  the `guard` proxy now resolves URL hostnames from `tools/call` results at runtime
+  and blocks (error-replace) when any resolved IP falls in a deny range
+  (`SSRF_NETWORKS` — link-local, loopback, RFC1918, IPv6 ULA/loopback/link-local).
+  This closes the bypass where `WRD-RES-EXFIL-IP-LITERAL` could not fire because the
+  result contained a DNS hostname (e.g. `169.254.169.254.nip.io`) rather than a raw
+  IP literal. Resolution is bounded by 1 s across all hostnames per result frame,
+  fail-open (any DNS error = no hit), and opt-out via `--no-block-exfil-dns-ssrf`
+  (or `--no-block-deterministic`). Raw IP literals and the offline `inspect` command
+  are unchanged. New module `res_dns.py`; 23 new tests.
 
 ## [1.0.1] — 2026-06-13
 

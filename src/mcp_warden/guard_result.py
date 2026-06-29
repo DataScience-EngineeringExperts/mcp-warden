@@ -98,6 +98,17 @@ def handle_s2c(state, frame: Frame, mode: str) -> bytes:
             ) from None
         state.emit(_frame_error_note("s2c", rpc_id, f"inspect error: {exc}"))
         return frame.raw
+
+    # WRD-RES-EXFIL-DNS-SSRF: resolve URL hostnames to catch SSRF bypasses
+    # (fail-open — any DNS error produces no hits, never aborts).
+    if state.config.category_enabled("WRD-RES-EXFIL-DNS-SSRF"):
+        try:
+            dns_findings = _dns_ssrf_findings(result, tool)
+            if dns_findings:
+                findings = list(findings) + dns_findings
+        except Exception as exc:  # pragma: no cover
+            state.emit(_frame_error_note("s2c", rpc_id, f"dns-ssrf error: {exc}"))
+
     return _apply_result_findings(state, frame, mode, rpc_id, tool, result, findings, pol)
 
 
@@ -179,6 +190,47 @@ def _tool_name_from_result(obj: dict[str, Any]) -> str:
     return ""
 
 
+def _dns_ssrf_findings(result: dict, tool: str) -> list[ResultFinding]:
+    """Resolve URL hostnames in ``result`` blocks; return WRD-RES-EXFIL-DNS-SSRF findings.
+
+    Fail-open: DNS errors within :func:`~mcp_warden.res_dns.resolve_ssrf_hits`
+    are already swallowed there (return ``[]``). This function raises only if
+    the catalog/extract plumbing itself fails — caught by the caller.
+
+    Args:
+        result: The ``tools/call`` result dict.
+        tool: The tool name (for finding messages).
+
+    Returns:
+        Per-block ``WRD-RES-EXFIL-DNS-SSRF`` findings (empty if no SSRF hits).
+    """
+    from . import res_catalog, res_dns
+
+    blocks, _ = res_catalog.extract_blocks(result)
+    if not blocks:
+        return []
+
+    # Collect unique candidates across all blocks (resolve once, match per block).
+    all_candidates: set[str] = set()
+    for _idx, text in blocks:
+        all_candidates.update(res_dns.extract_dns_candidates(text))
+    if not all_candidates:
+        return []
+
+    hits = res_dns.resolve_ssrf_hits(sorted(all_candidates))
+    if not hits:
+        return []
+
+    hit_map: dict[str, tuple[str, str]] = {h: (ip, lbl) for h, ip, lbl in hits}
+    findings: list[ResultFinding] = []
+    for idx, text in blocks:
+        block_candidates = res_dns.extract_dns_candidates(text)
+        block_hits = [(h, hit_map[h][0], hit_map[h][1]) for h in block_candidates if h in hit_map]
+        if block_hits:
+            findings.extend(res_catalog.inspect_exfil_dns_ssrf(block_hits, tool, idx))
+    return findings
+
+
 def _apply_result_findings(
     state,
     frame: Frame,
@@ -197,7 +249,7 @@ def _apply_result_findings(
     if state.config.block_inject_phrase and not state.config.audit_only:
         block_findings += [f for f in findings if f.tier == TIER_MONITOR]
 
-    error_rules = {"WRD-RES-EXFIL-DOMAIN", "WRD-RES-INJECT-PHRASE"}
+    error_rules = {"WRD-RES-EXFIL-DOMAIN", "WRD-RES-INJECT-PHRASE", "WRD-RES-EXFIL-DNS-SSRF"}
     if not state.config.redact_secret_echo:
         error_rules.add("WRD-RES-SECRET-ECHO")
     redact_rules = {"WRD-RES-ANSI"}
