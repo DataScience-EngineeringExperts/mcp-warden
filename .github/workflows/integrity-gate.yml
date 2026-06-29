@@ -168,7 +168,7 @@ jobs:
             --lock e2e.warden.lock \
             --verify \
             --certificate-identity \
-              "https://github.com/ernestprovo23/mcp-warden/.github/workflows/integrity-gate.yml@${GITHUB_REF}" \
+              "https://github.com/DataScience-EngineeringExperts/mcp-warden/.github/workflows/integrity-gate.yml@${GITHUB_REF}" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 
       # NEGATIVE PROOF (real crypto): tamper the signed lock's overall_digest and
@@ -185,7 +185,7 @@ jobs:
                --lock e2e.warden.lock \
                --verify \
                --certificate-identity \
-                 "https://github.com/ernestprovo23/mcp-warden/.github/workflows/integrity-gate.yml@${GITHUB_REF}" \
+                 "https://github.com/DataScience-EngineeringExperts/mcp-warden/.github/workflows/integrity-gate.yml@${GITHUB_REF}" \
                --certificate-oidc-issuer "https://token.actions.githubusercontent.com" ; then
             echo "ERROR: real sigstore verified a TAMPERED overall_digest — fail closed is broken"
             exit 1
