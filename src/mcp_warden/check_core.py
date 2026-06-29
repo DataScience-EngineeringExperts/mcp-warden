@@ -5,8 +5,12 @@ Both ``cli.py:check`` and the pre-commit wrapper (``precommit.py``) call
 (issue: "a hook that disagrees with CI is worse than no hook").
 
 The sequence here mirrors what ``check`` has always done:
-``read_lock`` -> ``capture_surface_sync`` -> ``run_checks`` -> ``build_lock``
+``read_lock`` -> capture -> ``run_checks`` -> ``build_lock``
 (an in-memory CURRENT lock, never persisted) -> ``compute_drift``.
+
+Capture routing:
+- stdio (command + args): :func:`~mcp_warden.capture.capture_surface_sync`
+- HTTP/SSE (url):        :func:`~mcp_warden.capture.capture_surface_http_sync`
 
 # INTERNAL STABILITY NOTE: the pre-commit wrapper (precommit.py) depends on this
 # function's signature and exception contract (CaptureError for spawn/timeout
@@ -26,7 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from .capture import capture_surface_sync
+from .capture import capture_surface_http_sync, capture_surface_sync
 from .checks import run_checks
 from .drift import DriftItem, compute_drift
 from .lockfile import build_lock, read_lock
@@ -50,6 +54,8 @@ def run_check_full(
     args: list[str],
     lock_path: Path,
     timeout_s: float,
+    *,
+    url: str | None = None,
 ) -> CheckResult:
     """Run the full check verdict path: read lock -> capture -> checks -> drift.
 
@@ -58,10 +64,12 @@ def run_check_full(
     calls the thinner :func:`run_check` which discards ``findings``.
 
     Args:
-        command: The MCP server launch command (argv[0]).
-        args: The remaining server launch argv.
+        command: The MCP server launch command (argv[0]). Ignored when ``url`` is set.
+        args: The remaining server launch argv. Ignored when ``url`` is set.
         lock_path: Path to the baseline ``warden.lock``.
         timeout_s: Capture timeout in seconds.
+        url: When set, connect to this HTTP/SSE endpoint instead of spawning a
+            subprocess. Mutually exclusive with meaningful ``command``/``args``.
 
     Returns:
         A :class:`CheckResult` (``drift`` empty == clean).
@@ -69,10 +77,13 @@ def run_check_full(
     Raises:
         FileNotFoundError: The lock file does not exist.
         ValueError: The lock file is invalid JSON or fails schema validation.
-        CaptureError: The server could not be spawned or did not respond in time.
+        CaptureError: The server could not be spawned/reached or did not respond in time.
     """
     baseline = read_lock(lock_path)
-    surface = capture_surface_sync(command, args, timeout_s=timeout_s)
+    if url:
+        surface = capture_surface_http_sync(url, timeout_s=timeout_s)
+    else:
+        surface = capture_surface_sync(command, args, timeout_s=timeout_s)
     findings = run_checks(surface)
     # build_lock constructs an IN-MEMORY current lock for diffing only; it is
     # never written to disk on the check path.

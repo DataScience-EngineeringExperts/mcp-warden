@@ -44,10 +44,11 @@ class CapturedPrompt(BaseModel):
 
 
 class CapturedSurface(BaseModel):
-    """The full captured declared surface of an MCP server over stdio."""
+    """The full captured declared surface of an MCP server (stdio or HTTP/SSE)."""
 
-    command: str
+    command: str = ""
     args: list[str] = Field(default_factory=list)
+    url: str | None = None  # set for HTTP/SSE captures; mutually exclusive with command/args
     protocol_version: str
     tools: list[CapturedTool] = Field(default_factory=list)
     resources: list[CapturedResource] = Field(default_factory=list)
@@ -113,8 +114,9 @@ class Finding(BaseModel):
 class ServerIdentity(BaseModel):
     """Server identity block (WARDEN_LOCK_SCHEMA.md §4)."""
 
-    command: str
-    args: list[str]
+    command: str = ""
+    args: list[str] = Field(default_factory=list)
+    url: str | None = None  # set for HTTP/SSE-transport pins
     command_digest: str
 
 

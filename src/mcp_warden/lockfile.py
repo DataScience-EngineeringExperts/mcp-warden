@@ -47,7 +47,15 @@ def _now_rfc3339() -> str:
 
 
 def _server_identity(surface: CapturedSurface) -> ServerIdentity:
-    """Build the server identity block + ``command_digest`` (§4.1)."""
+    """Build the server identity block + ``command_digest`` (§4.1).
+
+    For HTTP/SSE captures (``surface.url`` is set) the digest covers the URL;
+    command and args remain empty strings so existing overall-digest logic is
+    unchanged in the stdio path.
+    """
+    if surface.url:
+        command_digest = hash_value({"url": surface.url})
+        return ServerIdentity(url=surface.url, command_digest=command_digest)
     command_digest = hash_value({"command": surface.command, "args": surface.args})
     return ServerIdentity(command=surface.command, args=list(surface.args), command_digest=command_digest)
 

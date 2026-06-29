@@ -1,8 +1,9 @@
-"""MCP stdio capture client.
+"""MCP capture client — stdio and HTTP/SSE transports.
 
 Spawns the target MCP server **over stdio as an argv array, never via a shell**
-(WARDEN_LOCK_SCHEMA.md §10.4), runs ``initialize`` + ``tools/list`` +
-``resources/list`` + ``prompts/list``, and captures the declared surface.
+(WARDEN_LOCK_SCHEMA.md §10.4), *or* connects to an already-running server over
+HTTP/SSE (Streamable HTTP), then runs ``initialize`` + ``tools/list`` +
+``resources/list`` + ``prompts/list`` and captures the declared surface.
 
 A server that hangs, crashes, or exits nonzero must produce a clear
 ``CaptureError``, not a traceback.
@@ -16,6 +17,7 @@ from typing import Any
 import anyio
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.client.streamable_http import streamable_http_client
 
 from .models import (
     CapturedPrompt,
@@ -195,3 +197,79 @@ def capture_surface_sync(
         CaptureError: On any capture failure (see :func:`capture_surface`).
     """
     return anyio.run(capture_surface, command, args, timeout_s)
+
+
+async def _capture_http_async(url: str, timeout_s: float) -> CapturedSurface:
+    """Inner async HTTP/SSE capture; wrapped with a timeout by :func:`capture_surface_http`."""
+    async with streamable_http_client(url) as (read_stream, write_stream, _get_session_id):
+        async with ClientSession(read_stream, write_stream) as session:
+            init_result = await session.initialize()
+            protocol_version = str(getattr(init_result, "protocolVersion", "") or "")
+
+            tools = await _list_tools(session)
+            resources = await _list_resources(session)
+            prompts = await _list_prompts(session)
+
+    return CapturedSurface(
+        url=url,
+        protocol_version=protocol_version,
+        tools=tools,
+        resources=resources,
+        prompts=prompts,
+    )
+
+
+async def capture_surface_http(
+    url: str,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
+) -> CapturedSurface:
+    """Connect to a running MCP server over HTTP/SSE and capture its declared surface.
+
+    Connects to ``url`` using the Streamable HTTP transport (MCP SDK
+    ``streamable_http_client``). The server must already be running and
+    reachable; no process is spawned.
+
+    Args:
+        url: HTTP/HTTPS endpoint of the MCP server (e.g. ``https://example.com/mcp``).
+        timeout_s: Wall-clock timeout for the whole handshake.
+
+    Returns:
+        The :class:`CapturedSurface` with ``url`` set and ``command``/``args`` empty.
+
+    Raises:
+        CaptureError: On timeout, connection error, or MCP handshake failure.
+    """
+    logger.debug("connecting to MCP server over HTTP/SSE: url=%r", url)
+    try:
+        with anyio.fail_after(timeout_s):
+            return await _capture_http_async(url, timeout_s)
+    except TimeoutError as exc:
+        raise CaptureError(
+            f"MCP server at '{url}' did not complete the handshake within {timeout_s:.0f}s "
+            f"(it may be unreachable or hung)."
+        ) from exc
+    except CaptureError:
+        raise
+    except Exception as exc:
+        raise CaptureError(
+            f"Failed to capture MCP server at '{url}': {type(exc).__name__}: {exc}"
+        ) from exc
+
+
+def capture_surface_http_sync(
+    url: str,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
+) -> CapturedSurface:
+    """Synchronous wrapper around :func:`capture_surface_http` for the CLI.
+
+    Args:
+        url: HTTP/HTTPS endpoint URL.
+        timeout_s: Wall-clock timeout.
+
+    Returns:
+        The captured surface.
+
+    Raises:
+        CaptureError: On any capture failure.
+    """
+    return anyio.run(capture_surface_http, url, timeout_s)
