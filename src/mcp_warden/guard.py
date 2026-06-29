@@ -33,6 +33,8 @@ from .guard_lifecycle import (
     forward_signals,
     synthesize_pending_errors,
     teardown_child,
+    win32_register_child,
+    win32_release_child,
 )
 from .guard_loop import GuardConfig, GuardState, handle_c2s, handle_s2c
 from .guard_strict import GUARD_STRICT_EXIT, _find_strict_abort, _handle_strict_abort
@@ -282,6 +284,10 @@ async def run_guard_async(
     posix_kwargs: dict[str, Any] = {}
     if os.name == "posix":
         posix_kwargs["start_new_session"] = True  # own process group (§2.6)
+    elif os.name == "nt":
+        # Place child in its own console group so CTRL_BREAK_EVENT targets only
+        # the child (not guard); required for _win32_send_ctrl to work correctly.
+        posix_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
 
     try:
         proc = await anyio.open_process(
@@ -297,6 +303,10 @@ async def run_guard_async(
     except Exception as exc:  # spawn failure
         logger.error("guard: failed to spawn child: %s", exc)
         return GUARD_FATAL_EXIT
+
+    # Windows: assign child to a Job Object with KILL_ON_JOB_CLOSE so the child
+    # tree is reaped when guard exits (even on unexpected exit). No-op on POSIX.
+    win32_register_child(proc.pid)
 
     c2s_reader = FrameReader(client_in.receive, state.config.max_frame_bytes)
     s2c_reader = FrameReader(proc.stdout.receive, state.config.max_frame_bytes)
@@ -349,6 +359,7 @@ async def run_guard_async(
         await teardown_child(proc, on_note=state.emit)
         code = exit_code_for_child(proc.returncode) if proc.returncode is not None else GUARD_TRANSPORT_EXIT
         logger.info("guard: client disconnected; child reaped, exit code %s", code)
+        win32_release_child(proc.pid)
         return code
 
     # §2.1: child exited (possibly mid-call). Synthesize -32002 for every pending
@@ -356,6 +367,7 @@ async def run_guard_async(
     await synthesize_pending_errors(state, client_out, chan.client_mode, proc.returncode)
     code = exit_code_for_child(proc.returncode)
     logger.info("guard: child exited with code %s", code)
+    win32_release_child(proc.pid)
     return code
 
 
