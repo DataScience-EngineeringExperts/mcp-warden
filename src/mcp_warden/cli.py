@@ -25,7 +25,7 @@ from rich.console import Console
 from rich.table import Table
 
 from . import __version__
-from .capture import CaptureError, capture_surface_sync
+from .capture import CaptureError, capture_surface_http_sync, capture_surface_sync
 from .check_core import run_check_full
 from .checks import run_checks
 from .cli_diff import register as register_diff_command
@@ -94,7 +94,9 @@ def _split_server_cmd(server_cmd: list[str]) -> tuple[str, list[str]]:
 
 @app.command()
 def pin(
-    server_cmd: list[str] = typer.Argument(..., help="MCP server launch argv (e.g. node ./server.js)"),
+    server_cmd: Optional[list[str]] = typer.Argument(
+        None, help="MCP server launch argv (e.g. node ./server.js); omit when using --url"
+    ),
     lock: Path = typer.Option(Path(DEFAULT_LOCK_NAME), "--lock", help="Output lock path"),
     approve: bool = typer.Option(False, "--approve", help="Record a human approval attestation"),
     approver: Optional[str] = typer.Option(None, "--approver", help="Approver identity (or WARDEN_APPROVER env)"),
@@ -105,16 +107,32 @@ def pin(
     identity_token: Optional[str] = typer.Option(
         None, "--identity-token", help="Explicit OIDC token for signing (default: ambient/CI OIDC)"
     ),
+    url: Optional[str] = typer.Option(
+        None, "--url", help="HTTP/SSE endpoint of a running MCP server (mutually exclusive with server-cmd)"
+    ),
 ) -> None:
-    """Pin an MCP server's declared surface into ``warden.lock`` (TOFU baseline)."""
-    command, args = _split_server_cmd(server_cmd)
+    """Pin an MCP server's declared surface into ``warden.lock`` (TOFU baseline).
+
+    Pass either a server launch command (stdio) or ``--url`` (HTTP/SSE).
+    """
+    if url and server_cmd:
+        err_console.print("[red]error:[/red] --url and server-cmd are mutually exclusive")
+        raise typer.Exit(code=2)
+    if not url and not server_cmd:
+        err_console.print("[red]error:[/red] provide either a server command or --url")
+        raise typer.Exit(code=2)
+
     approver_id = approver or os.environ.get("WARDEN_APPROVER")
     if approve and not approver_id:
         err_console.print("[red]error:[/red] --approve requires --approver <id> or WARDEN_APPROVER env")
         raise typer.Exit(code=2)
 
     try:
-        surface = capture_surface_sync(command, args, timeout_s=timeout)
+        if url:
+            surface = capture_surface_http_sync(url, timeout_s=timeout)
+        else:
+            command, args = _split_server_cmd(server_cmd)
+            surface = capture_surface_sync(command, args, timeout_s=timeout)
     except CaptureError as exc:
         err_console.print(f"[red]capture failed:[/red] {exc}")
         raise typer.Exit(code=2) from exc
@@ -146,7 +164,7 @@ def pin(
 @app.command()
 def check(
     server_cmd: Optional[list[str]] = typer.Argument(
-        None, help="MCP server launch argv (must match the pinned launch); omit with --verify"
+        None, help="MCP server launch argv (must match the pinned launch); omit with --url or --verify"
     ),
     lock: Path = typer.Option(Path(DEFAULT_LOCK_NAME), "--lock", help="Baseline lock path"),
     json_out: bool = typer.Option(False, "--json", help="Emit findings+drift as JSONL to stdout"),
@@ -164,9 +182,13 @@ def check(
     offline_bundle: Optional[Path] = typer.Option(
         None, "--offline-bundle", help="Explicit bundle path (default: <lockname>.sigstore next to the lock)"
     ),
+    url: Optional[str] = typer.Option(
+        None, "--url", help="HTTP/SSE endpoint of a running MCP server (mutually exclusive with server-cmd)"
+    ),
 ) -> None:
     """Re-capture and verify a server against ``warden.lock``; fail on drift.
 
+    Pass either a server launch command (stdio) or ``--url`` (HTTP/SSE).
     With ``--verify`` the command ALSO/INSTEAD verifies the lock's Sigstore
     signature (a no-server-spawn cryptographic check). ``--verify`` requires
     ``--certificate-identity`` and ``--certificate-oidc-issuer`` and exits 0 only
@@ -179,12 +201,22 @@ def check(
         )
         return
 
-    command, args = _split_server_cmd(server_cmd)
+    if url and server_cmd:
+        err_console.print("[red]error:[/red] --url and server-cmd are mutually exclusive")
+        raise typer.Exit(code=2)
+    if not url and not server_cmd:
+        err_console.print("[red]error:[/red] provide either a server command or --url")
+        raise typer.Exit(code=2)
+
+    if url:
+        command, args = "", []
+    else:
+        command, args = _split_server_cmd(server_cmd)
 
     try:
         # Single source of truth shared with the pre-commit wrapper (precommit.py)
         # so a local hook and CI can never disagree on a drift verdict.
-        result = run_check_full(command, args, lock, timeout_s=timeout)
+        result = run_check_full(command, args, lock, timeout_s=timeout, url=url)
     except (FileNotFoundError, ValueError) as exc:
         err_console.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(code=2) from exc
