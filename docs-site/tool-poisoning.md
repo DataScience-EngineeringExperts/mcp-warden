@@ -71,4 +71,4 @@ in the first place — pair it with a scanner for that.
     defend against behavioral / runtime attacks, does **not** statically classify
     new descriptions as malicious, and makes **no compliance or regulatory
     claim**. Read the limits in the
-    [threat model](https://github.com/ernestprovo23/mcp-warden/blob/main/docs/THREAT_MODEL.md).
+    [threat model](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/docs/THREAT_MODEL.md).

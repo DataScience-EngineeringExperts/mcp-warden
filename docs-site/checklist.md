@@ -49,7 +49,7 @@ not the right layer.** No single tool covers this list — that is the point.
       exits non-zero on any drift. Wire it into [CI](pin-in-ci.md).
 - [ ] **Run the same verdict locally before CI.** Catch drift at commit time, not
       in the pipeline. mcp-warden ships a pre-commit hook
-      ([example config](https://github.com/ernestprovo23/mcp-warden/blob/main/examples/pre-commit/.pre-commit-config.yaml))
+      ([example config](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/examples/pre-commit/.pre-commit-config.yaml))
       that reuses the identical drift path as `check`.
 - [ ] **Surface findings where your team already looks.** mcp-warden emits SARIF
       (`--sarif`) that uploads straight to GitHub code scanning, so drift shows up
@@ -88,4 +88,4 @@ not the right layer.** No single tool covers this list — that is the point.
     only the pin-and-drift items. mcp-warden does **not** defend behavioral /
     runtime attacks, does **not** statically classify new definitions, and makes
     **no compliance or regulatory claim**. Read the limits in the
-    [threat model](https://github.com/ernestprovo23/mcp-warden/blob/main/docs/THREAT_MODEL.md).
+    [threat model](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/docs/THREAT_MODEL.md).

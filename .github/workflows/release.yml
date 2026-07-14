@@ -101,7 +101,7 @@ jobs:
   # No API token, no stored secret: pypa/gh-action-pypi-publish mints a short-lived
   # OIDC token from this job's `id-token: write` and exchanges it for a PyPI upload
   # token. PyPI must have a Trusted Publisher (pending or active) for `mcp-warden-cli`
-  # pointing at owner=ernestprovo23, repo=mcp-warden, workflow=release.yml — see
+  # pointing at owner=DataScience-EngineeringExperts, repo=mcp-warden, workflow=release.yml — see
   # RELEASING.md. Until that exists, this job fails CLOSED (publish denied), it
   # never falls back to anything insecure.
   #
@@ -197,7 +197,7 @@ jobs:
           # Self-check: verify what we just signed against THIS workflow's own
           # identity so a broken run never publishes a bad bundle.
           verify: true
-          verify-cert-identity: "https://github.com/ernestprovo23/mcp-warden/.github/workflows/release.yml@${{ github.ref }}"
+          verify-cert-identity: "https://github.com/DataScience-EngineeringExperts/mcp-warden/.github/workflows/release.yml@${{ github.ref }}"
           verify-oidc-issuer: "https://token.actions.githubusercontent.com"
           # release-signing-artifacts defaults to true: on a release event the
           # .sigstore bundles are attached to the Release assets automatically.

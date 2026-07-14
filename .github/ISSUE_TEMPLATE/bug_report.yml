@@ -8,7 +8,7 @@ body:
         ⚠️ **Do not report security vulnerabilities here.** If this is a way to
         bypass a control mcp-warden claims to enforce (drift slips through, a real
         secret is emitted unredacted, a poisoned result evades the block tier),
-        report it privately per [SECURITY.md](https://github.com/ernestprovo23/mcp-warden/blob/main/SECURITY.md).
+        report it privately per [SECURITY.md](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/SECURITY.md).
   - type: checkboxes
     id: prechecks
     attributes:

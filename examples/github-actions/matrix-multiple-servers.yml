@@ -38,7 +38,7 @@ jobs:
             category: "mcp-warden-search"
     steps:
       - uses: actions/checkout@v4
-      - uses: ernestprovo23/mcp-warden@v0
+      - uses: DataScience-EngineeringExperts/mcp-warden@v0
         with:
           server-cmd: ${{ matrix.server-cmd }}
           lock: ${{ matrix.lock }}

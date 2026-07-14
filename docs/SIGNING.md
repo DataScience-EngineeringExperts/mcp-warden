@@ -268,5 +268,5 @@ out-of-digest provenance change does NOT require regeneration (the signed
 3. Drop `warden.lock` + `warden.lock.sigstore` into `tests/fixtures/signed/`.
 4. The offline-fixture test now runs (no longer skips), verifying the committed
    bundle against the pinned identity
-   `https://github.com/ernestprovo23/mcp-warden/.github/workflows/sigstore-fixture.yml@refs/heads/main`
+   `https://github.com/DataScience-EngineeringExperts/mcp-warden/.github/workflows/sigstore-fixture.yml@refs/heads/main`
    (issuer `https://token.actions.githubusercontent.com`).

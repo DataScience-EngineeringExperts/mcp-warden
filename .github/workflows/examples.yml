@@ -16,6 +16,14 @@ on:
   pull_request:
     branches: [main]
 
+# Least-privilege: both jobs only read the repo.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # --------------------------------------------------------------------------
   # Job 1: YAML-lint the example workflows.

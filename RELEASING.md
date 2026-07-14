@@ -8,7 +8,7 @@ Two names matter and they are deliberately different:
 |-------|-------|
 | PyPI distribution name (what `pip install` uses) | `mcp-warden-cli` |
 | CLI command (what users type) | `mcp-warden` |
-| GitHub repository | `ernestprovo23/mcp-warden` |
+| GitHub repository | `DataScience-EngineeringExperts/mcp-warden` |
 
 Install is therefore `pip install mcp-warden-cli`, but the command stays `mcp-warden`.
 The PyPI name `mcp-warden` is an unrelated package by another author. PyPI rejects
@@ -37,7 +37,7 @@ the very first upload is already OIDC-published.
 2. Go to **Account → Publishing** (<https://pypi.org/manage/account/publishing/>).
 3. Under **Add a new pending publisher**, fill in **exactly**:
    - **PyPI Project Name**: `mcp-warden-cli`
-   - **Owner**: `ernestprovo23`
+   - **Owner**: `DataScience-EngineeringExperts`
    - **Repository name**: `mcp-warden`
    - **Workflow name**: `release.yml`
    - **Environment name**: *(leave blank — the workflow does not use a GitHub
@@ -75,7 +75,7 @@ without the publish job failing red before the Trusted Publisher exists.
   and nothing is uploaded to PyPI. Use this to cut signed GitHub Releases for
   versions already published by token (e.g. `1.0.0`, `1.0.1`).
 - **After you have configured the Trusted Publisher above** (project
-  `mcp-warden-cli`, owner `ernestprovo23`, repo `mcp-warden`, workflow
+  `mcp-warden-cli`, owner `DataScience-EngineeringExperts`, repo `mcp-warden`, workflow
   `release.yml`), enable OIDC publishing for future releases by setting the
   variable:
   ```bash
@@ -160,14 +160,14 @@ Do this on a clean checkout of `main` with all v1 PRs merged.
    sigstore verify identity dist/mcp_warden_cli-1.0.0-py3-none-any.whl \
      --bundle mcp_warden_cli-1.0.0-py3-none-any.whl.sigstore \
      --cert-identity \
-       "https://github.com/ernestprovo23/mcp-warden/.github/workflows/release.yml@refs/tags/v1.0.0" \
+       "https://github.com/DataScience-EngineeringExperts/mcp-warden/.github/workflows/release.yml@refs/tags/v1.0.0" \
      --cert-oidc-issuer "https://token.actions.githubusercontent.com"
    ```
    (Download the `.whl` and its `.sigstore` bundle from the Release assets first.)
 
 3. **Confirm the PyPI page.** Visit <https://pypi.org/project/mcp-warden-cli/> and check:
    - version `1.0.0` is listed;
-   - the project URLs (homepage / repository) point at `ernestprovo23/mcp-warden`;
+   - the project URLs (homepage / repository) point at `DataScience-EngineeringExperts/mcp-warden`;
    - "Publisher" shows the Trusted Publisher (OIDC), not a token upload.
 
 4. **Smoke-test the gate** in a throwaway dir to confirm the published wheel works:

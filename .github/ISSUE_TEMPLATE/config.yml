@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
   - name: 🔒 Report a security vulnerability
-    url: https://github.com/ernestprovo23/mcp-warden/security/advisories/new
+    url: https://github.com/DataScience-EngineeringExperts/mcp-warden/security/advisories/new
     about: "Security issues must be reported privately — do NOT open a public issue. See SECURITY.md."
   - name: 📖 Documentation & threat model
-    url: https://github.com/ernestprovo23/mcp-warden/tree/main/docs
+    url: https://github.com/DataScience-EngineeringExperts/mcp-warden/tree/main/docs
     about: "Read the design specs and threat model before filing — some behaviors are explicitly out of scope."

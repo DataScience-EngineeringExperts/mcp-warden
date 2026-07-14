@@ -31,7 +31,7 @@ the same declared surface** — that byte-reproducibility is the conformance bar
 The complete, normative specification is the source of truth and lives in the
 repository:
 
-- **[MCP Lock Format v1 — `docs/SPEC.md`](https://github.com/ernestprovo23/mcp-warden/blob/main/docs/SPEC.md)**
+- **[MCP Lock Format v1 — `docs/SPEC.md`](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/docs/SPEC.md)**
 
 It covers the file format and location, server identity, the per-entry schema
 (tool / resource / prompt), field / entry / overall digest construction, the
@@ -40,10 +40,10 @@ conformance section, and a minimal worked-example lock.
 
 The mcp-warden-specific implementation details (how *this* tool realizes the
 format) are documented separately in
-[`docs/WARDEN_LOCK_SCHEMA.md`](https://github.com/ernestprovo23/mcp-warden/blob/main/docs/WARDEN_LOCK_SCHEMA.md),
+[`docs/WARDEN_LOCK_SCHEMA.md`](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/docs/WARDEN_LOCK_SCHEMA.md),
 which references `SPEC.md` as the format source of truth. A short, concrete
 example lock is in
-[`docs/WARDEN_LOCK_EXAMPLE.md`](https://github.com/ernestprovo23/mcp-warden/blob/main/docs/WARDEN_LOCK_EXAMPLE.md).
+[`docs/WARDEN_LOCK_EXAMPLE.md`](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/docs/WARDEN_LOCK_EXAMPLE.md).
 
 ## What the format is for — and is not
 
@@ -60,4 +60,4 @@ is explicitly **not**:
     The lock format covers declared-surface integrity only. It does **not** attest
     runtime behavior, does **not** judge whether a surface is benign, and makes
     **no compliance or regulatory claim**. Read the limits in the
-    [threat model](https://github.com/ernestprovo23/mcp-warden/blob/main/docs/THREAT_MODEL.md).
+    [threat model](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/docs/THREAT_MODEL.md).
