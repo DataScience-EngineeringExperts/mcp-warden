@@ -6,6 +6,15 @@ on:
   pull_request:
     branches: [main]
 
+# Least-privilege by default; the sigstore-e2e job widens scope locally
+# (id-token: write) for ambient-OIDC signing.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # --------------------------------------------------------------------------
   # Job 1: pytest suite

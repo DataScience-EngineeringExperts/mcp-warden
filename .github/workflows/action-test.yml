@@ -22,6 +22,15 @@ on:
       - "tests/fixtures/**"
       - ".github/workflows/action-test.yml"
 
+# Least-privilege by default; the action-upload-sarif job widens scope locally
+# (security-events: write) for the real SARIF upload path.
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # --------------------------------------------------------------------------
   # Matrix job: pass path + blocking proof on ubuntu / macos / windows.

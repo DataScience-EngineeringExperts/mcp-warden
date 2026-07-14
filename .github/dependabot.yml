@@ -22,3 +22,8 @@ updates:
       - "ci"
     commit-message:
       prefix: "ci"
+    # Batch all github-actions bumps into a single PR to reduce CI churn.
+    groups:
+      github-actions:
+        patterns:
+          - "*"
