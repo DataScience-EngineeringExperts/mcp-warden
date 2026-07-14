@@ -31,6 +31,29 @@ CI. The v0.3 `guard` proxy adds deterministic runtime *result* inspection
 
 ### Added
 
+- **CI coverage / lint / CVE gates.** The `CI` workflow now enforces three new
+  standing gates: (1) a **coverage floor** — `pytest --cov=mcp_warden
+  --cov-fail-under=80` (whole-project coverage is ~86%; the floor is pinned below
+  actual so it can only rise). Subprocess coverage of `guard_list_gate.py` (which
+  only executes inside the guard child spawned by the strict-abort tests) is now
+  captured via `[tool.coverage.run] parallel = true` + `COVERAGE_PROCESS_START`,
+  taking it from a 0% visibility artifact to ~89%. (2) A **ruff lint gate**
+  (`ruff check .`) with config in `[tool.ruff]` (pyflakes/pycodestyle/isort/
+  bugbear; `line-length = 100`). (3) A **pip-audit CVE gate** in `deps-locked`
+  that audits the resolved dependency closure and fails closed on any advisory.
+- **Trust-root unit tests (`tests/test_signing_unit.py`).** 25 new tests drive
+  the internal `signing.py` sign/verify code paths directly (mocking the sigstore
+  boundary — no network, OIDC, or Fulcio/Rekor traffic), lifting `signing.py`
+  line coverage from 61% to 99%. Covers the sign path (ambient + explicit token),
+  the verify path (identity/issuer plumbing), and every fail-closed branch.
+
+### Changed
+
+- **Dependency refresh (security).** Bumped the hash-locked dev/CI closure:
+  `pydantic-settings` 2.14.1 → 2.14.2 (clears advisory **GHSA-4xgf-cpjx-pc3j**),
+  plus current minors of `mcp` (1.27.2 → 1.28.1), `cryptography` (→ 49.0.0),
+  `anyio` (4.13.0 → 4.14.2), and others. `pytest-cov` added to the `dev` extra.
+
 - **Runtime DNS resolution SSRF bypass detection (`WRD-RES-EXFIL-DNS-SSRF`)** (#11):
   the `guard` proxy now resolves URL hostnames from `tools/call` results at runtime
   and blocks (error-replace) when any resolved IP falls in a deny range

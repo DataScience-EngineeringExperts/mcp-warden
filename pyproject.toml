@@ -30,6 +30,7 @@ dependencies = [
 dev = [
     "pytest>=9.0.3",
     "pytest-asyncio>=0.23.0",
+    "pytest-cov>=6.0.0",
     "hypothesis>=6.100.0",
 ]
 # #16: Sigstore keyless signing + verification of warden.lock. OPT-IN — the base
@@ -55,7 +56,58 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/mcp_warden"]
 
+# --------------------------------------------------------------------------
+# Lint config (ruff). Modeled on conclave's config: pyflakes (F), pycodestyle
+# (E/W), isort (I) and bugbear (B). line-length owns E501 so we don't fight the
+# formatter over long lines; B008 is ignored because typer/FastAPI idiomatically
+# put `typer.Option(...)` / `Depends(...)` calls in argument defaults, which B008
+# flags as false positives.
+# --------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B"]
+ignore = ["E501", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests intentionally reach into private module internals (leading underscore
+# names) and re-bind them via monkeypatch; that is the whole point of the
+# trust-root wiring tests, so don't flag those imports/uses.
+"tests/**" = ["E402"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 filterwarnings = ["ignore::DeprecationWarning"]
+
+# --------------------------------------------------------------------------
+# Coverage config (issue: coverage + lint/CVE gates).
+#
+# parallel = true so the guard child spawned via tests/fixtures/
+# fault_guard_launcher.py (a real subprocess — see test_guard_strict.py) is
+# measured too. That subprocess inherits COVERAGE_PROCESS_START from the parent
+# env and the coverage .pth hook starts a second data file; `coverage combine`
+# (run by pytest-cov automatically) merges them. Without this, guard_list_gate.py
+# reports 0% purely as a visibility artifact — it only ever runs in-subprocess.
+#
+# CI sets COVERAGE_PROCESS_START=pyproject.toml before pytest so the .pth hook
+# fires in child processes; see .github/workflows/integrity-gate.yml.
+# --------------------------------------------------------------------------
+[tool.coverage.run]
+branch = false
+parallel = true
+source = ["mcp_warden"]
+
+[tool.coverage.report]
+show_missing = true
+# Exclude the guarded lines that are unreachable by design (the ImportError
+# graceful-degrade path is exercised only via monkeypatch, never a real absent
+# import) plus the standard pragma.
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+]

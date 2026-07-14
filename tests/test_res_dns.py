@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import socket
-from unittest.mock import patch
 
 from mcp_warden.res_dns import extract_dns_candidates, resolve_ssrf_hits
-
 
 # ---------------------------------------------------------------------------
 # extract_dns_candidates

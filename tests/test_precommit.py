@@ -19,7 +19,6 @@ import builtins
 import inspect
 from pathlib import Path
 
-import pytest
 import yaml
 
 from mcp_warden import precommit

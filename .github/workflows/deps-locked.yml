@@ -103,3 +103,18 @@ jobs:
         run: |
           /tmp/locked/bin/python -m pip install --no-deps -e .
           /tmp/locked/bin/python -c "import mcp_warden; from mcp_warden import cli; import mcp, rfc8785, pydantic, typer, rich, yaml, anyio, pytest, hypothesis; print('OK: mcp_warden + hash-locked dev/CI closure import clean')"
+
+      # --------------------------------------------------------------------
+      # 4. CVE gate (pip-audit, fail-closed).
+      #    Audits the RESOLVED dependency closure against the PyPI/OSV advisory
+      #    databases and fails the job on ANY known advisory. A supply-chain
+      #    integrity tool must not ship its own vulnerable transitive deps — this
+      #    is the standing evidence that we don't. --skip-editable excludes the
+      #    editable mcp-warden-cli checkout itself (no published advisories for a
+      #    local source tree). Mirrors conclave's fail-closed pip-audit job.
+      # --------------------------------------------------------------------
+      - name: Install pip-audit (pinned)
+        run: /tmp/locked/bin/python -m pip install "pip-audit==2.9.0"
+
+      - name: CVE audit the locked closure (fail on any advisory)
+        run: /tmp/locked/bin/python -m pip_audit --skip-editable

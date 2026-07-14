@@ -18,7 +18,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import pytest
 import yaml
 
 ACTION_YML = Path(__file__).parent.parent / "action.yml"
@@ -104,7 +103,6 @@ def test_exit_code_propagation_step_exists() -> None:
     propagation_found = False
     for step in steps:
         run_block = step.get("run", "")
-        name = step.get("name", "")
         step_id = step.get("id", "")
         if (
             "exit" in run_block

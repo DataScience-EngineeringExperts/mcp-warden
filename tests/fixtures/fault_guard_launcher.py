@@ -54,8 +54,8 @@ def _install_fault(site: str) -> None:
 
         gl.evaluate_call = _make_raiser("evaluate_call")  # type: ignore[assignment]
     elif site == "diverges":
-        import mcp_warden.guard_result as gr
         import mcp_warden.guard_list_gate as glg
+        import mcp_warden.guard_result as gr
 
         raiser = _make_raiser("diverges_from_lock")
         glg.diverges_from_lock = raiser  # type: ignore[assignment]
