@@ -7,7 +7,7 @@
 # `mcp-warden` — install `mcp-warden-cli`, then run `mcp-warden ...`. See README
 # impostor warning + CHANGELOG.
 name = "mcp-warden-cli"
-version = "1.0.1"
+version = "1.1.0"
 description = "CI-first MCP supply-chain integrity gate: pin and verify the declared tool/resource/prompt surface of an MCP server, plus runtime tool-result inspection (guard/inspect)."
 readme = "README.md"
 requires-python = ">=3.11"
