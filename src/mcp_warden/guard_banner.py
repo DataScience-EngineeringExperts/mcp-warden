@@ -137,6 +137,14 @@ def _blocking_lines(cfg: GuardConfig) -> list[str]:
     if cfg.category_enabled("WRD-RES-INJECT-PHRASE"):
         # Opt-in only (--block-inject-phrase); when on it is a real BLOCK tier.
         active.append("  - injection-phrase block (WRD-RES-INJECT-PHRASE, opt-in)")
+    elif cfg.block_inject_phrases_subset:
+        # Per-phrase opt-in (--block-inject-phrase-only): only NAMED phrases block;
+        # all other fuzzy matches stay monitor-only. Report it so posture is honest.
+        n = len(cfg.block_inject_phrases_subset)
+        active.append(
+            f"  - injection-phrase block for {n} named phrase(s) "
+            "(WRD-RES-INJECT-PHRASE, --block-inject-phrase-only)"
+        )
     if cfg.list_changed_enabled():
         active.append("  - tools/list_changed drift gate (MCP-DRIFT, armed by --lock)")
     if cfg.policy_block_enabled():
@@ -155,11 +163,19 @@ def _monitor_lines(cfg: GuardConfig) -> list[str]:
     """The MONITOR-ONLY bucket — detect + log, never block."""
     lines = ["MONITOR-ONLY (detect + log, no block):"]
     if not cfg.category_enabled("WRD-RES-INJECT-PHRASE"):
-        # When NOT opted-in (or under audit-only) the fuzzy tier only logs.
-        lines.append(
-            "  - injection-phrase tier (WRD-RES-INJECT-PHRASE) — fuzzy; "
-            "logs matches, does NOT block (enable: --block-inject-phrase)"
-        )
+        if cfg.block_inject_phrases_subset and not cfg.audit_only:
+            # Per-phrase opt-in: the NAMED phrases block (listed above); every OTHER
+            # curated phrase in this tier still only logs.
+            lines.append(
+                "  - injection-phrase tier (WRD-RES-INJECT-PHRASE) — fuzzy; only the "
+                "named phrases block (--block-inject-phrase-only), all others log only"
+            )
+        else:
+            # When NOT opted-in (or under audit-only) the fuzzy tier only logs.
+            lines.append(
+                "  - injection-phrase tier (WRD-RES-INJECT-PHRASE) — fuzzy; "
+                "logs matches, does NOT block (enable: --block-inject-phrase)"
+            )
     lines.append(
         "  - uninspectable / non-tools/call / uncorrelated-id frames pass through "
         "uninspected (GUARD_PROXY.md §4.4)"

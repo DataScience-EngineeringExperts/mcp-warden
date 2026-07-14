@@ -31,6 +31,23 @@ CI. The v0.3 `guard` proxy adds deterministic runtime *result* inspection
 
 ### Added
 
+- **Injection-phrase FP-instrumentation (Refs #12).** Shippable, non-default-changing
+  groundwork for eventually promoting `WRD-RES-INJECT-PHRASE` to default-block once field
+  false-positive (FP) data justifies it. **No default posture changed** — the fuzzy tier
+  stays monitor-only, and `WRD-RES-INJECT-PHRASE` keeps its tier, its default action, and its
+  place in the error-replacement set. Added: (1) a discrete **`matched_phrases`** array on the
+  finding record (JSONL) + **`matchedPhrases`** SARIF property, so per-phrase aggregation reads
+  a structured field instead of parsing `message`; (2) a **`run-summary`** JSONL record + SARIF
+  run property carrying **`frames_inspected`** — the base-rate denominator for a per-phrase FP
+  rate — plus `inject_phrase_findings`; (3) **`--block-inject-phrase-only <file>`**, a
+  default-off, per-phrase opt-in that blocks ONLY the named exact phrases while every other
+  curated phrase stays monitor (narrower than `--block-inject-phrase`; the future
+  deterministic-subset promotion mechanism); (4) an operator **record → inspect → label**
+  FP-collection workflow in `docs/RESULT_INSPECTION.md` §10. **Security:** the telemetry
+  surface emits only the curated denylist phrase, rule id, metadata, action, and counts —
+  **never raw result content** (which can carry secrets/PII); all aggregation is local-only,
+  no phone-home. Issue #12 stays **open** (the default-block flip remains gated on the FP data
+  this instrumentation collects).
 - **CI coverage / lint / CVE gates.** The `CI` workflow now enforces three new
   standing gates: (1) a **coverage floor** — `pytest --cov=mcp_warden
   --cov-fail-under=80` (whole-project coverage is ~86%; the floor is pinned below

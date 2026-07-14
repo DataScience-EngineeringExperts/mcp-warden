@@ -68,6 +68,12 @@ class ResultFinding:
         direction: ``s2c|c2s`` (set by the runner).
         rpc_id: The JSON-RPC id of the frame (set by the runner).
         tool: The tool name (set by the runner).
+        matched_phrases: For ``WRD-RES-INJECT-PHRASE`` only — the curated denylist
+            phrases that matched, as a discrete tuple (empty for every other rule).
+            These come from our OWN ``SEED_INJECT_PHRASES`` / org denylist, NEVER
+            from raw result content, so they are safe to emit into telemetry. They
+            make per-phrase FP aggregation possible without parsing the free-text
+            ``message`` (issue #12 FP-instrumentation).
     """
 
     rule_id: str
@@ -81,6 +87,7 @@ class ResultFinding:
     direction: str = "s2c"
     rpc_id: Any = None
     tool: str = ""
+    matched_phrases: tuple[str, ...] = ()
 
     @property
     def level(self) -> str:

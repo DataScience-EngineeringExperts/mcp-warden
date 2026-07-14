@@ -15,7 +15,12 @@ from rich.console import Console
 from rich.table import Table
 
 from . import res_rules
-from .emit_res import build_result_sarif, result_findings_to_jsonl, result_sarif_to_json
+from .emit_res import (
+    build_result_sarif,
+    result_findings_to_jsonl,
+    result_sarif_to_json,
+    run_summary_to_dict,
+)
 from .guard import run_guard
 from .guard_banner import render_posture_banner
 from .guard_lifecycle import (
@@ -90,6 +95,17 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         no_block_policy: bool = typer.Option(False, "--no-block-policy", help="Demote argument-policy deny to shadow"),
         no_block_deterministic: bool = typer.Option(False, "--no-block-deterministic", help="Demote the WHOLE deterministic tier + both gates"),
         block_inject_phrase: bool = typer.Option(False, "--block-inject-phrase", help="Opt-in block for WRD-RES-INJECT-PHRASE (fuzzy)"),
+        block_inject_phrase_only: Optional[Path] = typer.Option(
+            None,
+            "--block-inject-phrase-only",
+            help=(
+                "Block ONLY these exact injection phrases (one per line; '#' comments); "
+                "every other curated phrase stays monitor-only. Narrower than "
+                "--block-inject-phrase (which promotes the whole fuzzy tier). Does NOT "
+                "change the rule's tier or default. If --block-inject-phrase is also set, "
+                "block-all wins."
+            ),
+        ),
         block_ansi: bool = typer.Option(False, "--block-ansi", help="DEPRECATED no-op (now default-on)", hidden=True),
         block_secret_echo: bool = typer.Option(False, "--block-secret-echo", help="DEPRECATED no-op", hidden=True),
         block_exfil_domain: bool = typer.Option(False, "--block-exfil-domain", help="DEPRECATED no-op", hidden=True),
@@ -182,6 +198,9 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             no_block_list_changed=no_block_list_changed or no_block_deterministic,
             no_block_policy=no_block_policy or no_block_deterministic,
             block_inject_phrase=block_inject_phrase,
+            block_inject_phrases_subset=frozenset(
+                res_rules.normalize_phrase_text(p) for p in _load_line_list(block_inject_phrase_only)
+            ),
             armed_list_changed=lock is not None,
             armed_policy=policy_file is not None,
             redact_secret_echo=redact_secret_echo,
@@ -216,6 +235,10 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
 
         findings_sink: list = []
         record_lines: list[str] = []
+        summary_box = {"frames_inspected": 0}
+
+        def _on_summary(n: int) -> None:
+            summary_box["frames_inspected"] = n
 
         def _on_finding(f) -> None:
             findings_sink.append(f)
@@ -241,14 +264,23 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             inject_phrases=phrases,
             on_finding=_on_finding,
             record=_record if record is not None else None,
+            on_summary=_on_summary,
         )
 
+        frames_inspected = summary_box["frames_inspected"]
+        inject_findings = sum(1 for f in findings_sink if f.rule_id == "WRD-RES-INJECT-PHRASE")
+        summary = run_summary_to_dict(
+            frames_inspected=frames_inspected, inject_phrase_findings=inject_findings
+        )
         if record is not None:
             record.write_text("\n".join(record_lines) + ("\n" if record_lines else ""), encoding="utf-8")
         if sarif is not None:
-            sarif.write_text(result_sarif_to_json(build_result_sarif(findings_sink)), encoding="utf-8")
+            sarif.write_text(
+                result_sarif_to_json(build_result_sarif(findings_sink, frames_inspected=frames_inspected)),
+                encoding="utf-8",
+            )
         if json_out is not None:
-            json_out.write_text(result_findings_to_jsonl(findings_sink), encoding="utf-8")
+            json_out.write_text(result_findings_to_jsonl(findings_sink, summary=summary), encoding="utf-8")
 
         raise typer.Exit(code=code)
 
@@ -274,16 +306,27 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         exfil = res_rules.SEED_EXFIL_DENYLIST + _load_line_list(exfil_denylist)
         phrases = res_rules.SEED_INJECT_PHRASES + _load_line_list(inject_phrases)
 
+        stats: dict = {}
         try:
-            findings = analyze_trace(trace, lock=lock_doc, exfil_denylist=exfil, inject_phrases=phrases)
+            findings = analyze_trace(
+                trace, lock=lock_doc, exfil_denylist=exfil, inject_phrases=phrases, stats=stats
+            )
         except TraceError as exc:
             err_console.print(f"[red]error:[/red] {exc}")
             raise typer.Exit(code=2) from exc
 
+        frames_inspected = stats.get("frames_inspected", 0)
+        inject_findings = sum(1 for f in findings if f.rule_id == "WRD-RES-INJECT-PHRASE")
+        summary = run_summary_to_dict(
+            frames_inspected=frames_inspected, inject_phrase_findings=inject_findings
+        )
         if sarif is not None:
-            sarif.write_text(result_sarif_to_json(build_result_sarif(findings)), encoding="utf-8")
+            sarif.write_text(
+                result_sarif_to_json(build_result_sarif(findings, frames_inspected=frames_inspected)),
+                encoding="utf-8",
+            )
         if json_out is not None:
-            json_out.write_text(result_findings_to_jsonl(findings), encoding="utf-8")
+            json_out.write_text(result_findings_to_jsonl(findings, summary=summary), encoding="utf-8")
         else:
             _print_result_findings(console, findings)
 
