@@ -29,6 +29,8 @@ CI. The v0.3 `guard` proxy adds deterministic runtime *result* inspection
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-07-14
+
 ### Added
 
 - **Injection-phrase FP-instrumentation (Refs #12).** Shippable, non-default-changing
@@ -186,6 +188,7 @@ v1-strong foundation. Highlights of the 0.3.0 → 1.0.0 arc:
   declared surface, RFC 8785 (JCS) + SHA-256 canonicalization, SARIF output, and a live
   integrity-gate workflow with committed `clean.warden.lock`.
 
-[Unreleased]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/DataScience-EngineeringExperts/mcp-warden/releases/tag/v1.0.0
