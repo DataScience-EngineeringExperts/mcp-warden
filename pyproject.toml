@@ -42,11 +42,11 @@ mcp-warden = "mcp_warden.cli:app"
 mcp-warden-precommit = "mcp_warden.precommit:main"
 
 [project.urls]
-Homepage = "https://github.com/ernestprovo23/mcp-warden"
-Repository = "https://github.com/ernestprovo23/mcp-warden"
-Documentation = "https://ernestprovo23.github.io/mcp-warden/"
-Changelog = "https://github.com/ernestprovo23/mcp-warden/blob/main/CHANGELOG.md"
-Issues = "https://github.com/ernestprovo23/mcp-warden/issues"
+Homepage = "https://github.com/DataScience-EngineeringExperts/mcp-warden"
+Repository = "https://github.com/DataScience-EngineeringExperts/mcp-warden"
+Documentation = "https://datascience-engineeringexperts.github.io/mcp-warden/"
+Changelog = "https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/CHANGELOG.md"
+Issues = "https://github.com/DataScience-EngineeringExperts/mcp-warden/issues"
 
 [build-system]
 requires = ["hatchling"]

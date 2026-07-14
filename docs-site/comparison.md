@@ -89,7 +89,7 @@ Each tool above is good at its own job; pick the layers you need and combine the
     classify new definitions (use a scanner), does **not** mediate runtime traffic
     as its core job (use a gateway), and makes **no compliance or regulatory
     claim**. Read the limits in the
-    [threat model](https://github.com/ernestprovo23/mcp-warden/blob/main/docs/THREAT_MODEL.md).
+    [threat model](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/docs/THREAT_MODEL.md).
 
 ---
 

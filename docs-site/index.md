@@ -31,4 +31,4 @@ definitions, alert on drift* — mcp-warden is the deterministic tool that does 
     `resources/list` / `prompts/list`; it does **not** defend against behavioral
     attacks at runtime and makes **no compliance or regulatory claim** of any
     kind. Read the limits first in the
-    [threat model](https://github.com/ernestprovo23/mcp-warden/blob/main/docs/THREAT_MODEL.md).
+    [threat model](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/docs/THREAT_MODEL.md).

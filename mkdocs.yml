@@ -2,9 +2,9 @@ site_name: mcp-warden
 site_description: >-
   Task-focused guides for pinning an MCP server's declared tool/resource/prompt
   surface into a signed lock and failing CI when that surface drifts.
-site_url: https://ernestprovo23.github.io/mcp-warden/
-repo_url: https://github.com/ernestprovo23/mcp-warden
-repo_name: ernestprovo23/mcp-warden
+site_url: https://datascience-engineeringexperts.github.io/mcp-warden/
+repo_url: https://github.com/DataScience-EngineeringExperts/mcp-warden
+repo_name: DataScience-EngineeringExperts/mcp-warden
 edit_uri: edit/main/docs-site/
 docs_dir: docs-site
 
@@ -69,5 +69,5 @@ nav:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/ernestprovo23/mcp-warden
+      link: https://github.com/DataScience-EngineeringExperts/mcp-warden
       name: mcp-warden on GitHub

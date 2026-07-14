@@ -16,7 +16,7 @@ preferred because it keeps the report, the fix, and the CVE in one place):
 
 1. **GitHub Security Advisories** — go to the repository's **Security** tab and
    click **"Report a vulnerability"**
-   (<https://github.com/ernestprovo23/mcp-warden/security/advisories/new>). This
+   (<https://github.com/DataScience-EngineeringExperts/mcp-warden/security/advisories/new>). This
    opens a private advisory visible only to you and the maintainers.
 2. **Email** — `ernest@thedataexperts.us`. Use a clear subject line such as
    `[mcp-warden security]`. If you want to encrypt, say so in a first plaintext

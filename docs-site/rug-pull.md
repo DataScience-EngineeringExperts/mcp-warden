@@ -64,4 +64,4 @@ changes each surface as their own finding with a severity. See the
     It does **not** defend behavioral / runtime attacks, does **not** classify a
     new surface as safe or malicious, and makes **no compliance or regulatory
     claim**. Read the limits in the
-    [threat model](https://github.com/ernestprovo23/mcp-warden/blob/main/docs/THREAT_MODEL.md).
+    [threat model](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/docs/THREAT_MODEL.md).

@@ -17,7 +17,7 @@ describe and visualize the implementation that satisfies that contract.
 ## GitHub Action (`action.yml` — Issue #18)
 
 The composite reusable action is the primary delivery vehicle for the `check` gate.
-Consumers pin `ernestprovo23/mcp-warden@<tag>` and get a zero-copy-paste integrity
+Consumers pin `DataScience-EngineeringExperts/mcp-warden@<tag>` and get a zero-copy-paste integrity
 gate with hash-locked supply-chain, SARIF upload, and cross-OS support.
 
 | Artifact | Purpose |

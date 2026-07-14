@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: warden
-        uses: ernestprovo23/mcp-warden@v0
+        uses: DataScience-EngineeringExperts/mcp-warden@v0
         with:
           server-cmd: "node ./build/index.js"
           lock: "warden.lock"

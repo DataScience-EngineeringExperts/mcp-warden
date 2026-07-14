@@ -1,10 +1,10 @@
 # mcp-warden
 
-[![CI](https://github.com/ernestprovo23/mcp-warden/actions/workflows/integrity-gate.yml/badge.svg)](https://github.com/ernestprovo23/mcp-warden/actions/workflows/integrity-gate.yml)
+[![CI](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml/badge.svg)](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
-[![GitHub Action](https://img.shields.io/badge/GitHub%20Action-mcp--warden-2088FF?logo=githubactions&logoColor=white)](https://github.com/ernestprovo23/mcp-warden/blob/main/action.yml)
-[![Latest release](https://img.shields.io/github/v/release/ernestprovo23/mcp-warden?display_name=tag&sort=semver)](https://github.com/ernestprovo23/mcp-warden/releases)
+[![GitHub Action](https://img.shields.io/badge/GitHub%20Action-mcp--warden-2088FF?logo=githubactions&logoColor=white)](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/action.yml)
+[![Latest release](https://img.shields.io/github/v/release/DataScience-EngineeringExperts/mcp-warden?display_name=tag&sort=semver)](https://github.com/DataScience-EngineeringExperts/mcp-warden/releases)
 
 **mcp-warden is the lockfile and CI gate for stdio-transport MCP servers: it pins
 an MCP server's declared tool/resource/prompt surface into a signed `warden.lock`,
@@ -79,7 +79,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ernestprovo23/mcp-warden@v0
+      - uses: DataScience-EngineeringExperts/mcp-warden@v0
         with:
           server-cmd: "node ./build/index.js"
           lock: "warden.lock"
@@ -107,7 +107,7 @@ mcp-warden does not replace a scanner or a gateway — it adds the missing **dri
 gate**: a signed baseline plus a deterministic CI check that the surface you
 approved is the surface you still run. For the full, sourced breakdown of how
 these layers complement each other and when to use which, see the
-[**comparison page**](https://ernestprovo23.github.io/mcp-warden/comparison/)
+[**comparison page**](https://datascience-engineeringexperts.github.io/mcp-warden/comparison/)
 on the docs site.
 
 ---
@@ -221,7 +221,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ernestprovo23/mcp-warden@v0
+      - uses: DataScience-EngineeringExperts/mcp-warden@v0
         with:
           server-cmd: "node ./build/index.js"
           lock: "warden.lock"
@@ -324,7 +324,7 @@ Add this to your `.pre-commit-config.yaml` (a complete, copy-pasteable example):
 
 ```yaml
 repos:
-  - repo: https://github.com/ernestprovo23/mcp-warden
+  - repo: https://github.com/DataScience-EngineeringExperts/mcp-warden
     rev: v1.0.1                       # pin to a release tag (supply-chain hygiene)
     hooks:
       - id: mcp-warden-check

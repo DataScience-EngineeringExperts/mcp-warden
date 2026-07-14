@@ -4,7 +4,7 @@
 # !!! NEVER RENAME OR MOVE THIS FILE !!!
 #
 # The committed offline fixture's signer identity is PINNED to this exact path:
-#     https://github.com/ernestprovo23/mcp-warden/.github/workflows/sigstore-fixture.yml@refs/heads/main
+#     https://github.com/DataScience-EngineeringExperts/mcp-warden/.github/workflows/sigstore-fixture.yml@refs/heads/main
 # (issuer https://token.actions.githubusercontent.com). The offline-fixture test
 # (tests/test_signing.py::test_offline_fixture_verifies_when_present) and
 # docs/SIGNING.md both hard-code this path. Renaming/moving this file changes the
@@ -63,7 +63,7 @@ jobs:
             --lock fixture-out/warden.lock \
             --verify \
             --certificate-identity \
-              "https://github.com/ernestprovo23/mcp-warden/.github/workflows/sigstore-fixture.yml@${GITHUB_REF}" \
+              "https://github.com/DataScience-EngineeringExperts/mcp-warden/.github/workflows/sigstore-fixture.yml@${GITHUB_REF}" \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com"
 
       - name: Upload signed fixture (lock + bundle)

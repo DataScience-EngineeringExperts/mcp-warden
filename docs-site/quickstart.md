@@ -72,7 +72,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ernestprovo23/mcp-warden@v0
+      - uses: DataScience-EngineeringExperts/mcp-warden@v0
         with:
           server-cmd: "node ./build/index.js"
           lock: "warden.lock"
@@ -95,4 +95,4 @@ the pin-once / check-on-PR pattern, see
     *contents* of tool descriptions for malicious wording (that is a scanner's
     job — see the [comparison](comparison.md)), and makes **no compliance or
     regulatory claim**. Read the limits in the
-    [threat model](https://github.com/ernestprovo23/mcp-warden/blob/main/docs/THREAT_MODEL.md).
+    [threat model](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/docs/THREAT_MODEL.md).

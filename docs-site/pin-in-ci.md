@@ -40,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: ernestprovo23/mcp-warden@v0
+      - uses: DataScience-EngineeringExperts/mcp-warden@v0
         with:
           server-cmd: "node ./build/index.js"
           lock: "warden.lock"
@@ -75,13 +75,13 @@ without GitHub Advanced Security.
 
 These live in the repository and are re-validated by CI on every change:
 
-- [pin-on-merge + check-on-PR](https://github.com/ernestprovo23/mcp-warden/blob/main/examples/github-actions/pin-on-merge-check-on-pr.yml)
+- [pin-on-merge + check-on-PR](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/examples/github-actions/pin-on-merge-check-on-pr.yml)
   — check on every PR, plus a manual re-pin job.
-- [matrix over multiple servers](https://github.com/ernestprovo23/mcp-warden/blob/main/examples/github-actions/matrix-multiple-servers.yml)
+- [matrix over multiple servers](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/examples/github-actions/matrix-multiple-servers.yml)
   — one gate fanned out across several servers.
-- [SARIF upload to code scanning](https://github.com/ernestprovo23/mcp-warden/blob/main/examples/github-actions/sarif-upload.yml)
+- [SARIF upload to code scanning](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/examples/github-actions/sarif-upload.yml)
   — the default mode.
-- [private repo, no SARIF upload](https://github.com/ernestprovo23/mcp-warden/blob/main/examples/github-actions/private-repo-no-sarif.yml)
+- [private repo, no SARIF upload](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/examples/github-actions/private-repo-no-sarif.yml)
   — `upload-sarif: false` for private repos / fork PRs.
 
 ## GitLab CI
@@ -106,7 +106,7 @@ mcp-integrity:
 
 A complete, runnable GitLab template is in the repository:
 
-- [`examples/gitlab-ci/.gitlab-ci.yml`](https://github.com/ernestprovo23/mcp-warden/blob/main/examples/gitlab-ci/.gitlab-ci.yml)
+- [`examples/gitlab-ci/.gitlab-ci.yml`](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/examples/gitlab-ci/.gitlab-ci.yml)
 
 ## Run it locally too (pre-commit)
 
@@ -114,18 +114,18 @@ To catch a rug pull before it ever reaches CI, run the *same* drift verdict on
 every commit with the [pre-commit](https://pre-commit.com) hook. A complete,
 copy-pasteable config (and a pre-push variant) is in the repository:
 
-- [`examples/pre-commit/.pre-commit-config.yaml`](https://github.com/ernestprovo23/mcp-warden/blob/main/examples/pre-commit/.pre-commit-config.yaml)
+- [`examples/pre-commit/.pre-commit-config.yaml`](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/examples/pre-commit/.pre-commit-config.yaml)
 
 ## Worked examples: real pinned servers
 
 The repository ships real, openly-available MCP servers pinned to a committed
 `warden.lock` each, re-checked by CI so they never go stale:
 
-- [`examples/pinned-servers/`](https://github.com/ernestprovo23/mcp-warden/tree/main/examples/pinned-servers)
+- [`examples/pinned-servers/`](https://github.com/DataScience-EngineeringExperts/mcp-warden/tree/main/examples/pinned-servers)
   — `server-everything`, `server-memory`, and `server-sequential-thinking`, each
   with the exact `pin` argv and a sample `check`.
 
-See the [examples index](https://github.com/ernestprovo23/mcp-warden/blob/main/examples/README.md)
+See the [examples index](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/examples/README.md)
 for the full gallery.
 
 !!! warning "What this does NOT cover"
@@ -134,4 +134,4 @@ for the full gallery.
     classify a new surface as malicious (pair it with a scanner — see the
     [comparison](comparison.md)), and makes **no compliance or regulatory
     claim**. Read the limits in the
-    [threat model](https://github.com/ernestprovo23/mcp-warden/blob/main/docs/THREAT_MODEL.md).
+    [threat model](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/docs/THREAT_MODEL.md).

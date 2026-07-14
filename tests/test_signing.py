@@ -587,7 +587,7 @@ SIGNED_FIXTURE_LOCK = SIGNED_FIXTURE_DIR / "warden.lock"
 #: workflow path. NEVER rename .github/workflows/sigstore-fixture.yml or this
 #: identity breaks (see docs/SIGNING.md).
 FIXTURE_IDENTITY = (
-    "https://github.com/ernestprovo23/mcp-warden/"
+    "https://github.com/DataScience-EngineeringExperts/mcp-warden/"
     ".github/workflows/sigstore-fixture.yml@refs/heads/main"
 )
 FIXTURE_ISSUER = "https://token.actions.githubusercontent.com"
