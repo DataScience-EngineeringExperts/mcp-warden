@@ -37,7 +37,11 @@ from .guard_lifecycle import (
     win32_release_child,
 )
 from .guard_loop import GuardConfig, GuardState, handle_c2s, handle_s2c
-from .guard_strict import GUARD_STRICT_EXIT, _find_strict_abort, _handle_strict_abort
+from .guard_strict import (
+    GUARD_STRICT_EXIT,  # noqa: F401 — re-exported; tests import guard.GUARD_STRICT_EXIT
+    _find_strict_abort,
+    _handle_strict_abort,
+)
 
 logger = logging.getLogger("mcp_warden.guard")
 

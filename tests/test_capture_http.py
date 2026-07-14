@@ -8,7 +8,6 @@ constructs CapturedSurface with url set.
 from __future__ import annotations
 
 import contextlib
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -19,7 +18,6 @@ from mcp_warden.capture import (
     capture_surface_http_sync,
 )
 from mcp_warden.models import CapturedSurface
-
 
 # ---------------------------------------------------------------------------
 # Helpers

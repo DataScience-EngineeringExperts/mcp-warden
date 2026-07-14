@@ -18,8 +18,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 REPO = Path(__file__).resolve().parent.parent
 POISON = str(REPO / "tests" / "fixtures" / "poison_server.py")
 PY = sys.executable

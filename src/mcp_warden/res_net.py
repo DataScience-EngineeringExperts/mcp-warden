@@ -11,7 +11,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from .net_rules import SSRF_NETWORKS, parse_ip
+from .net_rules import (  # noqa: F401 — SSRF_NETWORKS re-exported via res_rules
+    SSRF_NETWORKS,
+    parse_ip,
+)
 
 #: Seed exfil denylist (RESULT_INSPECTION.md §3.3). Org-extensible at runtime.
 SEED_EXFIL_DENYLIST: tuple[str, ...] = (

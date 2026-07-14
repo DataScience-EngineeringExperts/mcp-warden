@@ -31,9 +31,9 @@ from .models import WardenLock
 from .provenance import make_sigstore_pointer_attestation
 from .signing import (
     VerificationError,
+    build_statement,
     bundle_from_json,
     bundle_to_json,
-    build_statement,
     sign_statement,
     verify_statement,
 )

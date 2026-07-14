@@ -13,7 +13,6 @@ from __future__ import annotations
 from hypothesis import assume, example, given
 from hypothesis import strategies as st
 
-from mcp_warden import res_net
 from mcp_warden.res_net import (
     SEED_EXFIL_DENYLIST,
     SEED_EXFIL_PATH_QUALIFIED,

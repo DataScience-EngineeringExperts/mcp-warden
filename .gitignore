@@ -19,7 +19,14 @@ site/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.hypothesis/
 uv.lock
+
+# Coverage data (parallel data files + combined)
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 
 # OS
 .DS_Store

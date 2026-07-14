@@ -37,11 +37,24 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install package + dev deps
-        run: pip install -e ".[dev]"
+      # Install the sigstore extra too so the trust-root suite (test_signing*.py)
+      # exercises signing.py fully and the coverage number is reproducible run to
+      # run — without it the version-probe branches skip and coverage drifts.
+      - name: Install package + dev deps (with sigstore extra)
+        run: pip install -e ".[dev,sigstore]"
 
-      - name: Run pytest
-        run: pytest -q
+      # Coverage floor gate. --cov-fail-under=80 pins the whole-project floor
+      # below the current ~86% actual so it can only rise, never silently
+      # regress. COVERAGE_PROCESS_START makes the coverage .pth hook fire inside
+      # the guard child that tests/fixtures/fault_guard_launcher.py spawns as a
+      # real subprocess (see [tool.coverage.run] parallel=true in pyproject.toml),
+      # so guard_list_gate.py — which only ever executes in-subprocess — is
+      # measured instead of reporting a 0% visibility artifact. pytest-cov
+      # combines the parallel data files automatically.
+      - name: Run pytest with coverage (floor 80%)
+        env:
+          COVERAGE_PROCESS_START: pyproject.toml
+        run: pytest -q --cov=mcp_warden --cov-report=term-missing --cov-fail-under=80
 
       # Re-run the property-fuzz suite deterministically with a FIXED hypothesis
       # seed so any counterexample is replayable from the workflow log alone
@@ -52,6 +65,36 @@ jobs:
       # from the unseeded local pytest run.)
       - name: Run property-fuzz suite (deterministic, seed=0)
         run: pytest tests/fuzz -p no:randomly --hypothesis-seed=0
+
+  # --------------------------------------------------------------------------
+  # Job 1b: lint gate (ruff)
+  #
+  # ruff is the fast lint gate: pyflakes (F, dead imports/vars), pycodestyle
+  # (E/W), isort (I, import order) and bugbear (B, common bug patterns). Config
+  # lives in [tool.ruff] in pyproject.toml (line-length=100; E501 + the typer
+  # B008 default-call idiom are ignored). A single real violation fails CI.
+  # --------------------------------------------------------------------------
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # Pinned ruff — this is the supply-chain tool's own CI, so the linter is
+      # version-pinned too (bump deliberately, never float).
+      - name: Install ruff (pinned)
+        run: pip install "ruff==0.15.21"
+
+      - name: Ruff lint check
+        run: ruff check .
 
   # --------------------------------------------------------------------------
   # Job 2: MCP integrity gate demo

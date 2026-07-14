@@ -88,7 +88,7 @@ class StrictClient:
         except subprocess.TimeoutExpired:
             self.proc.kill()
             _out, err = self.proc.communicate()
-            raise AssertionError("guard hung; killed")
+            raise AssertionError("guard hung; killed") from None
         return self.proc.returncode, err.decode(errors="replace")
 
 
@@ -562,7 +562,7 @@ class FrameCapClient:
         except subprocess.TimeoutExpired:
             self.proc.kill()
             self.proc.communicate()
-            raise AssertionError("guard hung; killed")
+            raise AssertionError("guard hung; killed") from None
         return self.proc.returncode, err.decode(errors="replace")
 
 

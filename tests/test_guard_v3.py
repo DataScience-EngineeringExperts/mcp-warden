@@ -20,8 +20,6 @@ import sys
 import time
 from pathlib import Path
 
-import pytest
-
 REPO = Path(__file__).resolve().parent.parent
 FIX = REPO / "tests" / "fixtures"
 POISON = str(FIX / "poison_server.py")

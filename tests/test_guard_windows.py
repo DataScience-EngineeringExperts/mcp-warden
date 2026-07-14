@@ -33,7 +33,6 @@ from mcp_warden.guard_lifecycle import (
     win32_release_child,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -191,7 +190,8 @@ def test_register_child_noop_on_non_windows(monkeypatch):
 def test_release_child_pops_entry_and_closes_handle(monkeypatch):
     monkeypatch.setattr(lifecycle, "_IS_WINDOWS", True)
     _WIN_JOBS[77] = 9999
-    k = MagicMock(); k.CloseHandle.return_value = 1
+    k = MagicMock()
+    k.CloseHandle.return_value = 1
     with _windll_patch(k):
         win32_release_child(77)
     assert 77 not in _WIN_JOBS

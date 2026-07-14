@@ -34,7 +34,6 @@ from mcp_warden.guard_lifecycle import (
     platform_refusal_message,
 )
 
-
 # --- exit-code matrix invariant ------------------------------------------------
 
 
