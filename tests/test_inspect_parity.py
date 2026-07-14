@@ -53,11 +53,17 @@ def _run_inspect(trace: Path, tmp_path: Path, *extra: str) -> tuple[int, list[di
 
 
 def _result_keys(findings: list[dict]) -> set[tuple]:
-    """The comparable (rule_id, tool, direction) set, restricted to result rules."""
+    """The comparable (rule_id, tool, direction) set, restricted to result rules.
+
+    Skips the additive ``run-summary`` record (issue #12), which carries counts
+    (no ``rule_id``) rather than a finding.
+    """
     return {
         (f["rule_id"], f["tool"], f["direction"])
         for f in findings
-        if f["rule_id"].startswith("WRD-RES-") and f["rule_id"] != "WRD-RES-FRAME-ERROR"
+        if f.get("kind") == "result-finding"
+        and f["rule_id"].startswith("WRD-RES-")
+        and f["rule_id"] != "WRD-RES-FRAME-ERROR"
     }
 
 
@@ -82,7 +88,7 @@ def test_inspect_exit_nonzero_on_block_tier(tmp_path):
     trace, _sink = _run_recording_session(tmp_path)
     code, findings = _run_inspect(trace, tmp_path)
     # ANSI/SECRET-ECHO/EXFIL are BLOCK-tier and present -> non-zero exit (CI-usable).
-    assert any(f["tier"] == "block" for f in findings)
+    assert any(f.get("tier") == "block" for f in findings)
     assert code != 0
 
 

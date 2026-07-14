@@ -89,7 +89,9 @@ class GuardClient:
 def _findings(json_path: Path) -> list[dict]:
     if not json_path.exists():
         return []
-    return [json.loads(ln) for ln in json_path.read_text().splitlines() if ln.strip()]
+    recs = [json.loads(ln) for ln in json_path.read_text().splitlines() if ln.strip()]
+    # Exclude the additive run-summary record (issue #12) — it carries counts, not a finding.
+    return [r for r in recs if r.get("kind") == "result-finding"]
 
 
 # --- opt-out demotes to shadow (still detected/logged, frame forwarded) --------
@@ -426,3 +428,69 @@ def _find_descendant_pid(parent_pid: int) -> int | None:
         return None
     pids = [int(x) for x in out.split() if x.strip().isdigit()]
     return pids[0] if pids else None
+
+
+# --- issue #12: per-phrase opt-in block (--block-inject-phrase-only) -----------
+
+
+def test_block_inject_phrase_only_blocks_named_phrase(tmp_path):
+    """A named phrase present in a result IS blocked (error-replaced), even though
+    the fuzzy tier is NOT globally promoted. Default posture is unchanged; this is a
+    narrow, opt-in runtime control (does not touch the rule's tier/default)."""
+    sink = tmp_path / "f.jsonl"
+    subset = tmp_path / "block.txt"
+    subset.write_text("ignore previous instructions\n", encoding="utf-8")
+    client = GuardClient("--block-inject-phrase-only", str(subset), "--json", str(sink))
+    try:
+        client.initialize()
+        inject = client.call_and_get(2, "inject_tool")
+    finally:
+        code = client.close()
+    # inject_tool's result contains the named phrase -> error-replacement (-32001).
+    assert "error" in inject and inject["error"]["code"] == -32001
+    assert inject["error"]["data"]["rule"] == "WRD-RES-INJECT-PHRASE"
+    fr = [f for f in _findings(sink) if f["rule_id"] == "WRD-RES-INJECT-PHRASE"]
+    assert fr and fr[0]["action"] == "blocked" and fr[0]["tier"] == "monitor"
+    assert fr[0]["matched_phrases"] == ["ignore previous instructions"]
+    assert code == 0
+
+
+def test_block_inject_phrase_only_leaves_unnamed_phrase_at_monitor(tmp_path):
+    """A NON-named phrase stays monitor-only (shadowed, forwarded) — proving the
+    control blocks only the operator's named phrase(s), not the whole tier."""
+    sink = tmp_path / "f.jsonl"
+    subset = tmp_path / "block.txt"
+    subset.write_text("you are now\n", encoding="utf-8")  # NOT in inject_tool's result
+    client = GuardClient("--block-inject-phrase-only", str(subset), "--json", str(sink))
+    try:
+        client.initialize()
+        inject = client.call_and_get(2, "inject_tool")
+    finally:
+        code = client.close()
+    # inject_tool matches 'ignore previous instructions' (not named) -> monitor.
+    assert "result" in inject and "error" not in inject
+    fr = [f for f in _findings(sink) if f["rule_id"] == "WRD-RES-INJECT-PHRASE"]
+    assert fr and fr[0]["action"] == "shadowed"
+    assert code == 0
+
+
+def test_run_summary_denominator_and_matched_phrases_in_guard_json(tmp_path):
+    """The guard --json stream carries (a) matched_phrases on the inject finding and
+    (b) a run-summary record with the frames-inspected base-rate denominator (#12)."""
+    sink = tmp_path / "f.jsonl"
+    client = GuardClient("--json", str(sink))
+    try:
+        client.initialize()
+        client.call_and_get(2, "inject_tool")
+        client.call_and_get(3, "clean_tool")
+        client.call_and_get(4, "ansi_tool")
+    finally:
+        code = client.close()
+    fr = [f for f in _findings(sink) if f["rule_id"] == "WRD-RES-INJECT-PHRASE"]
+    assert fr and fr[0]["matched_phrases"] == ["ignore previous instructions"]
+    recs = [json.loads(ln) for ln in sink.read_text().splitlines() if ln.strip()]
+    summary = [r for r in recs if r.get("kind") == "run-summary"]
+    assert summary, "guard --json must append a run-summary record"
+    assert summary[0]["frames_inspected"] >= 3  # inject + clean + ansi results
+    assert summary[0]["inject_phrase_findings"] >= 1
+    assert code == 0

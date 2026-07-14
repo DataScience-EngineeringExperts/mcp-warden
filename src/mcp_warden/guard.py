@@ -386,6 +386,7 @@ def run_guard(
     inject_phrases: tuple[str, ...] | None = None,
     on_finding: Callable | None = None,
     record: Callable | None = None,
+    on_summary: Callable[[int], None] | None = None,
 ) -> int:
     """Synchronous entry point for the CLI: build state and run the loop.
 
@@ -395,6 +396,9 @@ def run_guard(
         lock/policy: Optional loaded lock + policy.
         exfil_denylist/inject_phrases: Merged seed+org lists (defaults to seed).
         on_finding/record: Optional sinks.
+        on_summary: Optional callback invoked once, after the loop finishes, with
+            the count of inspected ``tools/call`` result frames (issue #12 base-rate
+            denominator). A plain integer — never any result content.
 
     Returns:
         The child's exit code.
@@ -410,4 +414,7 @@ def run_guard(
         on_finding=on_finding,
         record=record,
     )
-    return anyio.run(run_guard_async, command, args, state)
+    code = anyio.run(run_guard_async, command, args, state)
+    if on_summary is not None:
+        on_summary(state.frames_inspected)
+    return code

@@ -402,3 +402,71 @@ artifact. There is no way to relax a check at runtime without a lock edit.
    kill the session).
 10. **SARIF `ruleId` == the `WRD-RES-*` id verbatim; `level` per §8.** Severity→level
     mapping matches `CHECKS.md` §2 (critical/high→error, medium→warning, low→note).
+
+---
+
+## 10. Operator false-positive collection workflow (issue #12)
+
+`WRD-RES-INJECT-PHRASE` is **monitor-only by default and stays that way** (§4, §7). Promoting
+it to default-block is gated on **field false-positive (FP) data** that does not exist yet.
+This section is the record → inspect → label loop an operator runs to *produce* that data
+**with zero blocking risk**. It changes no default.
+
+**Security invariant (non-negotiable).** The FP-collection surface emits **only** the curated
+matched phrase (from our own `SEED_INJECT_PHRASES` / org denylist), the rule id, tool/server
+metadata, the action, and counts. **Raw result content is NEVER transmitted or written** — a
+tool result can carry secrets/PII (that is exactly what `WRD-RES-SECRET-ECHO` catches). All
+aggregation is **local-only** and there is **no phone-home**.
+
+### 10.1 The loop
+
+1. **Record** a live session with the fuzzy tier in pure monitor mode (the default — do NOT
+   pass `--block-inject-phrase`):
+
+   ```
+   mcp-warden guard --record trace.jsonl --json findings.jsonl <server-cmd...>
+   ```
+
+   `--record` captures the frames; `--json` writes the finding stream. Injection-phrase hits
+   are logged and **forwarded unblocked** (`action: shadowed`).
+
+2. **Inspect** the recorded trace offline (identical catalog, no live process, no blocking):
+
+   ```
+   mcp-warden inspect trace.jsonl --json inspected.jsonl
+   ```
+
+3. **Review** the `WRD-RES-INJECT-PHRASE` records. Each finding record carries a discrete
+   **`matched_phrases`** array (the curated phrase(s) that matched — never the surrounding
+   text), so you aggregate **per phrase** without parsing prose. The final **`run-summary`**
+   record (`kind: "run-summary"`) carries **`frames_inspected`** — the base-rate denominator —
+   and `inject_phrase_findings`. FP rate for a phrase = FP-labeled hits ÷ `frames_inspected`.
+
+4. **Label** each hit TP or FP locally (a hit is an FP when the phrase appeared in benign
+   content — documentation, a quoted example, a changelog — and was not an actual injection).
+   Because `matched_phrases` is structured, a one-line `jq` group-by yields per-phrase counts:
+
+   ```
+   jq -r 'select(.kind=="result-finding" and .rule_id=="WRD-RES-INJECT-PHRASE")
+          | .matched_phrases[]' inspected.jsonl | sort | uniq -c
+   ```
+
+### 10.2 Graduated promotion (per-phrase opt-in block)
+
+Once a specific phrase proves **deterministic-enough** (FP rate ≈ 0 across enough
+`frames_inspected`), a cautious operator can block **only that phrase** while every other
+curated phrase stays monitor-only:
+
+```
+mcp-warden guard --block-inject-phrase-only phrases.txt <server-cmd...>
+```
+
+`phrases.txt` is one exact phrase per line (`#` comments allowed). This is **narrower** than
+`--block-inject-phrase` (which promotes the whole fuzzy tier) and is **default-off**. It does
+**not** change the rule's tier, its default action, or its position in the error-replacement
+set — it is a runtime, opt-in narrowing keyed on the safe `matched_phrases` field. It is also
+the intended delivery mechanism for a future "deterministic-enough subset" promotion.
+
+> **Issue #12 remains the gate.** The default-block flip for `WRD-RES-INJECT-PHRASE` stays
+> **BLOCKED** until this field FP data justifies it. The instrumentation above ships the
+> evidence-collection path; it does **not** flip any default.

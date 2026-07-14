@@ -86,6 +86,7 @@ def analyze_trace(
     lock: Any = None,
     exfil_denylist: tuple[str, ...] | None = None,
     inject_phrases: tuple[str, ...] | None = None,
+    stats: dict[str, Any] | None = None,
 ) -> list[ResultFinding]:
     """Analyze a recorded trace and return stamped result findings.
 
@@ -96,6 +97,10 @@ def analyze_trace(
         path: The JSONL trace path.
         lock: Optional loaded lock (per-tool precision).
         exfil_denylist/inject_phrases: Merged seed+org lists (defaults to seed).
+        stats: Optional mutable dict; when supplied, ``stats["frames_inspected"]``
+            is set to the count of inspected ``tools/call`` result frames — the
+            base-rate denominator for a per-phrase FP rate (issue #12). A plain
+            count; carries no result content.
 
     Returns:
         The list of stamped :class:`ResultFinding` over the whole trace.
@@ -110,6 +115,7 @@ def analyze_trace(
     inflight: dict[Any, str] = {}  # id -> method, for tools/call correlation
     tool_by_id: dict[Any, str] = {}
     findings: list[ResultFinding] = []
+    frames_inspected = 0
 
     for rec in records:
         frame = rec["frame"]
@@ -130,6 +136,7 @@ def analyze_trace(
             continue
         tool = tool_by_id.get(rpc_id, "")
         pol = policy_for_tool(lock, tool)
+        frames_inspected += 1
         try:
             raw = inspect_result(result, tool, pol, exfil_denylist=exfil, inject_phrases=phrases)
         except Exception as exc:  # mirror guard's fail-open posture (§9)
@@ -149,8 +156,11 @@ def analyze_trace(
                     direction="s2c",
                     rpc_id=rpc_id,
                     tool=tool,
+                    matched_phrases=f.matched_phrases,
                 )
             )
+    if stats is not None:
+        stats["frames_inspected"] = frames_inspected
     return findings
 
 

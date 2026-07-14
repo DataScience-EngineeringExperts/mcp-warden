@@ -93,7 +93,9 @@ class GuardClient:
 def _findings(json_path: Path) -> list[dict]:
     if not json_path.exists():
         return []
-    return [json.loads(ln) for ln in json_path.read_text().splitlines() if ln.strip()]
+    recs = [json.loads(ln) for ln in json_path.read_text().splitlines() if ln.strip()]
+    # Exclude the additive run-summary record (issue #12) — it carries counts, not a finding.
+    return [r for r in recs if r.get("kind") == "result-finding"]
 
 
 def test_acceptance_audit_only_restores_shadow(tmp_path):

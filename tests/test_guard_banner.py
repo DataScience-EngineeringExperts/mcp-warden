@@ -335,3 +335,20 @@ def test_cli_banner_reflects_exfil_optout_end_to_end(monkeypatch):
     block = _blocking_section(result.output)
     assert _EXFIL not in block, "opt-out exfil tier leaked into the CLI banner BLOCKING bucket"
     assert _ANSI in block, "ANSI tier should still block end-to-end"
+
+
+def test_banner_block_inject_phrase_only_reports_named_block():
+    """--block-inject-phrase-only surfaces as a NAMED-phrase block in the BLOCKING
+    bucket (posture must be honest), while the BLOCK_RULES-equality invariant still
+    holds (INJECT-PHRASE is not a deterministic rule) — issue #12."""
+    cfg = GuardConfig(block_inject_phrases_subset=frozenset({"you are now"}))
+    banner = render_posture_banner(cfg)
+    block = _blocking_section(banner)
+    assert _INJECT in block and "named phrase" in block
+    assert "--block-inject-phrase-only" in block
+    # Deterministic-rule equality is unaffected (INJECT-PHRASE filtered out).
+    assert _blocking_block_rule_ids(banner) == {
+        rid for rid in result_inspection.BLOCK_RULES if cfg.category_enabled(rid)
+    }
+    # Non-named phrases are still described as monitor-only.
+    assert "all others log only" in banner

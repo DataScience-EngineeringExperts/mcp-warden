@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from . import wire_block
+from . import res_rules, wire_block
 from .framing import Frame, serialize_frame
 from .result_inspection import (
     TIER_BLOCK,
@@ -81,6 +81,10 @@ def handle_s2c(state, frame: Frame, mode: str) -> bytes:
     result = obj.get("result")
     if not isinstance(result, dict):
         return frame.raw
+    # Base-rate denominator (issue #12): count every tools/call result frame the
+    # catalog actually inspects, so a per-phrase FP rate has a denominator. Counted
+    # here (a real result about to be inspected), NOT for pass-through/list frames.
+    state.frames_inspected += 1
     # Inspection-before-write invariant (binding #2): inspect_result runs BEFORE
     # this response frame is forwarded to the client, so a strict abort here
     # cannot leave a partially-forwarded (un-inspected) frame on the wire.
@@ -246,8 +250,24 @@ def _apply_result_findings(
         return frame.raw
 
     block_findings = [f for f in findings if f.tier == TIER_BLOCK and state.config.category_enabled(f.rule_id)]
-    if state.config.block_inject_phrase and not state.config.audit_only:
-        block_findings += [f for f in findings if f.tier == TIER_MONITOR]
+    if not state.config.audit_only:
+        if state.config.block_inject_phrase:
+            # Whole fuzzy tier promoted to block (existing --block-inject-phrase).
+            block_findings += [f for f in findings if f.tier == TIER_MONITOR]
+        elif state.config.block_inject_phrases_subset:
+            # Per-phrase opt-in (issue #12): promote ONLY the INJECT-PHRASE findings
+            # whose matched curated phrase(s) are on the operator's named subset; all
+            # other fuzzy matches stay monitor-only. Does NOT change the rule's tier
+            # or default action — a runtime narrowing keyed on the safe, structured
+            # matched_phrases field (never raw result content).
+            subset = state.config.block_inject_phrases_subset
+            block_findings += [
+                f
+                for f in findings
+                if f.tier == TIER_MONITOR
+                and f.rule_id == "WRD-RES-INJECT-PHRASE"
+                and any(res_rules.normalize_phrase_text(p) in subset for p in f.matched_phrases)
+            ]
 
     error_rules = {"WRD-RES-EXFIL-DOMAIN", "WRD-RES-INJECT-PHRASE", "WRD-RES-EXFIL-DNS-SSRF"}
     if not state.config.redact_secret_echo:
@@ -297,5 +317,6 @@ def _stamp(state, f: ResultFinding, rpc_id: Any, tool: str, action: str) -> None
             direction="s2c",
             rpc_id=rpc_id,
             tool=tool or f.tool,
+            matched_phrases=f.matched_phrases,
         )
     )

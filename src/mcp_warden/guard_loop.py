@@ -90,6 +90,14 @@ class GuardConfig:
     no_block_list_changed: bool = False
     no_block_policy: bool = False
     block_inject_phrase: bool = False
+    #: Per-phrase opt-in block list (issue #12). A set of NORMALIZED injection
+    #: phrases (via :func:`res_rules.normalize_phrase_text`) that a cautious
+    #: operator wants to block on the wire while EVERY other curated phrase stays
+    #: monitor-only. Default-off (empty). Narrower than ``block_inject_phrase``
+    #: (which promotes the whole fuzzy tier); if BOTH are set, block-all wins.
+    #: This does NOT change the rule's tier, its default action, or its position
+    #: in ``guard_result.error_rules`` — it is a runtime, opt-in narrowing only.
+    block_inject_phrases_subset: frozenset[str] = frozenset()
     armed_list_changed: bool = False  # True iff --lock supplied
     armed_policy: bool = False  # True iff --policy supplied
     redact_secret_echo: bool = False
@@ -162,6 +170,11 @@ class GuardState:
     inject_phrases: tuple[str, ...] = res_rules.SEED_INJECT_PHRASES
     on_finding: Callable[[ResultFinding], None] | None = None
     record: Callable[[str, dict[str, Any]], None] | None = None
+    #: Count of ``tools/call`` result frames the catalog inspected this run — the
+    #: base-rate denominator for a per-phrase FP rate (issue #12). A plain integer
+    #: counter; carries no result content. Incremented once per inspected result
+    #: frame in :func:`~mcp_warden.guard_result.handle_s2c`.
+    frames_inspected: int = 0
     enforcing: bool = False  # flips True at first tools/call (§2.2)
     inflight: "OrderedDict[Any, str]" = field(default_factory=OrderedDict)
     #: id -> tool name for in-flight tools/call requests (for result correlation).

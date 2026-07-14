@@ -183,6 +183,10 @@ def inspect_inject(text: str, tool: str, idx: int, phrases: tuple[str, ...] | li
             tier=TIER_MONITOR,
             message=f"tools/{tool}: result matched curated injection phrase(s): {', '.join(hits)}",
             block_index=idx,
+            # Discrete, machine-readable copy of the matched curated phrases (safe:
+            # from our own denylist, never raw result text). Enables per-phrase FP
+            # aggregation without parsing `message` (issue #12).
+            matched_phrases=tuple(hits),
         )
     ]
 
