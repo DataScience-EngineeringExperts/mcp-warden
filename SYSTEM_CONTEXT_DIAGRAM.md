@@ -1,9 +1,11 @@
 # mcp-warden — System Context Diagram
 
-Where mcp-warden sits, what it talks to, and where its outputs go. The **v0.1** path
-(`pin`/`check`/`policy`) is a **read-only, definition-only** gate: it spawns the target
-MCP server over stdio, captures the *declared* surface, and writes a baseline + machine
-reports — no proxy, no runtime interception. The **v0.2** path added a transparent stdio
+Where mcp-warden sits, what it talks to, and where its outputs go. The **definition-only
+path introduced in v0.1** (`pin`/`check`/`policy`) is read-only: it captures the
+*declared* surface and writes a baseline + machine reports — no proxy, no runtime
+interception. **As of v1.1**, `pin` and `check` either spawn a target over stdio or
+connect to an already-running Streamable HTTP endpoint. The **v0.2** path added a
+transparent stdio
 **proxy** (`guard`) and an **offline analyzer** (`inspect`) that inspect tool *results*
 at runtime; see C3 below. **v0.3** promotes the deterministic tier to **block by default**
 (opt-OUT per category via `--no-block-<category>`; `--audit-only` restores full shadow) and
@@ -59,7 +61,7 @@ flowchart TB
     end
 
     subgraph target["Untrusted boundary"]
-        server["Target MCP server\n(spawned as argv array,\nNEVER via a shell)"]
+        server["Target MCP server\nstdio child (argv, no shell) OR\nalready-running Streamable HTTP endpoint"]
     end
 
     repo[("warden.lock\ncommitted baseline\n(root of trust)")]
@@ -68,8 +70,8 @@ flowchart TB
 
     specs -. "implemented by" .-> warden
 
-    warden -- "1. spawn + initialize\n+ tools/list / resources/list\n/ prompts/list  (stdio)" --> server
-    server -- "2. declared surface\n(definitions only)" --> warden
+    warden -- "1. stdio: spawn; HTTP: connect\n2. initialize + tools/list\nresources/list / prompts/list" --> server
+    server -- "3. declared surface\n(definitions only)" --> warden
 
     warden -- "pin: write baseline" --> repo
     repo -- "check: read baseline" --> warden
@@ -90,12 +92,16 @@ sequenceDiagram
     autonumber
     participant CI as CI / operator
     participant W as mcp-warden
-    participant S as MCP server (stdio child)
+    participant S as MCP server (stdio child or HTTP endpoint)
     participant L as warden.lock
 
     Note over CI,L: pin (TOFU baseline)
-    CI->>W: pin <server-cmd...> --approve --approver <id>
-    W->>S: spawn (argv array, no shell)
+    CI->>W: pin <server-cmd...> OR pin --url <endpoint>
+    alt stdio command
+        W->>S: spawn (argv array, no shell)
+    else --url
+        W->>S: connect (Streamable HTTP)
+    end
     W->>S: initialize
     S-->>W: protocolVersion
     W->>S: tools/list · resources/list · prompts/list
@@ -104,9 +110,9 @@ sequenceDiagram
     W->>L: write warden.lock (hashes, redacted findings, approved_digest)
 
     Note over CI,L: check (later, in CI)
-    CI->>W: check <server-cmd...>
+    CI->>W: check <server-cmd...> OR check --url <endpoint>
     W->>L: read baseline
-    W->>S: spawn + initialize + list (same as pin)
+    W->>S: spawn or connect + initialize + list (same transport as pin)
     S-->>W: declared surface (possibly rug-pulled)
     W->>W: recompute digests, compute_drift(baseline, current)
     alt drift detected
@@ -179,8 +185,9 @@ flowchart LR
 
 - **Trusted:** mcp-warden, the Python runtime it runs in, and `warden.lock` in
   the repo (delegated to host controls — PR review, branch protection).
-- **Untrusted:** everything on the server side of the stdio pipe.
-- The boundary is the **stdio channel** between mcp-warden and the spawned server.
+- **Untrusted:** the target server and everything beyond its transport boundary.
+- The boundary is the **stdio channel** to a spawned child or the network channel to the
+  configured Streamable HTTP endpoint. Runtime `guard` interception remains stdio-only.
 
 ## What is explicitly NOT in this picture
 
@@ -196,7 +203,8 @@ flowchart LR
 - No network calls / no DNS resolution by checks, policy, or the proxy. Exfil + SSRF match
   on literal host strings **and (#54, D6) raw IP literals** in result text/args against the
   SSRF/exfil address ranges (`net_rules`) — deterministic, still no DNS-name resolution.
-- stdio transport only (HTTP/SSE deferred for all of v0.1/v0.2/v0.3).
+- No HTTP/SSE runtime proxy: `guard` remains stdio-only. Streamable HTTP support is limited
+  to definition capture by `pin` and `check` via `--url`.
 - The fuzzy `WRD-RES-INJECT-PHRASE` MONITOR tier is **never default-block**, even in v0.3
   (opt-in only via `--block-inject-phrase`).
 - Windows lifecycle guarantees are **experimental** in v0.3 — job-object best-effort teardown,

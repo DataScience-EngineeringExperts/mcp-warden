@@ -124,7 +124,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 |--------|----------------|-------------|
 | `src/mcp_warden/hashing.py` | `canon()` (RFC 8785) + `hash()` + field hashes | WARDEN_LOCK_SCHEMA §3 |
 | `src/mcp_warden/tokenizer.py` | Shared tokenizer + capability derivation (single source of truth) | CHECKS §3 / WARDEN_LOCK_SCHEMA §5.4 |
-| `src/mcp_warden/capture.py` | MCP stdio capture client (argv array, no shell; timeouts/errors) | THREAT_MODEL §3.3 / WARDEN_LOCK_SCHEMA §4.1 |
+| `src/mcp_warden/capture.py` | Declared-surface capture over stdio (argv array, no shell) or Streamable HTTP (`--url`); shared list normalization, timeouts, and errors | THREAT_MODEL §3.3 / WARDEN_LOCK_SCHEMA §4.1 |
 | `src/mcp_warden/models.py` | Pydantic models for captured surface + lock (incl. `Pinner`/`Attestation` provenance) | WARDEN_LOCK_SCHEMA §2–§8 |
 | `src/mcp_warden/lockfile.py` | Lock builder + reader/writer + overall digest | WARDEN_LOCK_SCHEMA §5–§6, §9 |
 | `src/mcp_warden/check_core.py` | **(#22)** Shared check verdict core (`run_check` / `run_check_full`): read_lock→capture→checks→build_lock(in-memory)→compute_drift. Single source of truth for `cli.py:check` AND the pre-commit wrapper | WARDEN_LOCK_SCHEMA §6.2 |
@@ -170,6 +170,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 | `tests/test_policy.py` | Lint (incl. unknown-key error) + eval (allow/deny/SSRF/fail-closed) |
 | `tests/test_emitters.py` | SARIF shape + level mapping + JSONL records |
 | `tests/test_e2e_pin_check.py` | **Headline:** real stdio pin→mutate→check round-trip |
+| `tests/test_capture_http.py` | **(#74, DSE-57)** Async/sync Streamable HTTP capture, protocol/list normalization, timeout handling, and connection errors |
 | `tests/test_diff.py` | **(v0.3)** `warden diff` renderer: identical→"no differences", tool add/remove + schema change rows, **redaction-leak guard** (secret in `server.args` absent from human/`--json`/`--sarif` incl. parsed-JSONL `detail`), provenance-only section vs empty integrity drift, `--exit-code` (1 on integrity drift / 0 on provenance-only), `--no-provenance` M6 message, fail-closed on missing/invalid lock |
 | `tests/test_result_inspection.py` | **(v0.2)** `WRD-RES-*`: ANSI codepoint match (incl. extended/binary-ok), secret-echo reuse + redaction, exfil host/subdomain boundary + path-qualified, injection exact-phrase (no broad-regex FP), URL/uninspectable notes |
 | `tests/test_inspection_policy.py` | **(v0.2)** §11 per-tool policy fail-safe defaults, byte-identical-to-v0.1 digest when absent, inspection-policy drift, pin-time validation, reader fallback + LOCK-INVALID |

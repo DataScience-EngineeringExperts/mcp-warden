@@ -13,15 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Scope (v1)
 
-mcp-warden v1 verifies the **declared surface** of **stdio-transport** MCP servers —
-the `(name, description, inputSchema)` metadata returned by `tools/list`,
-`resources/list`, and `prompts/list` — pinned into a signed `warden.lock` and gated in
-CI. The v0.3 `guard` proxy adds deterministic runtime *result* inspection
-(ANSI/control escapes, echoed secrets, exfil domains) with default-block.
+mcp-warden v1 verifies an MCP server's **declared surface** — the `(name, description,
+inputSchema)` metadata returned by `tools/list`, `resources/list`, and `prompts/list` —
+pinned into a signed `warden.lock` and gated in CI. `pin` and `check` support stdio and
+Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* inspection
+(ANSI/control escapes, echoed secrets, exfil domains) with default-block for stdio.
 
 **Explicitly out of scope in v1 (documented post-1.0 roadmap):**
 
-- **HTTP/SSE transport** — v1 is stdio-only; HTTP/SSE is the headline v1.x item (#9).
+- **Runtime proxying over HTTP/SSE** — `guard` remains stdio-only; HTTP/SSE support in
+  v1.1 applies to definition capture by `pin` and `check` (#74).
 - **Prompt-injection default-block** — stays opt-in / MONITOR until field
   false-positive data justifies blocking by default.
 - Behavioral-attack defense (`T-BEHAVE`), full agent-firewall mediation, and any
@@ -33,6 +34,10 @@ CI. The v0.3 `guard` proxy adds deterministic runtime *result* inspection
 
 ### Added
 
+- **Streamable HTTP definition capture (DSE-57, #74).** `pin` and `check` now accept
+  `--url <endpoint>` as a mutually exclusive alternative to a stdio server command,
+  connecting to an already-running MCP server over the SDK's Streamable HTTP transport.
+  Runtime `guard` proxying remains stdio-only.
 - **Injection-phrase FP-instrumentation (Refs #12).** Shippable, non-default-changing
   groundwork for eventually promoting `WRD-RES-INJECT-PHRASE` to default-block once field
   false-positive (FP) data justifies it. **No default posture changed** — the fuzzy tier
