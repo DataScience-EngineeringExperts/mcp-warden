@@ -6,10 +6,9 @@
 [![GitHub Action](https://img.shields.io/badge/GitHub%20Action-mcp--warden-2088FF?logo=githubactions&logoColor=white)](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/action.yml)
 [![Latest release](https://img.shields.io/github/v/release/DataScience-EngineeringExperts/mcp-warden?display_name=tag&sort=semver)](https://github.com/DataScience-EngineeringExperts/mcp-warden/releases)
 
-**mcp-warden is the lockfile and CI gate for stdio-transport MCP servers: it pins
-an MCP server's declared tool/resource/prompt surface into a signed `warden.lock`,
-then fails CI when that surface drifts from the approved baseline.** v1 covers
-**stdio-transport** servers; HTTP/SSE transport is a documented v1.x roadmap item.
+**mcp-warden is the lockfile and CI gate for MCP servers: it pins a server's declared
+tool/resource/prompt surface into a signed `warden.lock`, then fails CI when that surface
+drifts.** `pin` and `check` support stdio and Streamable HTTP; `guard` is stdio-only.
 
 > ⚠️ **Install `mcp-warden-cli`, not `mcp-warden`.** The PyPI name `mcp-warden` is
 > an **unrelated package by a different author** — it is not this project. The
@@ -65,8 +64,14 @@ uv pip install --python .venv/bin/python -e ".[dev]"
 .venv/bin/mcp-warden check python tests/fixtures/mutated_server.py --lock warden.lock
 ```
 
-Then wire it into CI with the official GitHub Action (point `server-cmd` at *your*
-server's launch argv, commit `warden.lock`):
+For an already-running Streamable HTTP server, use `--url` instead of a server command:
+
+```bash
+.venv/bin/mcp-warden pin --url https://example.com/mcp --approve --approver you@example.com --lock warden.lock
+.venv/bin/mcp-warden check --url https://example.com/mcp --lock warden.lock
+```
+
+Then wire it into CI with the official GitHub Action (point `server-cmd` at *your* server's launch argv, commit `warden.lock`):
 
 ```yaml
 # .github/workflows/mcp-integrity.yml
@@ -377,8 +382,8 @@ run the gate only on push:
 
 | Command | Purpose | Exit code |
 |---------|---------|-----------|
-| `mcp-warden pin <server-cmd...> [--approve --approver <id>] [--sign [--identity-token T]] [--sarif F] [--json]` | Capture + write `warden.lock` (TOFU baseline). **(#16)** `--sign` Sigstore-signs `overall_digest` (out-of-digest; needs `mcp-warden[sigstore]`) | 0 on success, 2 on capture/IO error, **1 on signing failure (fail closed, no partial sidecar)** |
-| `mcp-warden check <server-cmd...> [--lock F] [--sarif F] [--json]` | Re-capture + diff vs lock | **non-zero on drift**, 2 on error |
+| `mcp-warden pin <server-cmd...> \| --url URL [--approve --approver <id>] [--sign [--identity-token T]] [--sarif F] [--json]` | Capture over stdio or Streamable HTTP + write `warden.lock` (TOFU baseline). **(#16)** `--sign` Sigstore-signs `overall_digest` (out-of-digest; needs `mcp-warden[sigstore]`) | 0 on success, 2 on capture/IO error, **1 on signing failure (fail closed, no partial sidecar)** |
+| `mcp-warden check <server-cmd...> \| --url URL [--lock F] [--sarif F] [--json]` | Re-capture over stdio or Streamable HTTP + diff vs lock | **non-zero on drift**, 2 on error |
 | `mcp-warden check --verify --certificate-identity ID --certificate-oidc-issuer ISS [--lock F] [--offline-bundle P]` | **(#16)** Verify the lock's Sigstore signature against a fixed sidecar (`<lockname>.sigstore` next to the lock); no server spawn. See [`docs/SIGNING.md`](docs/SIGNING.md) | **0 only on clean verify**; non-zero on any failure (fail closed) |
 | `mcp-warden policy lint <file> [--lock F]` | Lint a policy file (fail closed) | non-zero on lint error |
 | `mcp-warden policy eval <file> <sample.json> [--lock F]` | Evaluate one sample call | **non-zero on a deny verdict** (CI assertion) |
@@ -388,8 +393,9 @@ run the gate only on push:
 | `mcp-warden diff <lock-a> <lock-b> [--json] [--sarif F] [--no-provenance] [--exit-code]` | **(v0.3)** Offline, **redacted** viewer over the drift engine: renders integrity drift between two existing locks (A=baseline, B=current) + a separate informational provenance section. Never re-captures and never prints raw `server.command`/`args` (secret-safe) | 0 (viewer); with `--exit-code`, 1 on **integrity** drift only; 2 on missing/invalid lock |
 | `mcp-warden-precommit [--lock F] [--timeout N] [--strict] -- <server-cmd...>` | **(v0.3)** pre-commit hook entry point (see [pre-commit hook](#pre-commit-hook--the-local-pre-ci-gate)). Runs the same check verdict path; check-only (never pins, never writes the lock) | 0 clean / **1 drift** / 2 config error; server-unavailable → 0+warning (non-strict) or 2 (`--strict`) |
 
-`<server-cmd...>` is passed to the OS as an **argv array, never through a shell.**
-Set `WARDEN_LOG_LEVEL=INFO` for diagnostic logging.
+For stdio, `<server-cmd...>` is passed to the OS as an **argv array, never through a
+shell.** `--url` instead connects to an already-running Streamable HTTP endpoint and
+is mutually exclusive with a server command. Set `WARDEN_LOG_LEVEL=INFO` for diagnostics.
 
 ### Runtime result inspection (v0.3 — blocks by default)
 
