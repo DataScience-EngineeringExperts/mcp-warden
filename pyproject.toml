@@ -32,6 +32,7 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=6.0.0",
     "hypothesis>=6.100.0",
+    "setuptools>=83.0.0",
 ]
 # #16: Sigstore keyless signing + verification of warden.lock. OPT-IN — the base
 # install stays sigstore-free. Pinned to the 4.3.x line the implementation was
