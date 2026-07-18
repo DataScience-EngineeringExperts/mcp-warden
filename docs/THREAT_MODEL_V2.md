@@ -11,6 +11,11 @@ and §8 (the honest availability/UX-risk callout).
 > default** instead of shadow; the **fuzzy** monitor tier stays **opt-in**. §8 states the
 > availability/UX risk of default-blocking plainly and names the opt-out.
 
+> **Forward contract:** [`AGENT_TRUST_KERNEL.md`](AGENT_TRUST_KERNEL.md) intentionally requires
+> stronger fail-closed, complete-mediation behavior than this shipped runtime contract. The
+> current `guard` opt-outs and fail-open paths remain accurately documented here and are not
+> ATK-conformant until DSE-715 through DSE-717 close those gaps.
+
 > Read `THREAT_MODEL.md` first. The v0.1 trust model (TOFU + `--approve`), assets/actors,
 > the four definition-level threat classes, and the deliberate cuts are unchanged. This
 > addendum closes one named v0.1 gap — `T-RESULT` — and is explicit about what it still does
@@ -245,6 +250,8 @@ flag scheme + precedence: `GUARD_PROXY.md` §5 and `GUARD_PROXY_V3.md` §4.
 
 ## 9. Related documents
 
+- [`AGENT_TRUST_KERNEL.md`](AGENT_TRUST_KERNEL.md) — DSE-714 design contract for the future
+  deterministic reference monitor; does not replace this shipped MCP runtime contract.
 - [`THREAT_MODEL.md`](THREAT_MODEL.md) — v0.1 base threat model (still authoritative).
 - [`RESULT_INSPECTION.md`](RESULT_INSPECTION.md) — the `WRD-RES-*` result-inspection catalog
   (catalog unchanged in v0.3; default posture updated).

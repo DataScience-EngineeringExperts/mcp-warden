@@ -16,6 +16,10 @@ It operates entirely on **definitions** — the `(name, description, inputSchema
 metadata returned by `tools/list`, `resources/list`, and `prompts/list` — never on
 runtime tool **behavior** or tool **results**.
 
+> **Forward contract:** [`AGENT_TRUST_KERNEL.md`](AGENT_TRUST_KERNEL.md) defines a separate,
+> future non-bypassable reference-monitor contract. It does not retroactively change this
+> v0.1 contract or imply that the current product is ATK-conformant.
+
 This distinction is the single most important thing in this document. An earlier
 "runtime firewall" design was critiqued by a 4-model adversarial council. The
 council's central finding was that **definition integrity is not behavioral
@@ -304,6 +308,8 @@ because of time, but because they are net-negative:
 
 ## 8. Related documents
 
+- `AGENT_TRUST_KERNEL.md` — **DSE-714 design contract:** future deterministic reference-monitor
+  invariants and downstream bindings; implementation conformance is pending DSE-715–717.
 - `WARDEN_LOCK_SCHEMA.md` — baseline format, canonicalization, hashing, drift definition.
 - `CHECKS.md` — the deterministic static-check catalog (IDs, rules, severities, SARIF).
 - `POLICY_MODEL.md` — argument-level policy shapes, constraints, lint + sample evaluation.
