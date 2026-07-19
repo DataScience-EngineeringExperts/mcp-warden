@@ -19,12 +19,12 @@ integrity drift between two EXISTING locks by reusing `compute_drift` (no captur
 logic) plus a separate informational provenance section. It never prints raw
 `server.command`/`args` (secret-safe); default exit 0, `--exit-code` → 1 on integrity drift only.
 
-> **Agent Trust Kernel status (DSE-714):** [`docs/AGENT_TRUST_KERNEL.md`](docs/AGENT_TRUST_KERNEL.md)
-> is the normative contract for a future deterministic reference monitor. It is **design-only**
-> until DSE-715 through DSE-717 implement provenance/taint, PDP/PEP complete mediation, and
-> signed evidence-before-effect. The current `guard` path is not represented as ATK-conformant.
-> In C1, the dashed ATK edge and `Future Agent Trust Kernel runtime` node are conceptual
-> documentation scope only—not a deployed component, shipped data flow, or implementation claim.
+> **Agent Trust Kernel status:** [`docs/AGENT_TRUST_KERNEL.md`](docs/AGENT_TRUST_KERNEL.md)
+> is the normative contract. DSE-715 implements the isolated content-envelope foundation
+> (untrusted ingress, deterministic lineage, monotonic taint, secret-safe projection), but it
+> is not wired into `guard` and grants no authority. DSE-716/717 must still deliver PDP/PEP
+> complete mediation and signed evidence-before-effect. The current `guard` path is not
+> represented as ATK-conformant.
 
 > `conclave` (the 4-model adversarial council referenced in `docs/THREAT_MODEL.md`)
 > is a **dev-time design reviewer** that shaped this contract. It is **NOT** a
@@ -65,8 +65,10 @@ flowchart TB
         conclave -. "security review" .-> atk
     end
 
-    future["Future Agent Trust Kernel runtime\nDSE-715–717 · NOT IMPLEMENTED"]
-    atk -. "governs future conformance" .-> future
+    envelope["Content Envelope V1\nDSE-715 · implemented evidence foundation\nNOT wired to guard · grants no authority"]
+    future["Future PDP/PEP + signed evidence\nDSE-716–717 · NOT IMPLEMENTED"]
+    atk -. "governs partial foundation" .-> envelope
+    envelope -. "required input" .-> future
 
     subgraph ci["CI pipeline (GitHub Actions / local)"]
         warden["mcp-warden CLI\npin · check · policy · lock rotate · diff"]

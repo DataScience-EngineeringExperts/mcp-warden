@@ -1,7 +1,7 @@
 # Agent Trust Kernel — Normative Security Contract
 
-**Status:** Design contract (DSE-714). Implementation conformance is pending DSE-715,
-DSE-716, and DSE-717.
+**Status:** Design contract (DSE-714). DSE-715 implements the isolated content-envelope
+foundation; whole-kernel conformance remains pending DSE-716 and DSE-717.
 **Scope:** Deterministic reference monitor beneath agents and protocol adapters.
 **Document owner:** Security. Changes require threat-model review.
 
@@ -426,6 +426,19 @@ envelope consumed by 716; 716 establishes the structural PEP boundary used by 71
 evidence-before-effect path. DSE-717 MUST NOT be considered complete until DSE-716's ATK-04
 mediation conformance gates pass. No downstream ticket may weaken an invariant silently. A
 proposed exception requires a security-contract change and review before implementation.
+
+### DSE-715 implementation status
+
+`ContentEnvelopeV1` now implements and tests the DSE-715 portions of ATK-01, ATK-02, ATK-05,
+ATK-06, ATK-09, and ATK-12: literal untrusted ingress, immutable deterministic lineage,
+monotonic registered taint, strict bounded canonical parsing, domain-separated digests, no
+authority-bearing field/API, and digest-only secret-safe public output. Its lineage verifier is
+intentionally bounded and one-hop. It does not verify source truth, artifact authenticity,
+transitive ancestry, policy, authorization, mediation, or evidence-before-effect.
+
+This partial implementation does not change the current-product boundary: no shipped runtime
+may claim ATK conformance until DSE-716/717 integrate the envelope through the complete
+mediation and durable evidence paths and every conformance gate below passes.
 
 ## 11. Conformance gates
 
