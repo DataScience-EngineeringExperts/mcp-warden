@@ -83,6 +83,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 | [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | **(v0.1)** Positioning, trust model (TOFU + `--approve`), assets/actors, the four threat classes (MCP-DRIFT / MCP-CAPSURF / MCP-SECRET / MCP-SUPPLY), explicit out-of-scope limits, deliberate cuts |
 | [`docs/THREAT_MODEL_V2.md`](docs/THREAT_MODEL_V2.md) | **(v0.2)** Addendum extending the v0.1 model: T-RESULT vectors, the defends (BLOCK) / monitors (fuzzy) / still-does-NOT-defend (T-BEHAVE) table, runtime trust-model notes, retained + added cuts, shadow-default positioning |
 | [`docs/AGENT_TRUST_KERNEL.md`](docs/AGENT_TRUST_KERNEL.md) | **(DSE-714, design contract)** Normative invariants for the future deterministic Agent Trust Kernel: trust boundaries, complete mediation, default deny, non-overridable critical classes, evidence-before-effect, offline operation, residual risks, and bindings for DSE-715 through DSE-717. MCP-Warden v1.1 is explicitly not yet ATK-conformant |
+| [`docs/CONTENT_ENVELOPE.md`](docs/CONTENT_ENVELOPE.md) | **(DSE-715, implemented foundation)** Strict immutable V1 content envelope, domain-separated exact-byte digests, canonical metadata boundary, bounded one-hop lineage, monotonic taint, stable code-only errors, and secret-safe public projection. Evidence only; no authority or whole-ATK conformance claim |
 | [`docs/WARDEN_LOCK_SCHEMA.md`](docs/WARDEN_LOCK_SCHEMA.md) | **mcp-warden implementation of [`docs/SPEC.md`](docs/SPEC.md) (MCP Lock Format v1).** `warden.lock` format, RFC 8785 canonicalization + SHA-256 hashing, field/entry/overall digests, the normative drift definition + severities; **§5.1/§6.2 structural schema diff** (normalized per-tool `schema_skeleton`, `schema_version` 3 — skeleton added at v2, in-document `$ref` resolution at v3 (#29), granular `WRD-DRIFT-SCHEMA-*` taxonomy + severities, v1 fallback); **§8.1/§8.2 (v0.3, #19)** structured out-of-digest provenance (`pinner` / `attestations` / `rotation_count`, `PROVENANCE_VERSION`, B4 `bound_digest` format) + `lock rotate` digest-invariant semantics + the #16 signing implication; **§11 (v0.2)** optional per-tool inspection policy (`expected_output_charset` / `may_return_urls` / `secret_echo_applies`, fail-safe defaults, digest impact) |
 | [`docs/WARDEN_LOCK_EXAMPLE.md`](docs/WARDEN_LOCK_EXAMPLE.md) | Illustrative full `warden.lock` + a post-`lock rotate` `pin` block (archived from WARDEN_LOCK_SCHEMA §9 to keep that core doc under the line cap) |
 | [`docs/CHECKS.md`](docs/CHECKS.md) | The deterministic `WRD-*` static-check catalog (capability/secret/supply/robustness), the shared tokenizer, severity→SARIF mapping, redaction rule, CUT list. **Reused by v0.2** `WRD-RES-SECRET-ECHO` (the `WRD-SEC-*` patterns + redaction) |
@@ -97,6 +98,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 | Plan | Purpose |
 |---|---|
 | [`docs/plans/2026-07-18-agent-trust-kernel-design.md`](docs/plans/2026-07-18-agent-trust-kernel-design.md) | **Non-normative execution record.** Records the DSE-714 design decision and verification plan; binding requirements live in `docs/AGENT_TRUST_KERNEL.md` |
+| [`docs/plans/2026-07-18-content-envelope-design.md`](docs/plans/2026-07-18-content-envelope-design.md) | **Non-normative DSE-715 execution record.** Records the reviewed strict-TDD plan; verified behavior is documented in `docs/CONTENT_ENVELOPE.md` |
 
 ---
 
@@ -130,6 +132,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 | Module | Responsibility | Spec anchor |
 |--------|----------------|-------------|
 | `src/mcp_warden/hashing.py` | `canon()` (RFC 8785) + `hash()` + field hashes | WARDEN_LOCK_SCHEMA §3 |
+| `src/mcp_warden/content_models.py` · `content_envelope.py` | **(DSE-715)** Strict immutable evidence models; typed domain-separated byte hashing call surface; canonical constructors/parser; bounded derivation and one-hop lineage; explicit secret-safe projection | CONTENT_ENVELOPE.md / AGENT_TRUST_KERNEL ATK-01/02/05/06/09/12 |
 | `src/mcp_warden/tokenizer.py` | Shared tokenizer + capability derivation (single source of truth) | CHECKS §3 / WARDEN_LOCK_SCHEMA §5.4 |
 | `src/mcp_warden/capture.py` | Declared-surface capture over stdio (argv array, no shell) or Streamable HTTP (`--url`); shared list normalization, timeouts, and errors | THREAT_MODEL §3.3 / WARDEN_LOCK_SCHEMA §4.1 |
 | `src/mcp_warden/models.py` | Pydantic models for captured surface + lock (incl. `Pinner`/`Attestation` provenance) | WARDEN_LOCK_SCHEMA §2–§8 |
@@ -169,6 +172,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 | File | Covers |
 |------|--------|
 | `tests/test_hashing.py` | JCS+SHA-256 reproducibility, canonical-form pins, null handling |
+| `tests/test_content_envelope.py` | **(DSE-715)** Strict/frozen models, typed digest domains, nine ingress kinds, canonical/cap boundary, deterministic lineage, parser rejection matrix, atomic digest verification, and planted-secret output/error/log scans |
 | `tests/test_tokenizer.py` | Segment-exact tokenization + capability derivation |
 | `tests/test_checks.py` | Capability/secret/supply/robustness checks + redaction |
 | `tests/test_drift.py` | Drift per class (added/removed/modified/server-identity/unapproved) |
@@ -188,7 +192,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 | `tests/test_guard_v3.py` | **(v0.3)** opt-out demotes to shadow (`--no-block-*`/`--allow-exfil-domain`/`--no-block-deterministic`), `tools/list_changed` gate block+shadow, policy deny block+shadow, audit-only override, cancel/progress passthrough, **server-crash → `-32002` for every pending id**, client-disconnect child reap (no orphan), truncated + oversized frame fail-open |
 | `tests/test_guard_strict.py` | **(#21)** `--strict` fail-CLOSED: 4 terminate sites (request-policy / result-inspect / list-gate / nested-hash re-raise) → exit `3` + one `strict_abort` stderr line + `-32003` client frame + child reaped; negatives (truncated/over-cap/unparseable/clean) do NOT abort; default `--no-strict` byte-identical fail-open regression; secret-leak redaction; CLI threading; double-emission single line; `StrictInspectionAbort` is `BaseException`-not-`Exception` + anyio `ExceptionGroup` unwrap |
 | `tests/test_inspect_parity.py` | **(v0.2)** guard↔inspect finding parity on the same recorded frames + inspect exit codes |
-| `tests/fuzz/` (`test_fuzz_framing.py` · `test_fuzz_ansi.py` · `test_fuzz_domain.py` · `test_fuzz_redact.py`) | **(#17)** `hypothesis` property-fuzzing of the live runtime attack surface: framer XOR/never-raise + mode-equivalence + truncation→parse_error + `_parse_content_length` never-negative (Finding A fix) + read_frame never-hang + Content-Length composition consistency; ANSI construction-based liveness/soundness + completeness + idempotence + strip∘redact order-independence; exfil-domain soundness (no invented hits) + URL/bare-host liveness + anchoring/IDN/trailing-dot; redactor format-structure + leak-bound + #38 short-secret contract. `ci`/`fuzz` profiles in `tests/fuzz/conftest.py`; deep soak via `make fuzz` |
+| `tests/fuzz/` (`test_fuzz_framing.py` · `test_fuzz_ansi.py` · `test_fuzz_domain.py` · `test_fuzz_redact.py` · `test_fuzz_content_envelope.py`) | **(#17 / DSE-715)** `hypothesis` property-fuzzing of the live runtime attack surface plus content-envelope repeatability, round-trip, parent permutation, taint monotonicity, mutation rejection, malformed-byte bounded termination, flat-cycle non-recursion, registry drift, and planted-secret absence. `ci`/`fuzz` profiles in `tests/fuzz/conftest.py`; deep soak via `make fuzz` |
 | `tests/fixtures/clean_server.py` · `mutated_server.py` | Real MCP SDK stdio fixtures |
 | `tests/fixtures/poison_server.py` | **(v0.2)** result-poisoning fixture server (ANSI/secret-echo/exfil/inject/clean tools) |
 | `tests/fixtures/crash_server.py` · `listchange_server.py` · `clean_listchange.warden.lock` | **(v0.3)** raw-stdio lifecycle fixtures: crash-mid-call (`-32002`) and `tools/list_changed` rug-pull + its pinned clean lock |

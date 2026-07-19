@@ -19,10 +19,20 @@ from typing import Any
 
 import rfc8785
 
+from mcp_warden.content_models import DigestDomain
+
 logger = logging.getLogger("mcp_warden.hashing")
 
 #: Public prefix for every digest emitted by mcp-warden.
 SHA256_PREFIX = "sha256:"
+
+
+def hash_bytes(payload: bytes, *, domain: DigestDomain) -> str:
+    """Hash exact bytes under a closed content-envelope digest domain."""
+    if type(payload) is not bytes or type(domain) is not DigestDomain:
+        raise TypeError("payload and domain must be exact typed values")
+    digest = hashlib.sha256(domain.value.encode("ascii") + b"\x00" + payload).hexdigest()
+    return SHA256_PREFIX + digest
 
 
 def canon(value: Any) -> bytes:
