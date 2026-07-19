@@ -20,11 +20,12 @@ logic) plus a separate informational provenance section. It never prints raw
 `server.command`/`args` (secret-safe); default exit 0, `--exit-code` → 1 on integrity drift only.
 
 > **Agent Trust Kernel status:** [`docs/AGENT_TRUST_KERNEL.md`](docs/AGENT_TRUST_KERNEL.md)
-> is the normative contract. DSE-715 implements the isolated content-envelope foundation
-> (untrusted ingress, deterministic lineage, monotonic taint, secret-safe projection), but it
-> is not wired into `guard` and grants no authority. DSE-716/717 must still deliver PDP/PEP
-> complete mediation and signed evidence-before-effect. The current `guard` path is not
-> represented as ATK-conformant.
+> is the normative contract. DSE-715 implements the isolated content-envelope foundation.
+> DSE-716 implements isolated signed policy/runtime/adapter/bundle activation, exact
+> adapter/bundle lease binding, deterministic PDP, evidence-gated PEP, frozen handler identity,
+> and fixed-corpus adapter-conformance APIs. None is wired into `guard`; the default evidence gate denies
+> effects. DSE-717 must still deliver durable signed evidence, fallback, rollback-resistant
+> state, and the recovery latch. The current `guard` path is not represented as ATK-conformant.
 
 > `conclave` (the 4-model adversarial council referenced in `docs/THREAT_MODEL.md`)
 > is a **dev-time design reviewer** that shaped this contract. It is **NOT** a
@@ -66,9 +67,11 @@ flowchart TB
     end
 
     envelope["Content Envelope V1\nDSE-715 · implemented evidence foundation\nNOT wired to guard · grants no authority"]
-    future["Future PDP/PEP + signed evidence\nDSE-716–717 · NOT IMPLEMENTED"]
+    decision["Deterministic PDP/PEP V1\nDSE-716 · signed adapter/bundle gates + fixed corpus\nNOT wired to guard"]
+    evidence["Durable evidence + recovery state\nDSE-717 · NOT IMPLEMENTED\ndefault gate denies effects"]
     atk -. "governs partial foundation" .-> envelope
-    envelope -. "required input" .-> future
+    envelope -. "required input" .-> decision
+    decision -. "requires production gate" .-> evidence
 
     subgraph ci["CI pipeline (GitHub Actions / local)"]
         warden["mcp-warden CLI\npin · check · policy · lock rotate · diff"]
