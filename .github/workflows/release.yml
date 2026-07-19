@@ -140,7 +140,7 @@ jobs:
       # Production PyPI — only on a published Release. Trusted Publishing (OIDC).
       - name: Publish to PyPI
         if: github.event_name == 'release'
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
+        uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1
         with:
           packages-dir: dist/
           # No `password:` — OIDC Trusted Publishing is used (no stored secret).
@@ -152,7 +152,7 @@ jobs:
       # Requires a SEPARATE Trusted Publisher on test.pypi.org (optional; see RELEASING.md).
       - name: Publish to TestPyPI (manual dry run)
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish-target == 'testpypi'
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
+        uses: pypa/gh-action-pypi-publish@ba38be9e461d3875417946c167d0b5f3d385a247 # v1.14.1
         with:
           packages-dir: dist/
           repository-url: https://test.pypi.org/legacy/
