@@ -440,6 +440,25 @@ This partial implementation does not change the current-product boundary: no shi
 may claim ATK conformance until DSE-716/717 integrate the envelope through the complete
 mediation and durable evidence paths and every conformance gate below passes.
 
+### DSE-716 implementation status
+
+The versioned DSE-716 modules now implement the isolated decision/enforcement foundation for
+ATK-03 through ATK-09: exact signed policy/runtime/adapter/executable-bundle activation, adapter and
+bundle dependency closure, leases bound to exact adapter and executable-bundle manifests,
+deterministic default-deny PDP decisions, a non-overridable V1 critical floor, closure-free,
+mutable-global-free mechanically code/dependency-derived frozen handler registration, a PEP whose supported path
+orders exact binding then decision then bound evidence then sink, and a PEP-owned instrumented
+foundation harness with registration evidence, multiple serialized output-channel scans, and a
+non-optional versioned malformed-input corpus. The default evidence gate denies every otherwise
+allowed effect.
+
+This is still a partial implementation. It is not wired into the historical `guard`, supplies no
+built-in production verifier or live protocol adapter, and does not implement DSE-717's durable
+signed receipts, independent fallback evidence, rollback-resistant state, or persistent recovery
+latch. A custom evidence gate becomes TCB code and does not create an ATK-conformance claim. No
+production effect or whole-kernel claim is valid until DSE-717 closes ATK-10 through ATK-12 and
+the full §11 platform/restart/rollback gates pass.
+
 ## 11. Conformance gates
 
 A component or adapter may claim ATK conformance only through a mechanically executable suite.
