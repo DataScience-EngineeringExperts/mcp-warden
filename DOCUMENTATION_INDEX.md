@@ -92,11 +92,11 @@ scope-honesty box and makes no compliance/regulatory claim.
 | [`docs/GUARD_PROXY_V3.md`](docs/GUARD_PROXY_V3.md) | **(v0.3)** The proxy-hardening contract: `notifications/cancelled`/`progress` untouched passthrough (§1), subprocess-lifecycle edge cases — server-crash `-32002` synthesis, client-disconnect process-group teardown, truncated/oversized-frame fail-open (§2), Windows experimental degradation (§3), the full v0.3 block-flag scheme + precedence (§4), and **(#21) `--strict` fail-CLOSED mode — terminate on an inspection-layer error, `-32003` non-retriable, exit `3` (§5)** |
 | [`docs/SIGNING.md`](docs/SIGNING.md) | **(v0.3, #16)** Sigstore keyless signing + verification of `warden.lock`: the optional `[sigstore]` extra, the deterministic `mcp-warden-lock-digest/v1` statement that binds ONLY `overall_digest` (survives `lock rotate`), `pin --sign` / `check --verify` usage, the **fixed-sidecar** verify contract (pointer field never trusted), the full fail-closed matrix, the TUF-cache/offline caveat, and the two accepted trade-offs (rotate-replay + committed-fixture coverage gap + refresh steps) |
 
-## Design and implementation plans
+## Non-normative design and implementation plans
 
 | Plan | Purpose |
 |---|---|
-| [`docs/plans/2026-07-18-agent-trust-kernel-design.md`](docs/plans/2026-07-18-agent-trust-kernel-design.md) | DSE-714 design decision and execution/verification plan; records why the kernel contract is separate from the shipped MCP-specific threat models |
+| [`docs/plans/2026-07-18-agent-trust-kernel-design.md`](docs/plans/2026-07-18-agent-trust-kernel-design.md) | **Non-normative execution record.** Records the DSE-714 design decision and verification plan; binding requirements live in `docs/AGENT_TRUST_KERNEL.md` |
 
 ---
 

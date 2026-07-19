@@ -1,6 +1,7 @@
 # Agent Trust Kernel Contract Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> **Status:** Non-normative execution record. The binding security requirements live in
+> `docs/AGENT_TRUST_KERNEL.md`.
 
 **Goal:** Define the non-bypassable, deterministic security contract that DSE-715,
 DSE-716, and DSE-717 must implement.
@@ -41,11 +42,16 @@ It is a design contract only; conformance remains pending DSE-715 through DSE-71
 
 **Step 2:** Add `ATK-01` through `ATK-12` with unique, testable requirements.
 
-**Step 3:** Add trust boundaries, attacker model, fail-closed matrix, critical classes,
-offline contract, explicit cuts, and residual risks.
+**Step 3:** Add exhaustive trust boundaries, trusted-time ownership, attacker model,
+structurally enforced mediation, fail-closed and evidence-degraded recovery matrices,
+critical classes, provenance authority, offline contract, explicit cuts, and residual risks.
 
-**Step 4:** Map DSE-715, DSE-716, and DSE-717 to their binding invariants and verification
-gates.
+**Step 4:** Assign one primary owner and secondary bindings to every invariant, record the
+DSE-715 → DSE-716 → DSE-717 dependency order, and gate DSE-717 completion on ATK-04.
+
+**Step 5:** Define mechanically executable conformance around authoritative finite adapter
+manifests with handler/sink bijection, an instrumented PEP/sink harness, a fixed malformed
+corpus, and planted-secret byte scans.
 
 ### Task 2: Integrate the contract without rewriting shipped guarantees
 

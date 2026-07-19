@@ -23,6 +23,8 @@ logic) plus a separate informational provenance section. It never prints raw
 > is the normative contract for a future deterministic reference monitor. It is **design-only**
 > until DSE-715 through DSE-717 implement provenance/taint, PDP/PEP complete mediation, and
 > signed evidence-before-effect. The current `guard` path is not represented as ATK-conformant.
+> In C1, the dashed ATK edge and `Future Agent Trust Kernel runtime` node are conceptual
+> documentation scope only—not a deployed component, shipped data flow, or implementation claim.
 
 > `conclave` (the 4-model adversarial council referenced in `docs/THREAT_MODEL.md`)
 > is a **dev-time design reviewer** that shaped this contract. It is **NOT** a
