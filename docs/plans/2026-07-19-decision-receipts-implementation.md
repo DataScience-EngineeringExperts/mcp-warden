@@ -20,6 +20,37 @@ Implementation must follow strict RED/GREEN cycles. Never create production code
 the named test has failed for the intended missing behavior. Every public error is code-only and
 must be raised outside provider exception frames. No commit gets a `Co-Authored-By` line.
 
+## Syntax and provider preflight
+
+Before any external review or provider-backed test, capture the local command/API contract:
+
+```bash
+conclave providers
+conclave ask --help
+```
+
+The currently configured friendly-name to model mapping is: `claude` →
+`anthropic/claude-sonnet-4-6`, `gemini` → `gemini/gemini-2.5-pro`, `grok` → `xai/grok-4.3`,
+`openai` → `openai/gpt-4.1`, and `perplexity` → `perplexity/sonar-pro`. `deepseek`, `groq`,
+`mistral`, and `together` are listed but have no configured key and are not silently substituted.
+Re-run `conclave providers` immediately before publication because model IDs and key availability
+can drift.
+
+Canonical adversarial invocation (only after explicit unpublished-code approval):
+
+```bash
+/Users/ernestprovo/.local/bin/ccl ask "$(cat /private/tmp/conclave-prompt.txt)" \
+  --council claude,gemini,grok,openai,perplexity \
+  --proposer claude --synthesizer claude --mode adversarial --json --cache
+```
+
+`--proposer` is valid for adversarial mode; `--synthesizer` selects the judge. `--json` emits the
+full audit result and disables `--stream`; streaming is supported only for synthesize/raw and is
+not a realtime/adversarial-review substitute. Conclave provider-specific runtime/model arguments
+are not exposed by this CLI; use the resolved model IDs above and record any provider error rather
+than inventing flags. DSE-717 signer, rule, state, coordinator, PEP, verifier, and replay APIs are
+local typed contracts; their exact keyword arguments are defined by the RED tests in this plan.
+
 ## Worktree bootstrap
 
 Create one isolated environment in this worktree and match CI pins before any RED test:
