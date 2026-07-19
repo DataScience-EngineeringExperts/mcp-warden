@@ -24,8 +24,9 @@ logic) plus a separate informational provenance section. It never prints raw
 > DSE-716 implements isolated signed policy/runtime/adapter/bundle activation, exact
 > adapter/bundle lease binding, deterministic PDP, evidence-gated PEP, frozen handler identity,
 > and fixed-corpus adapter-conformance APIs. None is wired into `guard`; the default evidence gate denies
-> effects. DSE-717 must still deliver durable signed evidence, fallback, rollback-resistant
-> state, and the recovery latch. The current `guard` path is not represented as ATK-conformant.
+> effects. DSE-717 is in progress (its protected-state contract is implemented in an isolated
+> branch), but it must still deliver durable signed evidence, fallback, rollback-resistant state,
+> and the recovery latch. The current `guard` path is not represented as ATK-conformant.
 
 > `conclave` (the 4-model adversarial council referenced in `docs/THREAT_MODEL.md`)
 > is a **dev-time design reviewer** that shaped this contract. It is **NOT** a
@@ -68,7 +69,7 @@ flowchart TB
 
     envelope["Content Envelope V1\nDSE-715 · implemented evidence foundation\nNOT wired to guard · grants no authority"]
     decision["Deterministic PDP/PEP V1\nDSE-716 · signed adapter/bundle gates + fixed corpus\nNOT wired to guard"]
-    evidence["Durable evidence + recovery state\nDSE-717 · NOT IMPLEMENTED\ndefault gate denies effects"]
+    evidence["Durable evidence + recovery state\nDSE-717 · IN PROGRESS\ncurrent default gate denies effects"]
     atk -. "governs partial foundation" .-> envelope
     envelope -. "required input" .-> decision
     decision -. "requires production gate" .-> evidence

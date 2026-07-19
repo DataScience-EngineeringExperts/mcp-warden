@@ -465,9 +465,10 @@ empty `allow_paths` = deny-all. See [`docs/POLICY_MODEL.md`](docs/POLICY_MODEL.m
 Agent Trust Kernel development is intentionally isolated from the shipped `guard` path:
 DSE-715's content envelope and DSE-716's deterministic PDP/PEP, exact signed adapter/bundle load
 gates, frozen handler identity, and fixed-corpus adapter harness are implemented foundations, but
-the default evidence gate denies effects. Durable signed receipts,
+the default evidence gate denies effects. DSE-717 is now in progress: its isolated branch has
+the reviewed receipt/recovery design and protected-state contract, but durable signed receipts,
 fallback evidence, rollback-resistant state, the recovery latch, and any whole-kernel conformance
-claim remain DSE-717. See [`docs/POLICY_ENFORCEMENT.md`](docs/POLICY_ENFORCEMENT.md) and
+claim remain incomplete. See [`docs/POLICY_ENFORCEMENT.md`](docs/POLICY_ENFORCEMENT.md) and
 [`docs/AGENT_TRUST_KERNEL.md`](docs/AGENT_TRUST_KERNEL.md).
 
 See [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md). The security-contract specs
