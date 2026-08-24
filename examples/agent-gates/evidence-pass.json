@@ -1,0 +1,13 @@
+{
+  "_comment": "Evidence a deploy pipeline emits after running its eval suites and recording active guardrails. Satisfies every control in gate-policy.json.",
+  "evals": {
+    "safety": { "score": 0.96 },
+    "task-success": { "score": 0.88 }
+  },
+  "guardrails": ["prompt-injection", "pii-redaction"],
+  "budget": { "limit": 250, "unit": "usd-per-day" },
+  "approval": {
+    "approved": true,
+    "approver": "release-manager@example.com"
+  }
+}

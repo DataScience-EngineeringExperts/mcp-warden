@@ -32,6 +32,17 @@ logic) plus a separate informational provenance section. It never prints raw
 > is a **dev-time design reviewer** that shaped this contract. It is **NOT** a
 > runtime dependency and is never invoked by `pin`/`check`/`policy`.
 
+> **Agent gates (DSE-1257 / DSE-1258)** add two CI-only verbs that sit alongside `check`
+> and never touch a running server. `deploy-gate` reads two JSON documents (a gate policy
+> and pipeline-produced deploy evidence) and fail-closes a deploy whose declared eval
+> thresholds, guardrails, budget, or human-approval receipt are unmet — it adjudicates
+> evidence and deliberately does **not** execute evals. `auth audit` reads MCP client
+> config files and flags weak auth posture statically: no server spawn, no DNS, no
+> network, which is what keeps it immune to MCP auth-spec churn. Both reuse the `check`
+> exit-code contract (0/1/2, fail closed) and the shared SARIF + JSONL emitters, so they
+> enter an existing code-scanning pipeline with no new plumbing. Runtime capability
+> brokering remains out of scope (DSE-725). See [`docs/AGENT_GATES.md`](docs/AGENT_GATES.md).
+>
 > **`action.yml` (Issue #18)** is the primary consumer delivery vehicle for the `check`
 > gate. Consumers pin `DataScience-EngineeringExperts/mcp-warden@<tag>` in their workflow; the composite
 > action wraps the C2 sequence (steps 1–5 of the pin/check sequence above) behind a

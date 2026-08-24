@@ -30,6 +30,30 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+### Added
+
+- **`deploy-gate` — fail-closed CI gate for agent deployments (DSE-1257).** Verifies a
+  deploy's evidence against a declared gate policy: required eval suites met their
+  thresholds, required guardrails are active, a budget/quota is declared, and a human
+  approval receipt is present when required. The gate **adjudicates evidence rather than
+  running evals** — keeping verdicts reproducible from two JSON files, free of any eval
+  framework's dependency tree, and making missing/malformed evidence an unambiguous
+  failure instead of a silent skip. Nine `WRD-GATE-*` rules; exit `0` only when every
+  control is satisfied, `1` on any finding, `2` on unreadable input (fail closed).
+  See [`docs/AGENT_GATES.md`](docs/AGENT_GATES.md).
+- **`auth audit` — static MCP auth-posture audit (DSE-1258).** Audits MCP client/server
+  config for remote endpoints declaring no authentication, cleartext `http://` transport,
+  and credential literals committed into config (`WRD-AUTH-*`), reusing the existing
+  vendor secret patterns from `check`. **Static only** — no server spawn, no DNS, no
+  network — which keeps it safe to run against any config in CI and immune to churn in
+  the MCP auth specification. Deliberately does not flag loopback servers, `${VAR}`
+  secret references, or local stdio servers; every credential literal is redacted in
+  findings, snippets, and SARIF. Runtime capability brokering stays out of scope
+  (DSE-725). See [`docs/AGENT_GATES.md`](docs/AGENT_GATES.md).
+
+Both commands reuse the `check` exit-code contract and the shared SARIF/JSONL emitters,
+so an existing code-scanning pipeline needs no changes.
+
 ## [1.1.0] — 2026-07-14
 
 ### Added

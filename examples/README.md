@@ -17,6 +17,7 @@ are re-checked on every run so these examples stay green.
 | [`gitlab-ci/.gitlab-ci.yml`](gitlab-ci/.gitlab-ci.yml) | the same check gate on GitLab CI |
 | [`pre-commit/.pre-commit-config.yaml`](pre-commit/.pre-commit-config.yaml) | local pre-commit + pre-push hook variants |
 | [`pinned-servers/`](pinned-servers/) | real MCP servers pinned to a committed `warden.lock` each |
+| [`agent-gates/`](agent-gates/) | runnable `deploy-gate` + `auth audit` demos — a config with four flagged servers and two that must NOT be flagged, plus pass/fail deploy evidence |
 
 ## Pinned-server examples
 

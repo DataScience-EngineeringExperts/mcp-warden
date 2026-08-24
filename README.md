@@ -107,10 +107,23 @@ closes gaps none of them cover alone.
 | **Static tool-poisoning scanner** | [mcp-scan](https://github.com/invariantlabs-ai/mcp-scan) | pin-time / pre-flight | suspicious *content* in tool definitions (injection-style descriptions, known-bad patterns) | you want to catch a poisoned definition the first time you see it |
 | **Runtime gateway / proxy** | ContextForge, Lunar MCPX, TrueFoundry, Docker MCP Gateway | every live request | runtime mediation — auth, rate limits, request/response policy on calls in flight | you need to mediate or police live traffic between agent and server |
 | **Lockfile + CI gate** | **mcp-warden** | CI / pre-commit | *drift* — the declared surface changing after a human approved it (rug-pull / silent redefinition) | you want a reproducible, human-approved baseline that fails the build when the surface changes |
+| **Config + deploy gates** | **mcp-warden** (`auth audit`, `deploy-gate`) | CI / pre-commit | *posture* — remote MCP endpoints with no auth or credentials pasted into config; agent deploys whose evals regressed or whose guardrails were switched off | you want the deploy blocked, not just reported, when the declared safety bar isn't met |
 
 mcp-warden does not replace a scanner or a gateway — it adds the missing **drift
 gate**: a signed baseline plus a deterministic CI check that the surface you
-approved is the surface you still run. For the full, sourced breakdown of how
+approved is the surface you still run.
+
+**The common thread across all four commands is that they *block*.** The loudest
+complaint about agents in production is that they are insecure by default and
+nothing stops a bad configuration or a regressed deploy from shipping — plenty of
+tools *report*, very few return a non-zero exit code that a pipeline must answer
+for. `check` blocks on surface drift, `auth audit` blocks on weak MCP auth
+posture, and `deploy-gate` blocks an agent deploy whose evals, guardrails,
+budget, or human approval don't meet the declared bar. All three fail **closed**:
+unreadable or missing input is a failure, never a silent pass. See
+[`docs/AGENT_GATES.md`](docs/AGENT_GATES.md).
+
+For the full, sourced breakdown of how
 these layers complement each other and when to use which, see the
 [**comparison page**](https://datascience-engineeringexperts.github.io/mcp-warden/comparison/)
 on the docs site.
@@ -129,6 +142,9 @@ automatically — so the use cases are sequenced by leverage:
   pre-commit hook) fails when upstream silently redefines its surface — the core rug-pull defense.
 - **Security / platform engineer.** Run the [Action](#github-action-one-step-drop-in)
   across a fleet; SARIF → code scanning; signed locks = auditable human-approval evidence.
+  Add `auth audit` to catch MCP endpoints configured without auth or with credentials
+  committed into config, and `deploy-gate` to make the agent safety bar a build failure
+  rather than a dashboard nobody reads.
 - **Incident responder / auditor.** `inspect` an offline trace and `warden diff` a suspect
   lock against a known-good baseline — no live server required.
 - **Agent-framework integrator** *(post-launch).* Enforce that only warden-locked servers
@@ -391,6 +407,8 @@ run the gate only on push:
 | `mcp-warden inspect <trace.jsonl> [--lock F] [--sarif F]` | **(v0.2)** Offline analyzer over a recorded JSON-RPC session — same `WRD-RES-*` catalog as `guard` (always report-only) | non-zero on any BLOCK-tier finding; 2 on read error |
 | `mcp-warden lock rotate <lock> [--approver ID] [--actor ID] [--note T] [--json]` | **(v0.3)** Re-attest provenance on an existing baseline without re-capturing the surface; `overall_digest` stays **byte-identical** (WARDEN_LOCK_SCHEMA §8.2). Fails closed on a tampered/inconsistent lock | 0 on success, 2 on missing/invalid/tampered lock |
 | `mcp-warden diff <lock-a> <lock-b> [--json] [--sarif F] [--no-provenance] [--exit-code]` | **(v0.3)** Offline, **redacted** viewer over the drift engine: renders integrity drift between two existing locks (A=baseline, B=current) + a separate informational provenance section. Never re-captures and never prints raw `server.command`/`args` (secret-safe) | 0 (viewer); with `--exit-code`, 1 on **integrity** drift only; 2 on missing/invalid lock |
+| `mcp-warden deploy-gate --policy F --evidence F [--json] [--sarif F]` | **(v1.2)** Fail-closed CI gate for agent deployments: verifies declared eval thresholds, required guardrails, a budget/quota, and a human-approval receipt. Adjudicates evidence — it does **not** run evals. See [`docs/AGENT_GATES.md`](docs/AGENT_GATES.md) | 0 only when every control is satisfied; 1 on any gate finding; 2 on unreadable/malformed input (fail closed) |
+| `mcp-warden auth audit <config...> [--json] [--sarif F]` | **(v1.2)** Static MCP auth-posture audit over client/server config: remote endpoints without auth, cleartext `http://`, credential literals committed into config. No server spawn, no network. See [`docs/AGENT_GATES.md`](docs/AGENT_GATES.md) | 0 clean; 1 on any finding; 2 on read/parse error (fail closed) |
 | `mcp-warden-precommit [--lock F] [--timeout N] [--strict] -- <server-cmd...>` | **(v0.3)** pre-commit hook entry point (see [pre-commit hook](#pre-commit-hook--the-local-pre-ci-gate)). Runs the same check verdict path; check-only (never pins, never writes the lock) | 0 clean / **1 drift** / 2 config error; server-unavailable → 0+warning (non-strict) or 2 (`--strict`) |
 
 For stdio, `<server-cmd...>` is passed to the OS as an **argv array, never through a

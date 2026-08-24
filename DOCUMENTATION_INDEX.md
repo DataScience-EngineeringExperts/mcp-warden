@@ -14,6 +14,24 @@ describe and visualize the implementation that satisfies that contract.
 | 2 | [`SYSTEM_CONTEXT_DIAGRAM.md`](SYSTEM_CONTEXT_DIAGRAM.md) | System context + pin/check sequence (mermaid); trust boundary; `conclave` as dev-time reviewer only; composite GitHub Action + **pre-commit hook** as consumer delivery vehicles |
 | 3 | [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md) | This file |
 
+## Agent gates (`deploy-gate` + `auth audit` — DSE-1257 / DSE-1258)
+
+Two fail-closed gates extending warden past MCP-surface integrity into the adjacent
+CI controls agent deployments lack: did the deploy meet its declared safety bar, and
+is the MCP auth posture sound. Both reuse the `check` exit-code contract (0 clean /
+1 finding / 2 fail-closed) and the shared SARIF + JSONL emitters.
+
+| Artifact | Purpose |
+|----------|---------|
+| [`docs/AGENT_GATES.md`](docs/AGENT_GATES.md) | Security contract for both gates — policy/evidence schemas, full rule tables, scope honesty, and the two load-bearing design decisions (evidence-adjudication, static-only) |
+| [`src/mcp_warden/deploy_gate.py`](src/mcp_warden/deploy_gate.py) | `WRD-GATE-*` engine: eval thresholds, guardrail presence, budget, approval receipt |
+| [`src/mcp_warden/cli_deploy_gate.py`](src/mcp_warden/cli_deploy_gate.py) | `deploy-gate` command body (register idiom) |
+| [`src/mcp_warden/auth_audit.py`](src/mcp_warden/auth_audit.py) | `WRD-AUTH-*` static config audit; reuses `checks_secret.scan_field` for vendor patterns |
+| [`src/mcp_warden/cli_auth.py`](src/mcp_warden/cli_auth.py) | `auth audit` sub-app command body |
+| [`tests/test_deploy_gate.py`](tests/test_deploy_gate.py) | Engine per-control pass/fail + CLI exit codes + fail-closed on malformed evidence |
+| [`tests/test_auth_audit.py`](tests/test_auth_audit.py) | Every rule, the deliberate non-flags (loopback, `${VAR}` refs, stdio), redaction, CLI/JSON/SARIF |
+| [`examples/agent-gates/`](examples/agent-gates/) | Runnable demos — a 6-server config (4 flagged / 2 deliberately clean) and pass/fail deploy evidence, with expected verdicts documented and verified |
+
 ## GitHub Action (`action.yml` — Issue #18)
 
 The composite reusable action is the primary delivery vehicle for the `check` gate.

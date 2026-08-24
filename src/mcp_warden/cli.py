@@ -28,6 +28,8 @@ from . import __version__
 from .capture import CaptureError, capture_surface_http_sync, capture_surface_sync
 from .check_core import run_check_full
 from .checks import run_checks
+from .cli_auth import register as register_auth_commands
+from .cli_deploy_gate import register as register_deploy_gate_command
 from .cli_diff import register as register_diff_command
 from .cli_guard import register as register_guard_commands
 from .cli_lock import register as register_lock_commands
@@ -82,6 +84,8 @@ def _root(
 register_guard_commands(app, console, err_console)
 register_lock_commands(app, console, err_console)
 register_diff_command(app, console, err_console)
+register_auth_commands(app, console, err_console)
+register_deploy_gate_command(app, console, err_console)
 
 
 def _split_server_cmd(server_cmd: list[str]) -> tuple[str, list[str]]:
