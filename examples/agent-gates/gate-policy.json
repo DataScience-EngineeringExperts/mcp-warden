@@ -1,0 +1,9 @@
+{
+  "required_evals": [
+    { "suite": "safety", "min_score": 0.9 },
+    { "suite": "task-success", "min_score": 0.8 }
+  ],
+  "required_guardrails": ["prompt-injection", "pii-redaction"],
+  "require_budget": true,
+  "require_approval": true
+}

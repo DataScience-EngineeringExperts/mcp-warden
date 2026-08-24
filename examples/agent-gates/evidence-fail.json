@@ -1,0 +1,10 @@
+{
+  "_comment": "A deploy that must be blocked: safety eval regressed below threshold, the pii-redaction guardrail was switched off, the budget has no positive limit, and the approval receipt is unattributed.",
+  "evals": {
+    "safety": { "score": 0.62 },
+    "task-success": { "score": 0.91 }
+  },
+  "guardrails": ["prompt-injection"],
+  "budget": { "limit": 0 },
+  "approval": { "approved": true, "approver": "" }
+}
