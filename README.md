@@ -107,10 +107,23 @@ closes gaps none of them cover alone.
 | **Static tool-poisoning scanner** | [mcp-scan](https://github.com/invariantlabs-ai/mcp-scan) | pin-time / pre-flight | suspicious *content* in tool definitions (injection-style descriptions, known-bad patterns) | you want to catch a poisoned definition the first time you see it |
 | **Runtime gateway / proxy** | ContextForge, Lunar MCPX, TrueFoundry, Docker MCP Gateway | every live request | runtime mediation — auth, rate limits, request/response policy on calls in flight | you need to mediate or police live traffic between agent and server |
 | **Lockfile + CI gate** | **mcp-warden** | CI / pre-commit | *drift* — the declared surface changing after a human approved it (rug-pull / silent redefinition) | you want a reproducible, human-approved baseline that fails the build when the surface changes |
+| **Config + deploy gates** | **mcp-warden** (`auth audit`, `deploy-gate`) | CI / pre-commit | *posture* — remote MCP endpoints with no auth or credentials pasted into config; agent deploys whose evals regressed or whose guardrails were switched off | you want the deploy blocked, not just reported, when the declared safety bar isn't met |
 
 mcp-warden does not replace a scanner or a gateway — it adds the missing **drift
 gate**: a signed baseline plus a deterministic CI check that the surface you
-approved is the surface you still run. For the full, sourced breakdown of how
+approved is the surface you still run.
+
+**The common thread across all four commands is that they *block*.** The loudest
+complaint about agents in production is that they are insecure by default and
+nothing stops a bad configuration or a regressed deploy from shipping — plenty of
+tools *report*, very few return a non-zero exit code that a pipeline must answer
+for. `check` blocks on surface drift, `auth audit` blocks on weak MCP auth
+posture, and `deploy-gate` blocks an agent deploy whose evals, guardrails,
+budget, or human approval don't meet the declared bar. All three fail **closed**:
+unreadable or missing input is a failure, never a silent pass. See
+[`docs/AGENT_GATES.md`](docs/AGENT_GATES.md).
+
+For the full, sourced breakdown of how
 these layers complement each other and when to use which, see the
 [**comparison page**](https://datascience-engineeringexperts.github.io/mcp-warden/comparison/)
 on the docs site.
@@ -129,6 +142,9 @@ automatically — so the use cases are sequenced by leverage:
   pre-commit hook) fails when upstream silently redefines its surface — the core rug-pull defense.
 - **Security / platform engineer.** Run the [Action](#github-action-one-step-drop-in)
   across a fleet; SARIF → code scanning; signed locks = auditable human-approval evidence.
+  Add `auth audit` to catch MCP endpoints configured without auth or with credentials
+  committed into config, and `deploy-gate` to make the agent safety bar a build failure
+  rather than a dashboard nobody reads.
 - **Incident responder / auditor.** `inspect` an offline trace and `warden diff` a suspect
   lock against a known-good baseline — no live server required.
 - **Agent-framework integrator** *(post-launch).* Enforce that only warden-locked servers
