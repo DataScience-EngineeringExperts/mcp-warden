@@ -45,9 +45,26 @@ def _is_local_host(host: str) -> bool:
 
 
 def _host_of(url: str) -> str:
-    """Extract the bare host[:port] from an http(s) URL without a full parse."""
+    """Extract the bare host[:port] from an http(s) URL without a full parse.
+
+    Any ``user:password@`` userinfo is dropped: a credential embedded in the URL
+    must never reach a finding snippet (see :func:`_safe_url`).
+    """
     rest = url.split("://", 1)[-1]
-    return rest.split("/", 1)[0]
+    authority = rest.split("/", 1)[0]
+    return authority.rsplit("@", 1)[-1]
+
+
+def _safe_url(url: str) -> str:
+    """Render a URL for a finding snippet with any userinfo credential stripped.
+
+    ``https://user:tok@host/path`` -> ``https://host`` — the audit must not widen
+    exposure of the very credential it is reporting.
+    """
+    scheme, sep, rest = url.partition("://")
+    if not sep:
+        return _host_of(url)
+    return f"{scheme}://{_host_of(url)}"
 
 
 def _looks_like_secret_ref(value: str) -> bool:
@@ -132,6 +149,20 @@ def audit_server(name: str, server: dict[str, Any]) -> list[Finding]:
     if isinstance(url, str) and url:
         host = _host_of(url)
         remote = not _is_local_host(host)
+        authority = url.partition("://")[2].split("/", 1)[0]
+        if "@" in authority:
+            findings.append(
+                Finding(
+                    rule_id="WRD-AUTH-URL-CREDENTIAL",
+                    severity="high",
+                    target=target,
+                    message=(
+                        "MCP endpoint URL embeds a userinfo credential; move it to a "
+                        "header referencing a secret manager"
+                    ),
+                    snippet=_safe_url(url),
+                )
+            )
         if url.lower().startswith("http://") and remote:
             findings.append(
                 Finding(
@@ -139,7 +170,7 @@ def audit_server(name: str, server: dict[str, Any]) -> list[Finding]:
                     severity="high",
                     target=target,
                     message=f"remote MCP endpoint '{host}' uses cleartext http://; use https://",
-                    snippet=url,
+                    snippet=_safe_url(url),
                 )
             )
         if remote and not _server_has_auth(server):

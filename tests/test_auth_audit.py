@@ -105,6 +105,25 @@ def test_cli_audit_malformed_config_exit_two(tmp_path):
     assert result.exit_code == 2
 
 
+def test_url_userinfo_credential_flagged_and_never_echoed():
+    # A credential in the URL authority must be flagged AND stripped from every
+    # snippet — the audit must not widen exposure of what it reports.
+    server = {"url": "https://svcuser:s3cr3t-token@mcp.example.com/sse"}
+    findings = audit_server("userinfo", server)
+    assert "WRD-AUTH-URL-CREDENTIAL" in _rules(findings)
+    assert all("s3cr3t-token" not in f.snippet for f in findings)
+    assert all("s3cr3t-token" not in f.message for f in findings)
+
+
+def test_userinfo_host_parsing_does_not_confuse_locality():
+    # '@' in the authority must not make host detection read the userinfo as host.
+    from mcp_warden.auth_audit import _host_of, _safe_url
+
+    assert _host_of("https://user:pw@real.example.com/x") == "real.example.com"
+    assert _safe_url("https://user:pw@real.example.com/x") == "https://real.example.com"
+    assert _safe_url("real.example.com") == "real.example.com"
+
+
 def test_non_dict_headers_and_non_string_values_are_ignored():
     # Malformed shapes must be skipped, never crash the audit.
     from mcp_warden.auth_audit import _scan_mapping_for_literals

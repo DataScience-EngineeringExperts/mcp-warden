@@ -111,6 +111,7 @@ and tracked separately (DSE-725).
 | `WRD-AUTH-NOAUTH` | medium | A remote endpoint declares no auth material |
 | `WRD-AUTH-PLAINTEXT-HTTP` | high | A remote endpoint uses `http://` |
 | `WRD-AUTH-TOKEN-IN-CONFIG` | high | An auth-bearing key holds a literal credential |
+| `WRD-AUTH-URL-CREDENTIAL` | high | The endpoint URL embeds a `user:pass@` userinfo credential |
 | `WRD-SEC-*` | varies | Vendor secret patterns found in any config value (shared with `check`) |
 
 ### What it deliberately does not flag
