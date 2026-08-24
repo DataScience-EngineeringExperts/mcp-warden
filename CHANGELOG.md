@@ -51,6 +51,23 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
   findings, snippets, and SARIF. Runtime capability brokering stays out of scope
   (DSE-725). See [`docs/AGENT_GATES.md`](docs/AGENT_GATES.md).
 
+### Fixed
+
+- **`auth audit` no longer flags `Bearer ${TOKEN}` as a committed credential.** The
+  reference check only recognised a secret reference when `${VAR}` was the *entire*
+  value, so the most common correct shape for an Authorization header was reported as
+  a leaked secret — found within a day by running the audit against a real in-house
+  config, despite the module having 100% test coverage (every fixture used the bare
+  `${VAR}` form). A reference is now recognised anywhere in the value; once all
+  references are stripped, the remainder may only be a short alphabetic auth-scheme
+  word, so a real literal sitting beside a reference (`Bearer sk-abc… ${T}`) is still
+  flagged.
+- **`--json` now emits valid JSONL.** Findings are written through `rich.Console`,
+  which wraps at 80 columns *even when stdout is a pipe*, splitting long findings
+  mid-object and silently breaking every machine consumer. Fixed with `soft_wrap=True`
+  at all five emit sites — this also repairs `check --json`, `pin --json`, and
+  `diff --json`, where the same defect predates the agent gates.
+
 Both commands reuse the `check` exit-code contract and the shared SARIF/JSONL emitters,
 so an existing code-scanning pipeline needs no changes.
 

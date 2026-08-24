@@ -16,7 +16,7 @@ correct configuration gets disabled.
 |--------|---------|
 | `filesystem-local` | clean — local stdio server, no auth posture to audit |
 | `loopback-dev` | clean — loopback is not remotely reachable |
-| `good-citizen` | clean — `${VENDOR_TOKEN}` is a reference, not a literal |
+| `good-citizen` | clean — `Bearer ${VENDOR_TOKEN}` is a reference, not a literal |
 | `internal-http` | `WRD-AUTH-PLAINTEXT-HTTP` (high) + `WRD-AUTH-NOAUTH` (medium) |
 | `vendor-api` | `WRD-AUTH-TOKEN-IN-CONFIG` (high) + `WRD-SEC-ENTROPY` (high) |
 | `legacy` | `WRD-AUTH-URL-CREDENTIAL` (high) + `WRD-AUTH-NOAUTH` (medium) |

@@ -30,7 +30,8 @@ is the MCP auth posture sound. Both reuse the `check` exit-code contract (0 clea
 | [`src/mcp_warden/cli_auth.py`](src/mcp_warden/cli_auth.py) | `auth audit` sub-app command body |
 | [`tests/test_deploy_gate.py`](tests/test_deploy_gate.py) | Engine per-control pass/fail + CLI exit codes + fail-closed on malformed evidence |
 | [`tests/test_auth_audit.py`](tests/test_auth_audit.py) | Every rule, the deliberate non-flags (loopback, `${VAR}` refs, stdio), redaction, CLI/JSON/SARIF |
-| [`examples/agent-gates/`](examples/agent-gates/) | Runnable demos — a 6-server config (4 flagged / 2 deliberately clean) and pass/fail deploy evidence, with expected verdicts documented and verified |
+| [`tests/test_agent_gates_examples.py`](tests/test_agent_gates_examples.py) | Pins the shipped examples to the per-server verdicts their README claims, so a rule change cannot silently make the docs wrong; also asserts the planted fake credentials never reach a finding field |
+| [`examples/agent-gates/`](examples/agent-gates/) | Runnable demos — a 6-server config (4 flagged / 2 deliberately clean, incl. the `Bearer ${VAR}` embedded-reference shape from #94) and pass/fail deploy evidence, with expected verdicts documented and verified |
 
 ## GitHub Action (`action.yml` — Issue #18)
 
