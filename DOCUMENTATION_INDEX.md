@@ -10,7 +10,7 @@ describe and visualize the implementation that satisfies that contract.
 
 | # | Doc | Purpose |
 |---|-----|---------|
-| 1 | [`README.md`](README.md) | Project overview, install, the pin/check CI demo, CLI reference (incl. v0.3 `lock rotate` + redacted offline `diff` viewer), GitHub Action usage section (Issue #18), **pre-commit hook section (Issue #22)** |
+| 1 | [`README.md`](README.md) | Project overview, install, the pin/check CI demo (full walkthrough archived to [`docs/PIN_CHECK_DEMO.md`](docs/PIN_CHECK_DEMO.md) to hold the 500-line core-doc limit), CLI reference (incl. v0.3 `lock rotate` + redacted offline `diff` viewer), GitHub Action usage section (Issue #18), **pre-commit hook section (Issue #22)** |
 | 2 | [`SYSTEM_CONTEXT_DIAGRAM.md`](SYSTEM_CONTEXT_DIAGRAM.md) | System context + pin/check sequence (mermaid); trust boundary; `conclave` as dev-time reviewer only; composite GitHub Action + **pre-commit hook** as consumer delivery vehicles |
 | 3 | [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md) | This file |
 
@@ -97,6 +97,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 
 | Doc | Defines |
 |-----|---------|
+| [`docs/PIN_CHECK_DEMO.md`](docs/PIN_CHECK_DEMO.md) | Full end-to-end pin/check walkthrough, archived out of `README.md` on 2026-08-24 to hold the 500-line core-doc limit |
 | [`docs/SPEC.md`](docs/SPEC.md) | **MCP Lock Format v1** — the vendor-neutral, self-contained format specification any tool can implement: on-disk `warden.lock` schema, RFC 8785 (JCS) canonicalization, SHA-256 `sha256:<hex>` hashing, `overall_digest` construction, the normative drift class + severity table, the optional per-tool inspection block, and a Conformance section + worked example. `WARDEN_LOCK_SCHEMA.md` is the mcp-warden implementation of this format |
 | [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | **(v0.1)** Positioning, trust model (TOFU + `--approve`), assets/actors, the four threat classes (MCP-DRIFT / MCP-CAPSURF / MCP-SECRET / MCP-SUPPLY), explicit out-of-scope limits, deliberate cuts |
 | [`docs/THREAT_MODEL_V2.md`](docs/THREAT_MODEL_V2.md) | **(v0.2)** Addendum extending the v0.1 model: T-RESULT vectors, the defends (BLOCK) / monitors (fuzzy) / still-does-NOT-defend (T-BEHAVE) table, runtime trust-model notes, retained + added cuts, shadow-default positioning |
