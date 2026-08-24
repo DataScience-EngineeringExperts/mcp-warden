@@ -220,7 +220,7 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
                 raise typer.Exit(code=2) from exc
 
         if json_out:
-            console.print(findings_to_jsonl([], drift), end="")
+            console.print(findings_to_jsonl([], drift), end="", soft_wrap=True)
         else:
             header = f"{lock_a.name} → {lock_b.name}"
             if drift:

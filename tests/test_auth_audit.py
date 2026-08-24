@@ -105,6 +105,47 @@ def test_cli_audit_malformed_config_exit_two(tmp_path):
     assert result.exit_code == 2
 
 
+def test_bearer_prefixed_reference_is_not_a_literal():
+    # `Bearer ${TOKEN}` is the single most common CORRECT shape for an
+    # Authorization header. Flagging it as a committed credential is the
+    # false positive that gets the whole gate switched off. Found by
+    # dogfooding against a real config.
+    for good in ("Bearer ${GMAIL_TOKEN}", "bearer $GMAIL_TOKEN", "Token {{ secret }}", "${T}"):
+        server = {"url": "https://x.example.com", "headers": {"Authorization": good}}
+        assert audit_server("ok", server) == [], f"false positive on {good!r}"
+
+
+def test_literal_next_to_a_reference_is_still_flagged():
+    # The permissive path must not become a bypass: a real literal sitting
+    # beside a reference is still a committed credential.
+    server = {"url": "https://x.example.com", "headers": {"Authorization": "Bearer sk-abcdefghijklmnopqrst ${T}"}}
+    assert "WRD-AUTH-TOKEN-IN-CONFIG" in _rules(audit_server("mixed", server))
+
+
+def test_json_output_is_one_line_per_finding(tmp_path):
+    # `--json` is a machine contract. rich wraps at 80 cols even when piped,
+    # which silently produced invalid JSONL; every emitted line must parse.
+    cfg = tmp_path / "mcp.json"
+    cfg.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "bad": {
+                        "url": "http://averyveryverylonghostname.example.com/sse/path/that/is/long",
+                        "headers": {"Authorization": "Bearer sk-abcdefghijklmnopqrstuvwxyz012345"},
+                    }
+                }
+            }
+        )
+    )
+    result = runner.invoke(app, ["auth", "audit", str(cfg), "--json"])
+    assert result.exit_code == 1
+    lines = [ln for ln in result.stdout.splitlines() if ln.strip()]
+    assert lines, "expected JSONL output"
+    for ln in lines:
+        json.loads(ln)  # raises if rich wrapped the line
+
+
 def test_url_userinfo_credential_flagged_and_never_echoed():
     # A credential in the URL authority must be flagged AND stripped from every
     # snippet — the audit must not widen exposure of what it reports.
