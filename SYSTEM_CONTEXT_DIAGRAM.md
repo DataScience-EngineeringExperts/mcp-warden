@@ -86,7 +86,7 @@ flowchart TB
     decision -. "requires production gate" .-> evidence
 
     subgraph ci["CI pipeline (GitHub Actions / local)"]
-        warden["mcp-warden CLI\npin · check · policy · lock rotate · diff"]
+        warden["mcp-warden CLI\npin · check · policy · lock rotate · diff\ndeploy-gate · auth audit"]
     end
 
     subgraph target["Untrusted boundary"]
