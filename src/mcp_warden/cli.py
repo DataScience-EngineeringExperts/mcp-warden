@@ -160,7 +160,7 @@ def pin(
     if sarif is not None:
         sarif.write_text(sarif_to_json(build_sarif(findings)), encoding="utf-8")
     if json_out:
-        console.print(findings_to_jsonl(findings), end="")
+        console.print(findings_to_jsonl(findings), end="", soft_wrap=True)
     else:
         _print_pin_summary(lock_doc, findings, lock, approve)
 
@@ -235,7 +235,7 @@ def check(
         sarif.write_text(sarif_to_json(build_sarif(findings, drift)), encoding="utf-8")
 
     if json_out:
-        console.print(findings_to_jsonl(findings, drift), end="")
+        console.print(findings_to_jsonl(findings, drift), end="", soft_wrap=True)
     else:
         _print_check_summary(drift, lock)
 

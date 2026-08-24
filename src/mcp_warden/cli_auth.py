@@ -68,7 +68,7 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             sarif.write_text(sarif_to_json(build_sarif(all_findings)), encoding="utf-8")
 
         if json_out:
-            console.print(findings_to_jsonl(all_findings), end="")
+            console.print(findings_to_jsonl(all_findings), end="", soft_wrap=True)
         else:
             _print_summary(console, all_findings, len(configs))
 

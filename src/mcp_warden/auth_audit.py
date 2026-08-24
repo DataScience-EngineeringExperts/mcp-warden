@@ -17,6 +17,7 @@ in the MCP auth spec.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -67,18 +68,37 @@ def _safe_url(url: str) -> str:
     return f"{scheme}://{_host_of(url)}"
 
 
-def _looks_like_secret_ref(value: str) -> bool:
-    """True when the value is an env/secret-manager reference, not a literal.
+#: An env/secret-manager reference anywhere in the value: ``${TOKEN}``, ``$TOKEN``,
+#: or ``{{ secret }}``.
+_SECRET_REF = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*|\{\{[^}]+\}\}")
 
-    ``${TOKEN}``, ``$TOKEN``, and ``{{ secret }}`` are references — the operator
-    is doing the right thing and we must not flag them.
+#: What may sit around a reference and still count as "no literal here": an auth
+#: scheme word. Real schemes (Bearer, Token, Basic, ApiKey, Negotiate) are short
+#: and purely alphabetic — deliberately strict, because anything longer or
+#: containing digits/punctuation is far more likely to BE the credential than to
+#: name the scheme carrying it.
+_REF_SURROUND_OK = re.compile(r"^[A-Za-z]{1,12}$")
+
+
+def _looks_like_secret_ref(value: str) -> bool:
+    """True when the value carries its secret by reference, not as a literal.
+
+    The operator is doing the right thing and must not be flagged. Crucially this
+    accepts a reference *embedded* in a header value — ``Bearer ${TOKEN}`` is the
+    single most common correct shape for an Authorization header, and treating it
+    as a committed credential is a false positive that gets the whole gate
+    switched off.
+
+    Conservative by construction: a reference must be present, and once every
+    reference is removed, whatever remains may only be scheme words and
+    separators. ``Bearer ${T}`` passes; ``Bearer abc123 ${T}`` does not, because
+    a real literal is still sitting there next to the reference.
     """
     v = value.strip()
-    return (
-        (v.startswith("${") and v.endswith("}"))
-        or (v.startswith("$") and v[1:].isidentifier())
-        or (v.startswith("{{") and v.endswith("}}"))
-    )
+    if not _SECRET_REF.search(v):
+        return False
+    remainder = _SECRET_REF.sub(" ", v)
+    return all(_REF_SURROUND_OK.match(tok) for tok in remainder.split())
 
 
 def _server_has_auth(server: dict[str, Any]) -> bool:
