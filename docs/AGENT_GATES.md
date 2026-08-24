@@ -120,8 +120,17 @@ Precision matters more than recall for a gate that blocks CI:
 
 - **Loopback servers** (`localhost`, `127.0.0.1`, `::1`) — not remotely
   reachable, so missing auth is not an exposure.
-- **Secret references** — `${TOKEN}`, `$TOKEN`, `{{ secret }}` are the correct
-  pattern and are never flagged as literals.
+- **Secret references, including embedded ones** — `${TOKEN}`, `$TOKEN`,
+  `{{ secret }}` are the correct pattern and are never flagged as literals, and
+  that holds when the reference sits *inside* a larger value. **`Bearer ${TOKEN}`
+  is correct configuration and is not a finding** — it is the most common shape
+  an Authorization header takes, and flagging it was a real false positive found
+  by dogfooding (fixed in #94).
+
+  This is not a hole. A reference must be present, and once every reference is
+  removed, whatever remains may only be a short alphabetic auth-scheme word
+  (`Bearer`, `Token`, `Basic`, `ApiKey`). So `Bearer sk-abc… ${TOKEN}` — a real
+  literal sitting beside a reference — is still flagged.
 - **Local stdio servers** — a `command`/`args` entry with no URL and no remote
   transport has no auth posture to audit.
 

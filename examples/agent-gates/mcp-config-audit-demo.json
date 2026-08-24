@@ -1,23 +1,31 @@
 {
-  "_comment": "Demo MCP config for `mcp-warden auth audit`. Six servers: four with real posture problems, two that are correct and MUST NOT be flagged. All hosts are RFC 2606 example domains and every credential here is fake.",
+  "_comment": "Demo MCP config for `mcp-warden auth audit`. Six servers: four with real posture problems, two that are correct and MUST NOT be flagged \u2014 good-citizen uses `Bearer ${VENDOR_TOKEN}`, the embedded-reference shape that a real config exposed as a false positive (#94). All hosts are RFC 2606 example domains and every credential is fake.",
   "mcpServers": {
     "filesystem-local": {
       "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/data"]
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "/data"
+      ]
     },
     "loopback-dev": {
       "url": "http://localhost:3000/mcp"
     },
     "good-citizen": {
       "url": "https://api.ok.example.com/mcp",
-      "headers": { "Authorization": "${VENDOR_TOKEN}" }
+      "headers": {
+        "Authorization": "Bearer ${VENDOR_TOKEN}"
+      }
     },
     "internal-http": {
       "url": "http://mcp.internal.example.com:8080/sse"
     },
     "vendor-api": {
       "url": "https://api.vendor.example.com/mcp",
-      "headers": { "Authorization": "Bearer sk-live-9f2c8a7b6d5e4f3a2b1c0d9e" }
+      "headers": {
+        "Authorization": "Bearer sk-live-9f2c8a7b6d5e4f3a2b1c0d9e"
+      }
     },
     "legacy": {
       "url": "https://svc:hunter2pass@legacy.example.com/mcp"
