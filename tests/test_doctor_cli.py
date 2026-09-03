@@ -3,7 +3,8 @@
 Exit-code contract, the no-config path, redaction across stdout / JSONL /
 SARIF, the static-by-default guarantee (a spawn, socket, or DNS attempt on the
 default path fails the test), the ``--pin`` opt-in contract, and Windows path
-shapes via injected ``APPDATA``.
+shapes via injected ``APPDATA``. Hardening from the CSO review lives in
+``test_doctor_security.py``.
 """
 
 from __future__ import annotations
@@ -63,7 +64,7 @@ def test_report_exit_one_and_every_credential_redacted(tmp_path, monkeypatch):
     assert "WRD-AUTH-TOKEN-IN-CONFIG" in r.output and "WRD-AUTH-PLAINTEXT-HTTP" in r.output
     assert "WRD-SUP-NPX-UNPINNED" in r.output and "WRD-DOCTOR-NO-LOCK" in r.output
     assert "Next steps" in r.output and "mcp-warden pin" in r.output
-    assert GHP not in r.output
+    assert GHP not in r.output and GHP[-2:] + " " not in r.output
 
 
 def test_json_and_sarif_are_valid_and_redacted(tmp_path, monkeypatch):
@@ -105,9 +106,10 @@ def test_default_path_never_spawns_connects_or_resolves(tmp_path, monkeypatch):
 
 def test_pin_refuses_non_interactive_without_yes(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
-    home = _fake_home(tmp_path)
+    cfg = tmp_path / "mine.json"
+    cfg.write_text(json.dumps({"mcpServers": {"clean": {"command": sys.executable, "args": [str(FIXTURES / "clean_server.py")]}}}))
     monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: pytest.fail("spawned"))
-    r = _run("--pin", home=home)  # CliRunner stdin is not a TTY
+    r = _run("--no-discover", "--config", str(cfg), "--pin", home=tmp_path / "empty")  # CliRunner stdin is not a TTY
     assert r.exit_code == 2 and "--yes" in r.output
     assert not list(tmp_path.glob("*.warden.lock"))
 
@@ -123,9 +125,9 @@ def test_pin_yes_writes_unapproved_lock_for_a_real_server(tmp_path, monkeypatch)
     assert lock.exists(), r.output
     doc = json.loads(lock.read_text())
     assert doc["pin"]["approved"] is False and "pinned" in r.output
-    # Now that the lock exists the same server is covered on the next run.
+    # The lock now exists but is unapproved: coverage is reported, not silently granted.
     again = _run("--no-discover", "--config", str(cfg), home=tmp_path / "empty")
-    assert "WRD-DOCTOR-NO-LOCK" not in again.output
+    assert "WRD-DOCTOR-NO-LOCK" not in again.output and "WRD-DOCTOR-LOCK-UNAPPROVED" in again.output
 
 
 def test_pin_capture_failure_is_exit_two_not_silent(tmp_path, monkeypatch):
@@ -156,4 +158,6 @@ def test_symlinked_discovered_config_warns_and_is_skipped(tmp_path, monkeypatch)
     outside.write_text(json.dumps({"mcpServers": {"planted": {"url": "http://x.example.com"}}}))
     (home / ".cursor" / "mcp.json").symlink_to(outside)
     r = _run(home=home, platform="linux")
-    assert r.exit_code == 0 and "symlink" in r.output and "planted" not in r.output
+    # A skip is never a green exit: something on the machine went unscanned.
+    assert r.exit_code == 1 and "symlink" in r.output and "planted" not in r.output
+    assert "no MCP configs found" not in r.output

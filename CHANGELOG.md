@@ -44,6 +44,25 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
   component is skipped with a warning so a planted link cannot widen the read set.
   `--pin` is the single opt-in that launches servers; it refuses in a non-interactive
   session without `--yes`. Exit 0 clean / 1 any finding / 2 unreadable config (fail closed).
+  **Hardened after security review before merge** — the input files are attacker-reachable
+  (a cloned repo ships `.mcp.json`), so: every config-controlled string is control-character
+  neutralised before it reaches the terminal (no `\n`-injected second `pin` line, no
+  `\x1b` repaint); `--pin` only spawns servers from a `--config` file the user named and
+  prints every argv before asking; the printed `pin` command masks a doctor-local flag set
+  (`--key`, `--header`, `-H`, `Key: value`, JSON-object args) plus auth-shaped URL query
+  params and token-like path segments; a matching lock with `pin.approved: false` is
+  reported as `WRD-DOCTOR-LOCK-UNAPPROVED` (medium) instead of silently counting as
+  coverage; a malformed discovered file warns and the scan continues (exit 2 at the end);
+  VS Code JSONC parses; a skipped config (symlink, > 8 MiB) is never a green exit; the
+  project walk-up stops at the first `.git` or home and never walks at all from outside
+  home without a `.git` boundary; `--pin` never overwrites a lock. See `docs/DOCTOR.md`.
+
+### Changed
+
+- **`auth audit` snippets use the house redactor.** `WRD-AUTH-TOKEN-IN-CONFIG` snippets
+  were `abcd...xy` (a 2-character suffix), wider than `redact_secret` allows everywhere
+  else (prefix of at most half the value, no suffix). Now `abcd…(len=N)`. Found during the
+  `doctor` security review, which made that snippet fleet-wide and wrote it to SARIF.
 
 - **`deploy-gate` — fail-closed CI gate for agent deployments (DSE-1257).** Verifies a
   deploy's evidence against a declared gate policy: required eval suites met their

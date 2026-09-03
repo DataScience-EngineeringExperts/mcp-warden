@@ -1,10 +1,11 @@
 """``doctor`` engine tests — DSE-1516.
 
-Covers discovery as a pure function of (platform, home, cwd, env), the
-fail-closed loaders for every supported config shape, the symlink-escape
-guard, bounded lock discovery + coverage matching, per-server composition of
-the existing engines, and the redacted ``pin`` funnel. CLI behaviour lives in
-``test_doctor_cli.py``.
+Covers discovery as a function of (platform, home, cwd, env), the fail-closed
+loaders for every supported config shape, the symlink-escape guard, bounded
+lock discovery + coverage matching, per-server composition of the existing
+engines, and the redacted ``pin`` funnel. CLI behaviour lives in
+``test_doctor_cli.py``; the CSO-review hardening lives in
+``test_doctor_security.py``.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ import pytest
 
 from mcp_warden.doctor import (
     DoctorError,
+    coverage,
     find_locks,
     lock_covers,
     pin_command,
@@ -26,10 +28,12 @@ from mcp_warden.doctor_discovery import (
     FMT_CLAUDE_JSON,
     FMT_CODEX_TOML,
     FMT_JSON,
+    FMT_JSONC,
     ConfigSource,
     discover,
     load_config,
     project_config_paths,
+    strip_jsonc,
     well_known_config_paths,
 )
 from mcp_warden.lockfile import read_lock
@@ -47,7 +51,7 @@ def _rules(findings):
     return {f.rule_id for f in findings}
 
 
-# --- discovery is pure -------------------------------------------------------
+# --- discovery -------------------------------------------------------------
 
 
 def test_well_known_paths_per_platform(tmp_path):
@@ -60,16 +64,31 @@ def test_well_known_paths_per_platform(tmp_path):
     assert any(str(p).endswith("claude_desktop_config.json") and "AppData" in str(p) for p in win)
     # No APPDATA -> the two AppData-rooted entries are simply absent, never guessed.
     assert len(well_known_config_paths("win32", home, {})) == 4
+    # VS Code entries are JSONC: comments and trailing commas are legal there.
+    assert [f for c, _, f in well_known_config_paths("linux", home, {}) if c == "VS Code"] == [FMT_JSONC]
 
 
-def test_project_walk_stops_at_home_and_at_root(tmp_path):
+def test_project_walk_stops_at_home_or_git_boundary(tmp_path):
     home = tmp_path / "home"
     cwd = home / "a" / "b"
+    cwd.mkdir(parents=True)
     paths = [p for _, p, _, _ in project_config_paths(cwd, home)]
     assert cwd / ".mcp.json" in paths and home / ".mcp.json" in paths
     assert home.parent / ".mcp.json" not in paths
-    outside = [p for _, p, _, _ in project_config_paths(tmp_path / "x", tmp_path / "unrelated")]
-    assert Path(tmp_path.anchor) / ".mcp.json" in outside
+    # A .git boundary below home stops the walk there.
+    (home / "a" / ".git").mkdir()
+    paths = [p for _, p, _, _ in project_config_paths(cwd, home)]
+    assert home / "a" / ".mcp.json" in paths and home / ".mcp.json" not in paths
+
+
+def test_project_walk_outside_home_without_git_is_cwd_only(tmp_path):
+    outside = tmp_path / "x" / "y"
+    outside.mkdir(parents=True)
+    paths = [p for _, p, _, _ in project_config_paths(outside, tmp_path / "unrelated")]
+    assert paths and all(p.parent in (outside, outside / ".cursor", outside / ".vscode") for p in paths)
+    (tmp_path / "x" / ".git").mkdir()
+    paths = [p for _, p, _, _ in project_config_paths(outside, tmp_path / "unrelated")]
+    assert tmp_path / "x" / ".mcp.json" in paths and tmp_path / ".mcp.json" not in paths
 
 
 # --- loaders -------------------------------------------------------------------
@@ -85,6 +104,17 @@ def test_load_json_accepts_mcpservers_and_vscode_servers_key(tmp_path):
     empty = tmp_path / "e.json"
     empty.write_text("{}")
     assert load_config("c", empty, FMT_JSON, "e") == []
+
+
+def test_jsonc_comments_and_trailing_commas_parse_for_vscode(tmp_path):
+    body = '{\n  // user comment\n  "servers": { /* block */ "vs": {"url": "https://h.example.com",},},\n}\n'
+    p = tmp_path / "mcp.json"
+    p.write_text(body)
+    assert list(load_config("VS Code", p, FMT_JSONC, "x")[0].servers) == ["vs"]
+    # Comment markers inside strings are preserved verbatim.
+    assert json.loads(strip_jsonc('{"a": "http://x//y", "b": "/* keep */",}')) == {"a": "http://x//y", "b": "/* keep */"}
+    with pytest.raises(DoctorError):
+        load_config("c", p, FMT_JSON, "strict")  # plain JSON still rejects JSONC
 
 
 def test_load_claude_json_yields_top_level_and_per_project(tmp_path):
@@ -128,8 +158,8 @@ def test_discover_skips_symlinked_config_and_never_reads_its_target(tmp_path):
     outside.write_text(json.dumps({"mcpServers": {"planted": {"url": "http://evil.example.com"}}}))
     (home / ".cursor" / "mcp.json").symlink_to(outside)
     warnings, warn = _warns()
-    sources, _ = discover("linux", home, home, {}, warn)
-    assert sources == []
+    found = discover("linux", home, home, {}, warn)
+    assert found.sources == [] and found.skipped == 1
     assert any("symlink" in w for w in warnings)
 
 
@@ -141,8 +171,8 @@ def test_discover_skips_symlinked_directory_component(tmp_path):
     (real / "mcp.json").write_text(json.dumps({"mcpServers": {"planted": {"command": "x"}}}))
     (home / ".cursor").symlink_to(real, target_is_directory=True)
     warnings, warn = _warns()
-    sources, _ = discover("linux", home, home, {}, warn)
-    assert sources == [] and warnings
+    found = discover("linux", home, home, {}, warn)
+    assert found.sources == [] and warnings and found.skipped == 1
 
 
 # --- lock coverage -------------------------------------------------------------
@@ -170,6 +200,16 @@ def test_lock_covers_matches_exact_launch_only():
     assert not lock_covers(lock, {"url": "https://h.example.com/mcp"})
 
 
+def test_coverage_distinguishes_approved_from_unapproved():
+    lock = read_lock(FIXTURE_LOCK)
+    server = {"command": lock.server.command, "args": list(lock.server.args)}
+    unapproved = lock.model_copy(update={"pin": lock.pin.model_copy(update={"approved": False})})
+    assert coverage(server, [(FIXTURE_LOCK, lock)]) == "approved"
+    assert coverage(server, [(FIXTURE_LOCK, unapproved)]) == "unapproved"
+    assert coverage(server, [(FIXTURE_LOCK, unapproved), (FIXTURE_LOCK, lock)]) == "approved"
+    assert coverage({"url": "https://none.example.com"}, [(FIXTURE_LOCK, lock)]) is None
+
+
 # --- composition ---------------------------------------------------------------
 
 
@@ -189,7 +229,7 @@ def test_covered_server_has_no_lock_finding():
     lock = read_lock(FIXTURE_LOCK)
     server = {"command": lock.server.command, "args": list(lock.server.args)}
     r = scan_server(_src({"s": server}), "s", server, [(FIXTURE_LOCK, lock)])
-    assert r.covered and "WRD-DOCTOR-NO-LOCK" not in _rules(r.findings)
+    assert r.covered and not ({"WRD-DOCTOR-NO-LOCK", "WRD-DOCTOR-LOCK-UNAPPROVED"} & _rules(r.findings))
 
 
 def test_run_doctor_explicit_only(tmp_path, monkeypatch):
@@ -202,6 +242,7 @@ def test_run_doctor_explicit_only(tmp_path, monkeypatch):
     )
     assert [r.name for r in report.reports] == ["a"] and report.searched == 0
     assert _rules(report.findings) == {"WRD-DOCTOR-NO-LOCK"}
+    assert report.sources[0].explicit
 
 
 # --- the funnel -----------------------------------------------------------------

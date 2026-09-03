@@ -176,7 +176,9 @@ def test_non_dict_headers_and_non_string_values_are_ignored():
 def test_short_credential_literal_is_fully_masked():
     server = {"url": "https://x.example.com", "headers": {"Authorization": "abc"}}
     findings = audit_server("short", server)
-    assert any(f.snippet == "***" for f in findings)
+    # House redactor: at most floor(n/2) leading chars, never a suffix, bucketed length.
+    assert any(f.snippet == "a…(len<=3)" for f in findings)
+    assert all("abc" not in f.snippet for f in findings)
 
 
 def test_unreadable_config_path_raises(tmp_path):
