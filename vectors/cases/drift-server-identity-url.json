@@ -1,0 +1,78 @@
+{
+  "id": "drift/server-identity-url",
+  "kind": "drift",
+  "description": "HTTP endpoint changed -> server-identity (critical).",
+  "lock": {
+    "schema_version": 3,
+    "warden_version": "0.0.0",
+    "server": {
+      "command": "",
+      "args": [],
+      "url": "https://a.example.com/mcp",
+      "command_digest": "sha256:f0d46b3f49eaaa97e6ea43ad04e015fb39c868020185c7aef791842a55fd6aec"
+    },
+    "tools": [
+      {
+        "name": "t",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:fc9373d75e8760f06d8500e39c99c4b4ffd2ef8a8ded6a68e0c487596ef0d35a"
+      }
+    ],
+    "resources": [],
+    "prompts": [],
+    "findings": [],
+    "overall_digest": "sha256:1ddb7a0ce0ce1f08f0dffbeeaea4f0675355299d8c6c27d44e55052c7c0ed71d",
+    "pin": {
+      "created_at": "2026-01-01T00:00:00Z",
+      "warden_version": "0.0.0",
+      "mcp_protocol_version": "2025-06-18",
+      "approved": false,
+      "approver": null,
+      "approved_at": null,
+      "approved_digest": null,
+      "provenance_version": 1,
+      "pinner": null,
+      "attestations": [],
+      "rotated_at": null,
+      "rotation_count": 0
+    }
+  },
+  "surface": {
+    "url": "https://b.example.com/mcp",
+    "tools": [
+      {
+        "name": "t",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    ],
+    "resources": [],
+    "prompts": []
+  },
+  "expect": [
+    {
+      "drift_class": "server-identity",
+      "severity": "critical",
+      "target": "launch/command",
+      "detail": null
+    }
+  ]
+}

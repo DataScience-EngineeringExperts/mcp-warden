@@ -1,0 +1,22 @@
+{
+  "id": "canonical/deep-nesting",
+  "kind": "canonical",
+  "description": "Deeply nested empties.",
+  "input": {
+    "a": {
+      "b": {
+        "c": {
+          "d": [
+            [
+              []
+            ]
+          ]
+        }
+      }
+    }
+  },
+  "expect": {
+    "jcs": "{\"a\":{\"b\":{\"c\":{\"d\":[[[]]]}}}}",
+    "sha256": "sha256:388117f77e2340292e90ea546e029b368425df3876777d5d57a699d2cd0a283a"
+  }
+}

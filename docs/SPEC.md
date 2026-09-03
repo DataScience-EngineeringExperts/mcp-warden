@@ -75,8 +75,7 @@ To make `pin` (write baseline) and `check` (verify) agree byte-for-byte, every v
 is hashed MUST first be canonicalized.
 
 - **Canonical form:** an implementation MUST serialize JSON values using the **JSON
-  Canonicalization Scheme (JCS), RFC 8785**. This fixes object-key ordering (sort by
-  Unicode code point), string escaping, number formatting, and the elimination of all
+  Canonicalization Scheme (JCS), RFC 8785**. This fixes object-key ordering (sort by **UTF-16 code units**, RFC 8785 §3.2.3 — for astral characters this is *not* code-point order; `vectors/cases/canonical-surrogate-key-order.json` pins it), string escaping, number formatting, and the elimination of all
   insignificant whitespace. Implementers SHOULD use a vetted JCS library rather than
   hand-rolling number formatting.
 - **Array ordering:** JCS preserves array order. This format additionally requires the
@@ -203,8 +202,12 @@ recursing `properties` and array `items`. Each record keeps `type` (as a sorted 
 `required`, `enum`, and constraints (`maxLength`, `minLength`, `minimum`, `maximum`,
 `pattern`, `format`, `additionalProperties`); it **drops** cosmetic keys
 (`description`, `title`, `examples`, `default`). When `additionalProperties` is absent it
-is treated as `true`; a `$ref` is an opaque leaf and MUST NOT be followed; cyclic or
-over-deep nodes are recorded as `{"_truncated": true}`. The skeleton lets `check`
+is treated as `true`; a **same-document** `$ref` (`#/$defs/…`, `#/definitions/…`, any RFC 6901 pointer,
+percent-decoded before `~1`/`~0` unescaping) is **followed** into its target so a constraint
+hidden behind a shared definition classifies granularly (schema_version 3, §14.2); a remote
+`$ref`, a `$ref` with sibling keys, an unresolvable pointer, or a ref chain over budget is
+recorded as the opaque leaf `{"$ref": "<literal>"}`; a cyclic ref, and any cyclic or
+over-deep node, is recorded as `{"_truncated": true}`. The skeleton lets `check`
 classify *what* changed (§8.2). It MAY be `null`; a baseline lacking it falls back to a
 blob-level schema-modified classification until re-pinned.
 
@@ -387,7 +390,7 @@ relaxations of optional result-inspection checks for that one tool:
 An implementation is **conformant** with MCP Lock Format v1 if and only if:
 
 1. It writes and reads a `warden.lock` matching the top-level schema (§3), with
-   `schema_version` `1`.
+   `schema_version` naming the format level it implements (currently `3`, §14).
 2. It canonicalizes per RFC 8785 JCS (§4) and hashes per §5, emitting every digest as
    `sha256:` followed by 64 lowercase hex characters.
 3. Given the **same declared surface**, it produces a **byte-identical** `overall_digest`
@@ -402,6 +405,27 @@ An implementation is **conformant** with MCP Lock Format v1 if and only if:
 
 Conformance is about reproducing the digest over a declared surface. It is **not** any
 form of certification, and it makes no claim about runtime behavior or safety.
+
+### 12.1 Conformance vectors (normative)
+
+The directory [`vectors/`](../vectors/README.md) in the reference repository is the
+**language-neutral, executable definition** of the rules above. An implementation is
+conformant **if and only if** it reproduces every vector in `vectors/manifest.json`
+byte-for-byte:
+
+- `canonical` — the RFC 8785 text and `sha256:` digest of arbitrary JSON values (§4–§5);
+- `digest` — every field hash, `capabilities`, `schema_skeleton`, `entry_digest` and
+  `overall_digest` for a declared surface (§5.1–§8.1), including entry sorting;
+- `drift` — the ordered `(drift_class, severity, target, detail)` set for a baseline lock
+  and an observed surface (§8.2–§8.3);
+- `malformed` — lock documents a conforming reader MUST reject.
+
+The corpus is generated from the reference implementation (`vectors/tools/generate.py`)
+and is regenerated only on a deliberate format change (§14). Two implementations ship
+with the reference and both run the corpus in CI: the Python CLI and the zero-dependency
+TypeScript verifier [`@mcp-warden/lock`](../packages/lock-ts/README.md). A third
+implementation that disagrees with a vector has found either its own defect or a defect
+in the reference — never a reason to edit the vector.
 
 ---
 

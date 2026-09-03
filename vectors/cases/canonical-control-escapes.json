@@ -1,0 +1,10 @@
+{
+  "id": "canonical/control-escapes",
+  "kind": "canonical",
+  "description": "Only \\\" \\\\ \\b \\f \\n \\r \\t and \\u00XX (<0x20) are escaped; DEL and U+2028 stay literal.",
+  "input": "a\u0007b\n\t\"q\\ \u001f ",
+  "expect": {
+    "jcs": "\"a\\u0007b\\n\\t\\\"q\\\\ \\u001f \"",
+    "sha256": "sha256:d984d9123d369732ab3d28c652f531093f3e379a6ed379359848b333b2e7b93b"
+  }
+}

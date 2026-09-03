@@ -1,0 +1,21 @@
+{
+  "id": "canonical/nested-arrays",
+  "kind": "canonical",
+  "description": "Nesting + array order preserved; no insignificant whitespace.",
+  "input": {
+    "x": {
+      "y": [
+        1,
+        2,
+        {
+          "z": null
+        }
+      ]
+    },
+    "w": []
+  },
+  "expect": {
+    "jcs": "{\"w\":[],\"x\":{\"y\":[1,2,{\"z\":null}]}}",
+    "sha256": "sha256:78c057a296fe48219dcf2eaebd7580cb5f25eb98799f6a3aa1fa8810bee33158"
+  }
+}

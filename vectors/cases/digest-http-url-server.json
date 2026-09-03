@@ -1,0 +1,50 @@
+{
+  "id": "digest/http-url-server",
+  "kind": "digest",
+  "description": "A Streamable HTTP endpoint: command_digest covers {url}; command/args are empty.",
+  "surface": {
+    "url": "https://example.com/mcp",
+    "tools": [
+      {
+        "name": "ping",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    ],
+    "resources": [],
+    "prompts": []
+  },
+  "expect": {
+    "server": {
+      "command_digest": "sha256:b6ab9af4649e26f4b90a7786ee4b70f287a0b0189551386e1accb431f4e97986"
+    },
+    "tools": [
+      {
+        "name": "ping",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:6dbb5f5d14ac69981446cc85148ea4992450871a8466534d0338354ba66b4294"
+      }
+    ],
+    "resources": [],
+    "prompts": [],
+    "overall_digest": "sha256:fc2e3393237a2fc90b42494848c4497f8a6a77fdd02224a44aba2d623d8d5c24"
+  }
+}

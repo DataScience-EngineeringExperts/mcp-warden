@@ -14,6 +14,20 @@ describe and visualize the implementation that satisfies that contract.
 | 2 | [`SYSTEM_CONTEXT_DIAGRAM.md`](SYSTEM_CONTEXT_DIAGRAM.md) | System context + pin/check sequence (mermaid); trust boundary; `conclave` as dev-time reviewer only; composite GitHub Action + **pre-commit hook** as consumer delivery vehicles |
 | 3 | [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md) | This file |
 
+## Lock Format v1 conformance (`vectors/` + `@mcp-warden/lock` — DSE-1513)
+
+The format is a standard, not a tool: a language-neutral corpus defines conformance and two
+implementations (Python reference, zero-dependency TypeScript) prove it in CI.
+
+| Artifact | Purpose |
+|----------|---------|
+| [`vectors/README.md`](vectors/README.md) | Consumer contract: manifest schema, the four vector kinds, the surface document shape, how a third implementation runs the corpus |
+| [`vectors/manifest.json`](vectors/manifest.json) + [`vectors/cases/`](vectors/cases/) | 77 generated vectors — canonical (RFC 8785), digest, drift (every `WRD-DRIFT-*` class), malformed |
+| [`vectors/tools/generate.py`](vectors/tools/generate.py) | Regenerates the corpus from the Python reference; a corpus diff = a hashed-derivation change = a `schema_version` bump (SPEC §14.2) |
+| [`tests/test_spec_vectors.py`](tests/test_spec_vectors.py) | Python harness over the manifest (honours `MCP_LOCK_VECTORS_DIR`) |
+| [`packages/lock-ts/`](packages/lock-ts/README.md) | `@mcp-warden/lock` — verify-only TypeScript: hand-written JCS, SHA-256, capability + skeleton derivation, drift classifier; `npm test` runs the same corpus |
+| [`.github/workflows/integrity-gate.yml`](.github/workflows/integrity-gate.yml) `conformance` job | Runs both harnesses; mutation proof flips one hex char and requires BOTH to fail |
+
 ## Agent gates (`deploy-gate` + `auth audit` — DSE-1257 / DSE-1258)
 
 Two fail-closed gates extending warden past MCP-surface integrity into the adjacent
@@ -99,7 +113,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 | Doc | Defines |
 |-----|---------|
 | [`docs/PIN_CHECK_DEMO.md`](docs/PIN_CHECK_DEMO.md) | Full end-to-end pin/check walkthrough, archived out of `README.md` on 2026-08-24 to hold the 500-line core-doc limit |
-| [`docs/SPEC.md`](docs/SPEC.md) | **MCP Lock Format v1** — the vendor-neutral, self-contained format specification any tool can implement: on-disk `warden.lock` schema, RFC 8785 (JCS) canonicalization, SHA-256 `sha256:<hex>` hashing, `overall_digest` construction, the normative drift class + severity table, the optional per-tool inspection block, and a Conformance section + worked example. `WARDEN_LOCK_SCHEMA.md` is the mcp-warden implementation of this format |
+| [`docs/SPEC.md`](docs/SPEC.md) | **MCP Lock Format v1** — the vendor-neutral, self-contained format specification any tool can implement: on-disk `warden.lock` schema, RFC 8785 (JCS) canonicalization, SHA-256 `sha256:<hex>` hashing, `overall_digest` construction, the normative drift class + severity table, the optional per-tool inspection block, and a Conformance section (§12.1: passing `vectors/` **is** conformance) + worked example. `WARDEN_LOCK_SCHEMA.md` is the mcp-warden implementation of this format |
 | [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | **(v0.1)** Positioning, trust model (TOFU + `--approve`), assets/actors, the four threat classes (MCP-DRIFT / MCP-CAPSURF / MCP-SECRET / MCP-SUPPLY), explicit out-of-scope limits, deliberate cuts |
 | [`docs/THREAT_MODEL_V2.md`](docs/THREAT_MODEL_V2.md) | **(v0.2)** Addendum extending the v0.1 model: T-RESULT vectors, the defends (BLOCK) / monitors (fuzzy) / still-does-NOT-defend (T-BEHAVE) table, runtime trust-model notes, retained + added cuts, shadow-default positioning |
 | [`docs/AGENT_TRUST_KERNEL.md`](docs/AGENT_TRUST_KERNEL.md) | **(DSE-714, design contract)** Normative invariants for the future deterministic Agent Trust Kernel: trust boundaries, complete mediation, default deny, non-overridable critical classes, evidence-before-effect, offline operation, residual risks, and bindings for DSE-715 through DSE-717. MCP-Warden v1.1 is explicitly not yet ATK-conformant |

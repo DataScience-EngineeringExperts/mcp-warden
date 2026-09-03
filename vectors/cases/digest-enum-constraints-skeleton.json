@@ -1,0 +1,200 @@
+{
+  "id": "digest/enum-constraints-skeleton",
+  "kind": "digest",
+  "description": "Enum canonical ordering, retained constraint keys, type lists, nested items, additionalProperties false.",
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [
+      {
+        "name": "cfg",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "enum": [
+                "b",
+                "a",
+                1,
+                true,
+                null,
+                {
+                  "k": 1
+                },
+                [
+                  2
+                ]
+              ]
+            },
+            "n": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10
+            },
+            "s": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "pattern": "^x",
+              "format": "email",
+              "title": "cosmetic"
+            },
+            "items": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "maxLength": 4
+              }
+            },
+            "nested": {
+              "type": "object",
+              "properties": {
+                "deep": {
+                  "type": "boolean",
+                  "default": true
+                }
+              },
+              "required": [
+                "deep"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "additionalProperties": false
+        }
+      }
+    ],
+    "resources": [],
+    "prompts": []
+  },
+  "expect": {
+    "server": {
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [
+      {
+        "name": "cfg",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:b014b381f3068cda39bc4846678d17a26cf364eeb12422fbf3eaa8aacf835d1a",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": false
+              }
+            },
+            "items": {
+              "type": [
+                "array"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "items[]": {
+              "type": [
+                "string"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true,
+                "maxLength": 4
+              }
+            },
+            "mode": {
+              "type": [
+                "null",
+                "string"
+              ],
+              "required": true,
+              "enum": [
+                null,
+                true,
+                {
+                  "k": 1
+                },
+                1,
+                [
+                  2
+                ],
+                "a",
+                "b"
+              ],
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "n": {
+              "type": [
+                "integer"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true,
+                "maximum": 10,
+                "minimum": 0
+              }
+            },
+            "nested": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": false
+              }
+            },
+            "nested.deep": {
+              "type": [
+                "boolean"
+              ],
+              "required": true,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "s": {
+              "type": [
+                "string"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true,
+                "format": "email",
+                "maxLength": 64,
+                "minLength": 1,
+                "pattern": "^x"
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:0c3a0e1b0f5e9748b614818d5db658ae56af7db418b1472335d55d723ed9cb32"
+      }
+    ],
+    "resources": [],
+    "prompts": [],
+    "overall_digest": "sha256:945a89abf3aacd908242925ba13f8c4049383d9cfc1c912d85df7ef37644bff1"
+  }
+}

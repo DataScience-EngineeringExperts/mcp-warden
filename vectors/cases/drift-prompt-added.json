@@ -1,0 +1,57 @@
+{
+  "id": "drift/prompt-added",
+  "kind": "drift",
+  "description": "prompt-added (medium).",
+  "lock": {
+    "schema_version": 3,
+    "warden_version": "0.0.0",
+    "server": {
+      "command": "python",
+      "args": [
+        "server.py"
+      ],
+      "url": null,
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [],
+    "resources": [],
+    "prompts": [],
+    "findings": [],
+    "overall_digest": "sha256:3372c5e9da87c6d5fa8a4408770abea5376cbc7aa3b7d2ea6447e0d91b5abf66",
+    "pin": {
+      "created_at": "2026-01-01T00:00:00Z",
+      "warden_version": "0.0.0",
+      "mcp_protocol_version": "2025-06-18",
+      "approved": false,
+      "approver": null,
+      "approved_at": null,
+      "approved_digest": null,
+      "provenance_version": 1,
+      "pinner": null,
+      "attestations": [],
+      "rotated_at": null,
+      "rotation_count": 0
+    }
+  },
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [],
+    "resources": [],
+    "prompts": [
+      {
+        "name": "p"
+      }
+    ]
+  },
+  "expect": [
+    {
+      "drift_class": "prompt-added",
+      "severity": "medium",
+      "target": "prompts/p",
+      "detail": null
+    }
+  ]
+}

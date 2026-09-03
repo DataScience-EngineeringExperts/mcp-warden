@@ -1,0 +1,61 @@
+{
+  "id": "digest/absence-rules",
+  "kind": "digest",
+  "description": "Absent description hashes \"\", absent inputSchema hashes {}, absent arguments hashes [], absent name/mimeType are null.",
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [
+      {
+        "name": "bare"
+      }
+    ],
+    "resources": [
+      {
+        "uri": "res://bare"
+      }
+    ],
+    "prompts": [
+      {
+        "name": "bare"
+      }
+    ]
+  },
+  "expect": {
+    "server": {
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [
+      {
+        "name": "bare",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {}
+        },
+        "entry_digest": "sha256:e73d702704600656803bc02f9a9853d5d84846b01f17bb67578f8dfd94d131a9"
+      }
+    ],
+    "resources": [
+      {
+        "uri": "res://bare",
+        "name": null,
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "mime_type": null,
+        "entry_digest": "sha256:bbba68c6c1aa185835c104295617ec092075b16be5e738d4f00ce08c54b019f6"
+      }
+    ],
+    "prompts": [
+      {
+        "name": "bare",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "arguments_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "entry_digest": "sha256:37b54601b7622b3734efb093fa82da7e54ea38c9fd65980b6c403cee90959a0d"
+      }
+    ],
+    "overall_digest": "sha256:7af941616b0bf5c98755e9a543137cba622d986e86ef8404509132c27f3b38b5"
+  }
+}

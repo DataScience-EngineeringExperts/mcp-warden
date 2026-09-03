@@ -1,0 +1,60 @@
+{
+  "id": "drift/prompt-removed",
+  "kind": "drift",
+  "description": "prompt-removed (low).",
+  "lock": {
+    "schema_version": 3,
+    "warden_version": "0.0.0",
+    "server": {
+      "command": "python",
+      "args": [
+        "server.py"
+      ],
+      "url": null,
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [],
+    "resources": [],
+    "prompts": [
+      {
+        "name": "p",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "arguments_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "entry_digest": "sha256:473b3106f7027bbfec160cd85dc83be2eede9828005057b13401650798851e1b"
+      }
+    ],
+    "findings": [],
+    "overall_digest": "sha256:6b0bc437fc7e39f90fe0c85da8ef83676be617ffd9e890bb9c6f0917c3b616b0",
+    "pin": {
+      "created_at": "2026-01-01T00:00:00Z",
+      "warden_version": "0.0.0",
+      "mcp_protocol_version": "2025-06-18",
+      "approved": false,
+      "approver": null,
+      "approved_at": null,
+      "approved_digest": null,
+      "provenance_version": 1,
+      "pinner": null,
+      "attestations": [],
+      "rotated_at": null,
+      "rotation_count": 0
+    }
+  },
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [],
+    "resources": [],
+    "prompts": []
+  },
+  "expect": [
+    {
+      "drift_class": "prompt-removed",
+      "severity": "low",
+      "target": "prompts/p",
+      "detail": null
+    }
+  ]
+}

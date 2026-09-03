@@ -280,3 +280,71 @@ jobs:
 
       - name: Scan full git history
         run: gitleaks git . --config .gitleaks.toml --redact --no-banner
+
+  # --------------------------------------------------------------------------
+  # Job 5: MCP Lock Format v1 conformance — Python reference + TypeScript (DSE-1513)
+  #
+  # vectors/ is the language-neutral definition of a conforming implementation
+  # (docs/SPEC.md §12). Both shipped implementations — the Python reference and
+  # the zero-dependency @mcp-warden/lock verifier — must reproduce every vector
+  # byte-for-byte. The mutation step then proves the gate has teeth: ONE flipped
+  # hex character in ONE expected digest must fail BOTH harnesses.
+  # --------------------------------------------------------------------------
+  conformance:
+    name: Lock Format v1 conformance (py + ts)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Set up Node 22
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/lock-ts/package-lock.json
+
+      - name: Install mcp-warden
+        run: pip install -e ".[dev]"
+
+      - name: Python reference passes the corpus
+        run: pytest tests/test_spec_vectors.py -q
+
+      - name: TypeScript verifier passes the corpus (zero runtime deps)
+        working-directory: packages/lock-ts
+        run: |
+          npm ci
+          npm test
+          # "Zero runtime dependencies" is a published guarantee — assert it: the
+          # production tree must contain exactly one path, the package itself.
+          test "$(npm ls --omit=dev --all --parseable | wc -l)" -eq 1
+
+      - name: "Mutation proof: one flipped hex char must fail BOTH harnesses"
+        run: |
+          rm -rf /tmp/mutated-vectors && cp -r vectors /tmp/mutated-vectors
+          python - <<'PY'
+          import json, pathlib
+          p = pathlib.Path("/tmp/mutated-vectors/cases/digest-clean-fixture.json")
+          d = json.loads(p.read_text(encoding="utf-8"))
+          h = d["expect"]["overall_digest"]
+          d["expect"]["overall_digest"] = h[:-1] + ("0" if h[-1] != "0" else "1")
+          p.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+          PY
+          echo "--- Python harness vs mutated corpus (expect FAILURE) ---"
+          if MCP_LOCK_VECTORS_DIR=/tmp/mutated-vectors pytest tests/test_spec_vectors.py -q ; then
+            echo "ERROR: Python harness accepted a mutated vector — the conformance gate is broken"
+            exit 1
+          fi
+          echo "--- TypeScript harness vs mutated corpus (expect FAILURE) ---"
+          if (cd packages/lock-ts && MCP_LOCK_VECTORS_DIR=/tmp/mutated-vectors node --test dist/test/vectors.test.js) ; then
+            echo "ERROR: TypeScript harness accepted a mutated vector — the conformance gate is broken"
+            exit 1
+          fi
+          echo "--- Both harnesses correctly rejected the mutated corpus ---"

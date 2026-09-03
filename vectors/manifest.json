@@ -1,0 +1,393 @@
+{
+  "format": "mcp-lock-v1",
+  "schema_version": 3,
+  "generator": "vectors/tools/generate.py",
+  "count": 77,
+  "vectors": [
+    {
+      "id": "canonical/sorted-keys-utf16",
+      "kind": "canonical",
+      "file": "cases/canonical-sorted-keys-utf16.json"
+    },
+    {
+      "id": "canonical/nested-arrays",
+      "kind": "canonical",
+      "file": "cases/canonical-nested-arrays.json"
+    },
+    {
+      "id": "canonical/numbers-es6",
+      "kind": "canonical",
+      "file": "cases/canonical-numbers-es6.json"
+    },
+    {
+      "id": "canonical/unicode-literal",
+      "kind": "canonical",
+      "file": "cases/canonical-unicode-literal.json"
+    },
+    {
+      "id": "canonical/control-escapes",
+      "kind": "canonical",
+      "file": "cases/canonical-control-escapes.json"
+    },
+    {
+      "id": "canonical/surrogate-key-order",
+      "kind": "canonical",
+      "file": "cases/canonical-surrogate-key-order.json"
+    },
+    {
+      "id": "canonical/empty-string",
+      "kind": "canonical",
+      "file": "cases/canonical-empty-string.json"
+    },
+    {
+      "id": "canonical/empty-object",
+      "kind": "canonical",
+      "file": "cases/canonical-empty-object.json"
+    },
+    {
+      "id": "canonical/empty-array",
+      "kind": "canonical",
+      "file": "cases/canonical-empty-array.json"
+    },
+    {
+      "id": "canonical/scalars",
+      "kind": "canonical",
+      "file": "cases/canonical-scalars.json"
+    },
+    {
+      "id": "canonical/deep-nesting",
+      "kind": "canonical",
+      "file": "cases/canonical-deep-nesting.json"
+    },
+    {
+      "id": "canonical/key-escapes",
+      "kind": "canonical",
+      "file": "cases/canonical-key-escapes.json"
+    },
+    {
+      "id": "digest/minimal-single-tool",
+      "kind": "digest",
+      "file": "cases/digest-minimal-single-tool.json"
+    },
+    {
+      "id": "digest/clean-fixture",
+      "kind": "digest",
+      "file": "cases/digest-clean-fixture.json"
+    },
+    {
+      "id": "digest/absence-rules",
+      "kind": "digest",
+      "file": "cases/digest-absence-rules.json"
+    },
+    {
+      "id": "digest/http-url-server",
+      "kind": "digest",
+      "file": "cases/digest-http-url-server.json"
+    },
+    {
+      "id": "digest/malformed-input-schema",
+      "kind": "digest",
+      "file": "cases/digest-malformed-input-schema.json"
+    },
+    {
+      "id": "digest/capabilities-and-refs",
+      "kind": "digest",
+      "file": "cases/digest-capabilities-and-refs.json"
+    },
+    {
+      "id": "digest/enum-constraints-skeleton",
+      "kind": "digest",
+      "file": "cases/digest-enum-constraints-skeleton.json"
+    },
+    {
+      "id": "digest/entry-sorting",
+      "kind": "digest",
+      "file": "cases/digest-entry-sorting.json"
+    },
+    {
+      "id": "drift/no-drift",
+      "kind": "drift",
+      "file": "cases/drift-no-drift.json"
+    },
+    {
+      "id": "drift/server-identity",
+      "kind": "drift",
+      "file": "cases/drift-server-identity.json"
+    },
+    {
+      "id": "drift/server-identity-url",
+      "kind": "drift",
+      "file": "cases/drift-server-identity-url.json"
+    },
+    {
+      "id": "drift/tool-added",
+      "kind": "drift",
+      "file": "cases/drift-tool-added.json"
+    },
+    {
+      "id": "drift/tool-removed",
+      "kind": "drift",
+      "file": "cases/drift-tool-removed.json"
+    },
+    {
+      "id": "drift/capability-added",
+      "kind": "drift",
+      "file": "cases/drift-capability-added.json"
+    },
+    {
+      "id": "drift/capability-removed",
+      "kind": "drift",
+      "file": "cases/drift-capability-removed.json"
+    },
+    {
+      "id": "drift/description-modified",
+      "kind": "drift",
+      "file": "cases/drift-description-modified.json"
+    },
+    {
+      "id": "drift/description-and-schema",
+      "kind": "drift",
+      "file": "cases/drift-description-and-schema.json"
+    },
+    {
+      "id": "drift/resource-added",
+      "kind": "drift",
+      "file": "cases/drift-resource-added.json"
+    },
+    {
+      "id": "drift/resource-removed",
+      "kind": "drift",
+      "file": "cases/drift-resource-removed.json"
+    },
+    {
+      "id": "drift/resource-modified",
+      "kind": "drift",
+      "file": "cases/drift-resource-modified.json"
+    },
+    {
+      "id": "drift/prompt-added",
+      "kind": "drift",
+      "file": "cases/drift-prompt-added.json"
+    },
+    {
+      "id": "drift/prompt-removed",
+      "kind": "drift",
+      "file": "cases/drift-prompt-removed.json"
+    },
+    {
+      "id": "drift/prompt-modified",
+      "kind": "drift",
+      "file": "cases/drift-prompt-modified.json"
+    },
+    {
+      "id": "drift/unapproved-change",
+      "kind": "drift",
+      "file": "cases/drift-unapproved-change.json"
+    },
+    {
+      "id": "drift/schema-version-migrated",
+      "kind": "drift",
+      "file": "cases/drift-schema-version-migrated.json"
+    },
+    {
+      "id": "drift/inspection-policy-modified",
+      "kind": "drift",
+      "file": "cases/drift-inspection-policy-modified.json"
+    },
+    {
+      "id": "drift/schema-modified-v1-fallback",
+      "kind": "drift",
+      "file": "cases/drift-schema-modified-v1-fallback.json"
+    },
+    {
+      "id": "drift/schema-modified-opaque-ref",
+      "kind": "drift",
+      "file": "cases/drift-schema-modified-opaque-ref.json"
+    },
+    {
+      "id": "drift/schema-modified-ref-redacted",
+      "kind": "drift",
+      "file": "cases/drift-schema-modified-ref-redacted.json"
+    },
+    {
+      "id": "drift/schema-cosmetic-modified",
+      "kind": "drift",
+      "file": "cases/drift-schema-cosmetic-modified.json"
+    },
+    {
+      "id": "drift/schema-required-removed",
+      "kind": "drift",
+      "file": "cases/drift-schema-required-removed.json"
+    },
+    {
+      "id": "drift/schema-property-removed",
+      "kind": "drift",
+      "file": "cases/drift-schema-property-removed.json"
+    },
+    {
+      "id": "drift/schema-required-unconstrained-added",
+      "kind": "drift",
+      "file": "cases/drift-schema-required-unconstrained-added.json"
+    },
+    {
+      "id": "drift/schema-required-added",
+      "kind": "drift",
+      "file": "cases/drift-schema-required-added.json"
+    },
+    {
+      "id": "drift/schema-unconstrained-added",
+      "kind": "drift",
+      "file": "cases/drift-schema-unconstrained-added.json"
+    },
+    {
+      "id": "drift/schema-property-added",
+      "kind": "drift",
+      "file": "cases/drift-schema-property-added.json"
+    },
+    {
+      "id": "drift/schema-type-broadened",
+      "kind": "drift",
+      "file": "cases/drift-schema-type-broadened.json"
+    },
+    {
+      "id": "drift/schema-type-narrowed",
+      "kind": "drift",
+      "file": "cases/drift-schema-type-narrowed.json"
+    },
+    {
+      "id": "drift/schema-type-changed",
+      "kind": "drift",
+      "file": "cases/drift-schema-type-changed.json"
+    },
+    {
+      "id": "drift/schema-type-any-to-typed",
+      "kind": "drift",
+      "file": "cases/drift-schema-type-any-to-typed.json"
+    },
+    {
+      "id": "drift/schema-enum-widened",
+      "kind": "drift",
+      "file": "cases/drift-schema-enum-widened.json"
+    },
+    {
+      "id": "drift/schema-enum-narrowed",
+      "kind": "drift",
+      "file": "cases/drift-schema-enum-narrowed.json"
+    },
+    {
+      "id": "drift/schema-enum-removed",
+      "kind": "drift",
+      "file": "cases/drift-schema-enum-removed.json"
+    },
+    {
+      "id": "drift/schema-enum-added",
+      "kind": "drift",
+      "file": "cases/drift-schema-enum-added.json"
+    },
+    {
+      "id": "drift/schema-enum-disjoint-is-widened",
+      "kind": "drift",
+      "file": "cases/drift-schema-enum-disjoint-is-widened.json"
+    },
+    {
+      "id": "drift/schema-constraint-relaxed-required-to-optional",
+      "kind": "drift",
+      "file": "cases/drift-schema-constraint-relaxed-required-to-optional.json"
+    },
+    {
+      "id": "drift/schema-constraint-relaxed-maxlength-up",
+      "kind": "drift",
+      "file": "cases/drift-schema-constraint-relaxed-maxlength-up.json"
+    },
+    {
+      "id": "drift/schema-constraint-relaxed-pattern-removed",
+      "kind": "drift",
+      "file": "cases/drift-schema-constraint-relaxed-pattern-removed.json"
+    },
+    {
+      "id": "drift/schema-constraint-relaxed-minimum-lowered",
+      "kind": "drift",
+      "file": "cases/drift-schema-constraint-relaxed-minimum-lowered.json"
+    },
+    {
+      "id": "drift/schema-constraint-relaxed-bound-removed",
+      "kind": "drift",
+      "file": "cases/drift-schema-constraint-relaxed-bound-removed.json"
+    },
+    {
+      "id": "drift/schema-additional-props-opened",
+      "kind": "drift",
+      "file": "cases/drift-schema-additional-props-opened.json"
+    },
+    {
+      "id": "drift/schema-additional-props-opened-to-object",
+      "kind": "drift",
+      "file": "cases/drift-schema-additional-props-opened-to-object.json"
+    },
+    {
+      "id": "drift/schema-constraint-tightened",
+      "kind": "drift",
+      "file": "cases/drift-schema-constraint-tightened.json"
+    },
+    {
+      "id": "drift/schema-per-fact-emission",
+      "kind": "drift",
+      "file": "cases/drift-schema-per-fact-emission.json"
+    },
+    {
+      "id": "drift/schema-array-items-recursed",
+      "kind": "drift",
+      "file": "cases/drift-schema-array-items-recursed.json"
+    },
+    {
+      "id": "drift/schema-pattern-changed-tightened",
+      "kind": "drift",
+      "file": "cases/drift-schema-pattern-changed-tightened.json"
+    },
+    {
+      "id": "drift/schema-ref-resolved-granular",
+      "kind": "drift",
+      "file": "cases/drift-schema-ref-resolved-granular.json"
+    },
+    {
+      "id": "drift/mixed-multi-entry",
+      "kind": "drift",
+      "file": "cases/drift-mixed-multi-entry.json"
+    },
+    {
+      "id": "malformed/invalid-json",
+      "kind": "malformed",
+      "file": "cases/malformed-invalid-json.json"
+    },
+    {
+      "id": "malformed/missing-overall-digest",
+      "kind": "malformed",
+      "file": "cases/malformed-missing-overall-digest.json"
+    },
+    {
+      "id": "malformed/tools-not-array",
+      "kind": "malformed",
+      "file": "cases/malformed-tools-not-array.json"
+    },
+    {
+      "id": "malformed/server-missing-command-digest",
+      "kind": "malformed",
+      "file": "cases/malformed-server-missing-command-digest.json"
+    },
+    {
+      "id": "malformed/schema-version-not-integer",
+      "kind": "malformed",
+      "file": "cases/malformed-schema-version-not-integer.json"
+    },
+    {
+      "id": "malformed/missing-pin",
+      "kind": "malformed",
+      "file": "cases/malformed-missing-pin.json"
+    },
+    {
+      "id": "malformed/tool-missing-entry-digest",
+      "kind": "malformed",
+      "file": "cases/malformed-tool-missing-entry-digest.json"
+    }
+  ]
+}

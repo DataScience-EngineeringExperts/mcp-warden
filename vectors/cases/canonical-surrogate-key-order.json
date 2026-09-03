@@ -1,0 +1,14 @@
+{
+  "id": "canonical/surrogate-key-order",
+  "kind": "canonical",
+  "description": "UTF-16 ordering puts an astral key (D83D DE00) before U+E000 and U+FF01; code-point order would not.",
+  "input": {
+    "！": 1,
+    "😀": 2,
+    "": 3
+  },
+  "expect": {
+    "jcs": "{\"😀\":2,\"\":3,\"！\":1}",
+    "sha256": "sha256:c1ca72ce1f69cc033efa46ecd3870334cd0431bf063a4501ab3f6e2a98f6ba9a"
+  }
+}
