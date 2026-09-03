@@ -86,6 +86,15 @@ def test_community_options_without_the_flag_are_an_error(flags):
     assert r.exit_code == 2 and "--against-community" in r.output
 
 
+def test_verify_with_against_community_is_rejected_not_skipped():
+    # CSO re-verify N1: --verify returns before capture, so consensus was silently
+    # skipped and a CI job that added --verify passed having compared nothing.
+    r = runner.invoke(app, ["check", "--lock", CLEAN_LOCK, "--verify",
+                            "--certificate-identity", "x", "--certificate-oidc-issuer", "y",
+                            "--against-community", "--corpus", str(CORPUS), "--attester", ALICE])
+    assert r.exit_code == 2 and "mutually exclusive" in r.output
+
+
 def test_unpinned_launch_fails_before_spawn(monkeypatch):
     install_fake_verify(monkeypatch)
     # `npx foo` is unpinned; `npx` need not even exist — preflight runs before capture.

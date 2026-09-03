@@ -41,6 +41,14 @@ def validate_flags(
     min_attesters: int | None, err_console: Console,
 ) -> None:
     """A community option without ``--against-community`` is a mistake, not a no-op (CSO L1)."""
+    if against_community and verify:
+        # CSO re-verify N1: --verify returns before capture, so consensus would be
+        # silently skipped and the run would exit 0 having compared nothing.
+        err_console.print(
+            "[red]error:[/red] --verify and --against-community are mutually exclusive "
+            "(--verify never spawns the server; consensus needs a live capture) — run them as two invocations"
+        )
+        raise typer.Exit(code=2)
     if against_community:
         return
     stray = [
