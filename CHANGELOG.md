@@ -55,7 +55,15 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
   coverage; a malformed discovered file warns and the scan continues (exit 2 at the end);
   VS Code JSONC parses; a skipped config (symlink, > 8 MiB) is never a green exit; the
   project walk-up stops at the first `.git` or home and never walks at all from outside
-  home without a `.git` boundary; `--pin` never overwrites a lock. See `docs/DOCTOR.md`.
+  home without a `.git` boundary; `--pin` never overwrites a lock. A second review pass
+  closed the residuals: every JSON config is loaded as the **union** of `mcpServers` and
+  `servers` (a benign decoy map can no longer hide the one VS Code loads —
+  `WRD-DOCTOR-AMBIGUOUS-SERVER` on a conflicting name); the JSONC trailing-comma pass
+  is string-aware; `safe_text` also neutralises C1 controls, NEL, zero-width marks,
+  `U+2028`/`U+2029`, and the bidi-override blocks (Trojan Source); underscored auth
+  flags (`--openai_api_key`) mask; a URL fragment is redacted and a clean URL is
+  printed byte-for-byte; `--config` is de-duplicated by resolved path. See
+  `docs/DOCTOR.md`.
 
 ### Changed
 

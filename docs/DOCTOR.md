@@ -37,8 +37,15 @@ disk is opened unless named with `--config`.
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` | same | same | `mcpServers` |
 | Codex | `~/.codex/config.toml` | same | same | `[mcp_servers.<name>]` (stdlib `tomllib`) |
 
-Both the `mcpServers` and the VS Code `servers` key are accepted in any JSON file, so
-a config copied between clients still scans. On Windows the two `%APPDATA%` entries
+Every JSON file is loaded as the **union** of its `mcpServers` and `servers` maps. VS
+Code reads `servers`; if a file also carried a benign `mcpServers` and only that map
+were audited, a decoy could hide the map the client actually loads. A name present
+under both keys with an identical body is loaded once; with *different* bodies both
+are audited (the second as `<name>#servers`) and each is flagged
+`WRD-DOCTOR-AMBIGUOUS-SERVER` (medium). The JSONC pass (VS Code) is string-aware in
+**both** of its stages — comment stripping and trailing-comma removal — so a value
+such as `"echo {a, }"` is audited and pinned byte-for-byte as the client launches
+it. On Windows the two `%APPDATA%` entries
 are simply absent when `APPDATA` is unset — the location is never guessed.
 
 ### Project walk-up boundary
@@ -81,6 +88,7 @@ printed — something on the machine went unscanned.
 |---|---|---|
 | Static auth-posture audit | `WRD-AUTH-*` | `auth_audit.audit_server` — identical verdicts to `mcp-warden auth audit` |
 | Supply-chain launch checks | `WRD-SUP-*` (unpinned `npx`/`uvx`/`pip`, `@latest`, `curl \| sh`) | `checks_supply.check_launch_command` over `command` + `args` |
+| Config ambiguity | `WRD-DOCTOR-AMBIGUOUS-SERVER` (medium) | a name declared under both `mcpServers` and `servers` with different bodies (§1) |
 | Lock coverage | `WRD-DOCTOR-NO-LOCK` (low), `WRD-DOCTOR-LOCK-UNAPPROVED` (medium) | see §3 |
 
 Every finding's `target` is `<source label>#<server name>`, e.g.
@@ -90,9 +98,13 @@ Every finding's `target` is `<source label>#<server name>`, e.g.
 
 Every config-controlled string that reaches the terminal — server name, source
 label, config path, the host inside an auth-audit message, warning text — passes
-through `safe_text()` **before** any print: every control character
-(`U+0000`–`U+001F`, `U+007F`) becomes `U+FFFD` and the string is capped at 200
-characters. Rich markup is then escaped where markup is on, and the JSONL / pin
+through `safe_text()` **before** any print: every character a terminal or a copy
+buffer can be tricked by becomes `U+FFFD` — C0 + DEL (`U+0000`–`U+001F`, `U+007F`),
+the C1 range (`U+0080`–`U+009F`; `U+009B` is CSI and `U+009D` is OSC on xterm-family
+terminals), NEL, the zero-width and directional marks (`U+200B`–`U+200F`), the line
+and paragraph separators (`U+2028`, `U+2029`), and both bidi-override blocks
+(`U+202A`–`U+202E`, `U+2066`–`U+2069` — Trojan Source, CVE-2021-42574) — and the
+string is capped at 200 characters. Rich markup is then escaped where markup is on, and the JSONL / pin
 blocks print with `markup=False`. A server named
 `gh\n  mcp-warden pin sh -c '…'` therefore renders as one line with a visible `�`,
 never as a second copy-pasteable command; an `\x1b[2K` cannot repaint a row.
@@ -137,9 +149,11 @@ launch lines carry credentials in shapes the config audit never sees:
 - the value after an **auth-shaped flag** is masked. The flag set is doctor-local and
   wider than the config audit's key list: `key`, `api-key`, `apikey`, `token`,
   `secret`, `password`, `passwd`, `pat`, `bearer`, `credential(s)`, `cookie`, `auth`,
-  `authorization`, `header`, `-H` (case-insensitive, `_`/`-` folded, with or without
-  dashes) — so Smithery's `--key <uuid>` and mcp-remote's
-  `--header "Authorization: Bearer …"` are both masked;
+  `authorization`, `header`, `-H` (case-insensitive, matched in **both** the raw and
+  the `_`→`-` folded spelling, with or without dashes — so `--openai_api_key` masks
+  too) — Smithery's `--key <uuid>` and mcp-remote's `--header "Authorization:
+  Bearer …"` are both masked. A single-letter `-k` is **not** auth-shaped: its value
+  masks only when it hits a vendor pattern;
 - an auth-shaped `KEY=value` **or** `Key: value` argument is masked (both separators);
 - a JSON-object argument containing an auth-shaped key (`--config '{"apiKey":…}'`) is
   masked whole;
@@ -148,8 +162,11 @@ launch lines carry credentials in shapes the config audit never sees:
 - in a URL, userinfo masks the whole URL; an **auth-shaped query parameter**
   (`api_key`, `key`, `token`, `access_token`, `secret`, `sig`, `signature`, `auth`) has
   its value replaced; a **path segment of 20+ characters** that is high-entropy or
-  matches a vendor pattern is replaced (`/api/mcp/s/REDACTED/mcp`). Scheme and host
-  stay visible.
+  matches a vendor pattern is replaced (`/api/mcp/s/REDACTED/mcp`); a **fragment**
+  that is auth-shaped (`#token=…`) or token-like is replaced. Scheme and host stay
+  visible. When nothing needs masking the URL is printed **byte-for-byte** as it
+  appears in the config — never re-encoded — so the lock the user pins from the
+  printed command is the lock `doctor` recognises on the next run.
 
 When two server names slug to the same file (`a/b` and `a-b`), the second gets a
 short hash suffix. The block ends with the GitHub Action snippet.
@@ -178,7 +195,12 @@ warden command uses. `doctor` never edits a config file.
 - In a **non-interactive** session (`stdin` is not a TTY) it **refuses** unless
   `--yes` is passed — exit 2, nothing spawned.
 - Interactively it prints **every argv it is about to run** and prompts once
-  (default **No**).
+  (default **No**). That prompt deliberately shows the **raw, unmasked** argv: it is
+  informed consent to spawn exactly that process, it is TTY-only, and it is never
+  the string the user is told to paste — do not "fix" it into masking.
+- The printed `pin` command **omits `env`**. An env-dependent server's secrets belong
+  in the shell environment (`export FOO=…` before running the command), never inline
+  on a command line that lands in scrollback and shell history.
 - It runs the same capture + lock build as `mcp-warden pin`, writes
   `<slug>.warden.lock` in `cwd` **unapproved**, and prints the `lock rotate
   --approver` command that records the human approval. The next `doctor` run reports
