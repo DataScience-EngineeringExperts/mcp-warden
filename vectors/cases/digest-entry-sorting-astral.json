@@ -1,0 +1,125 @@
+{
+  "id": "digest/entry-sorting-astral",
+  "kind": "digest",
+  "description": "Entry arrays sort by Unicode code point: x (U+0078) < U+E000 < U+1F600. UTF-16 code-unit order would put the astral name first (D83D < E000). JCS object keys INSIDE each entry still sort by UTF-16 — the two orderings coexist.",
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [
+      {
+        "name": "😀x"
+      },
+      {
+        "name": "x"
+      },
+      {
+        "name": "x"
+      }
+    ],
+    "resources": [
+      {
+        "uri": "😀://1"
+      },
+      {
+        "uri": "://1"
+      },
+      {
+        "uri": "x://1"
+      }
+    ],
+    "prompts": [
+      {
+        "name": "😀"
+      },
+      {
+        "name": ""
+      },
+      {
+        "name": "x"
+      }
+    ]
+  },
+  "expect": {
+    "server": {
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [
+      {
+        "name": "x",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {}
+        },
+        "entry_digest": "sha256:db2c6ef62d1b7f633147a5ffb9235b2ff4ee345874aaea37b053981c1a63aee7"
+      },
+      {
+        "name": "x",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {}
+        },
+        "entry_digest": "sha256:7e04a59e75f10560e0a63af88eb82158e15af6ac7427fa242c64a695fd1a5adc"
+      },
+      {
+        "name": "😀x",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {}
+        },
+        "entry_digest": "sha256:9d3e100db419d9609cb544be93d8ae762c783a3087464fc81619e74623805407"
+      }
+    ],
+    "resources": [
+      {
+        "uri": "x://1",
+        "name": null,
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "mime_type": null,
+        "entry_digest": "sha256:8e5869da2647b1361277885d0e48a4bf173845d3789bed9c81d7ffc898b3ca3e"
+      },
+      {
+        "uri": "://1",
+        "name": null,
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "mime_type": null,
+        "entry_digest": "sha256:20e076e9d3ef40bdcce6263d4505de0d1e13a4bb84bf391ba8a68b84ccb40a25"
+      },
+      {
+        "uri": "😀://1",
+        "name": null,
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "mime_type": null,
+        "entry_digest": "sha256:6a9914d720d9ce61c55d518dd7839f8a6fd394edcc333e80617a78ca32a06905"
+      }
+    ],
+    "prompts": [
+      {
+        "name": "x",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "arguments_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "entry_digest": "sha256:293bba949c9b6c9b16a60d8e6c16defc3895d1221cfb020a9ea12f59bae3671c"
+      },
+      {
+        "name": "",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "arguments_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "entry_digest": "sha256:c2b7e39f3f92d425d8b68e5873afa0504704b087d3431ff637cf87f0344ae86b"
+      },
+      {
+        "name": "😀",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "arguments_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "entry_digest": "sha256:66aaf4461fd17d0c88a04e4e46d75d0aaf48d00ed66f977f854ddc720b740335"
+      }
+    ],
+    "overall_digest": "sha256:c75dd5c3454d83265b7d9f41e73f20015b55e415a6bebb1e321d6a1845970e68"
+  }
+}

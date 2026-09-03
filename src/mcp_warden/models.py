@@ -10,6 +10,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from . import SCHEMA_VERSION
+
 # --- Raw captured surface (pre-hashing) --------------------------------------
 
 
@@ -300,3 +302,19 @@ class WardenLock(BaseModel):
     findings: list[Finding]
     overall_digest: str
     pin: PinMetadata
+
+    @field_validator("schema_version")
+    @classmethod
+    def _schema_version_supported(cls, v: int) -> int:
+        """Refuse a lock written at a format level this version does not implement.
+
+        A newer level hashes fields by rules we do not know; comparing it under the
+        current rules would silently mis-verify (SPEC.md §14.3). Older levels are
+        accepted and surface as ``schema-version-migrated`` (drift.py).
+        """
+        if v < 1 or v > SCHEMA_VERSION:
+            raise ValueError(
+                f"schema_version {v} is outside the supported range 1..{SCHEMA_VERSION}; "
+                "a lock at a newer format level cannot be verified by this version"
+            )
+        return v

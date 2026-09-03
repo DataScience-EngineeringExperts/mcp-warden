@@ -1,0 +1,14 @@
+{
+  "id": "canonical/unicode-literal",
+  "kind": "canonical",
+  "description": "Non-ASCII is emitted literally as UTF-8, never \\uXXXX-escaped.",
+  "input": {
+    "k": "café",
+    "é": "ü",
+    "日本": "語"
+  },
+  "expect": {
+    "jcs": "{\"k\":\"café\",\"é\":\"ü\",\"日本\":\"語\"}",
+    "sha256": "sha256:d61d29c87d5b5cdcbd92ed4757a6e6a86ed2241bca5a96685097236898f2f40b"
+  }
+}

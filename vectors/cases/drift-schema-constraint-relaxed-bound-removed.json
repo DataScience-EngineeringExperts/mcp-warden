@@ -1,0 +1,105 @@
+{
+  "id": "drift/schema-constraint-relaxed-bound-removed",
+  "kind": "drift",
+  "description": "Removing an upper bound relaxes; adding a lower bound tightens.",
+  "lock": {
+    "schema_version": 3,
+    "warden_version": "0.0.0",
+    "server": {
+      "command": "python",
+      "args": [
+        "server.py"
+      ],
+      "url": null,
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [
+      {
+        "name": "t",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:3401dfaede6f4d8aac3ffe17f3afed035e779ab9033d26f0bbea65ba25ae4d4e",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "a": {
+              "type": [
+                "integer"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true,
+                "maximum": 10
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:b168ac2d98713763fc21bb84f2478fd06eb20dcac982d419f2c27d5ffd949283"
+      }
+    ],
+    "resources": [],
+    "prompts": [],
+    "findings": [],
+    "overall_digest": "sha256:9002475f2bac4aa37f7c916e9f8f154ff69eb1cb9369ea07c1b8c2f91c15b6a6",
+    "pin": {
+      "created_at": "2026-01-01T00:00:00Z",
+      "warden_version": "0.0.0",
+      "mcp_protocol_version": "2025-06-18",
+      "approved": false,
+      "approver": null,
+      "approved_at": null,
+      "approved_digest": null,
+      "provenance_version": 1,
+      "pinner": null,
+      "attestations": [],
+      "rotated_at": null,
+      "rotation_count": 0
+    }
+  },
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [
+      {
+        "name": "t",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "a": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      }
+    ],
+    "resources": [],
+    "prompts": []
+  },
+  "expect": [
+    {
+      "drift_class": "schema-constraint-relaxed",
+      "severity": "medium",
+      "target": "tools/t",
+      "detail": "maximum removed"
+    },
+    {
+      "drift_class": "schema-constraint-tightened",
+      "severity": "low",
+      "target": "tools/t",
+      "detail": "minimum added 1"
+    }
+  ]
+}

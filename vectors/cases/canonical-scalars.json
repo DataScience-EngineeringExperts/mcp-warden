@@ -1,0 +1,16 @@
+{
+  "id": "canonical/scalars",
+  "kind": "canonical",
+  "description": "Literals true/false/null and zero.",
+  "input": [
+    true,
+    false,
+    null,
+    "",
+    0
+  ],
+  "expect": {
+    "jcs": "[true,false,null,\"\",0]",
+    "sha256": "sha256:6b20884da6e8742d5e834cf9f0ff491c90d7140af4e7db5019a0a5dd1781e26f"
+  }
+}

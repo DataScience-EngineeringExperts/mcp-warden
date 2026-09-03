@@ -1,0 +1,9 @@
+{
+  "id": "malformed/invalid-json",
+  "kind": "malformed",
+  "description": "Not JSON at all.",
+  "expect": {
+    "error": true
+  },
+  "lock_text": "{not json"
+}

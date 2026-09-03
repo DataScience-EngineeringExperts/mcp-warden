@@ -1,0 +1,90 @@
+{
+  "id": "drift/tool-added",
+  "kind": "drift",
+  "description": "A new tool name -> tool-added (high).",
+  "lock": {
+    "schema_version": 3,
+    "warden_version": "0.0.0",
+    "server": {
+      "command": "python",
+      "args": [
+        "server.py"
+      ],
+      "url": null,
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [
+      {
+        "name": "a",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:cb207139f51a67842803bf299520d3084f2bb81f7da9167038a0dd320fa80fd0"
+      }
+    ],
+    "resources": [],
+    "prompts": [],
+    "findings": [],
+    "overall_digest": "sha256:f229e33df177a19793ec1991b6a7a740a30d963c7e094d122d86fdb6372222e3",
+    "pin": {
+      "created_at": "2026-01-01T00:00:00Z",
+      "warden_version": "0.0.0",
+      "mcp_protocol_version": "2025-06-18",
+      "approved": false,
+      "approver": null,
+      "approved_at": null,
+      "approved_digest": null,
+      "provenance_version": 1,
+      "pinner": null,
+      "attestations": [],
+      "rotated_at": null,
+      "rotation_count": 0
+    }
+  },
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [
+      {
+        "name": "a",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "b",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    ],
+    "resources": [],
+    "prompts": []
+  },
+  "expect": [
+    {
+      "drift_class": "tool-added",
+      "severity": "high",
+      "target": "tools/b",
+      "detail": null
+    }
+  ]
+}

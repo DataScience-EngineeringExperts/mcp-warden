@@ -1,0 +1,112 @@
+{
+  "id": "drift/schema-type-any-to-typed",
+  "kind": "drift",
+  "description": "any -> typed is a narrowing (low); typed -> any is a broadening (high).",
+  "lock": {
+    "schema_version": 3,
+    "warden_version": "0.0.0",
+    "server": {
+      "command": "python",
+      "args": [
+        "server.py"
+      ],
+      "url": null,
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [
+      {
+        "name": "t",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:02f05292f9e7b37efdf994c1234f4be75cf8b0006a89f8b18f34fb99d27dd3d7",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "a": {
+              "type": null,
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "b": {
+              "type": [
+                "string"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:e2235490b06847445b96cdf5ff6ff27c70a8858d12d91b9db3e897c6c1260899"
+      }
+    ],
+    "resources": [],
+    "prompts": [],
+    "findings": [],
+    "overall_digest": "sha256:a40c514127abb67c7965523a88f60c55921bf2817554b6126c23b10f231eccd7",
+    "pin": {
+      "created_at": "2026-01-01T00:00:00Z",
+      "warden_version": "0.0.0",
+      "mcp_protocol_version": "2025-06-18",
+      "approved": false,
+      "approver": null,
+      "approved_at": null,
+      "approved_digest": null,
+      "provenance_version": 1,
+      "pinner": null,
+      "attestations": [],
+      "rotated_at": null,
+      "rotation_count": 0
+    }
+  },
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [
+      {
+        "name": "t",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "a": {
+              "type": "string"
+            },
+            "b": {}
+          }
+        }
+      }
+    ],
+    "resources": [],
+    "prompts": []
+  },
+  "expect": [
+    {
+      "drift_class": "schema-type-broadened",
+      "severity": "high",
+      "target": "tools/t",
+      "detail": "type ['string']→any"
+    },
+    {
+      "drift_class": "schema-type-narrowed",
+      "severity": "low",
+      "target": "tools/t",
+      "detail": "type any→['string']"
+    }
+  ]
+}

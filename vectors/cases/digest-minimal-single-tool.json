@@ -1,0 +1,73 @@
+{
+  "id": "digest/minimal-single-tool",
+  "kind": "digest",
+  "description": "One stdio server, one tool with a required path property.",
+  "surface": {
+    "command": "node",
+    "args": [
+      "./server.js"
+    ],
+    "tools": [
+      {
+        "name": "read_file",
+        "description": "Read a file.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path"
+          ]
+        }
+      }
+    ],
+    "resources": [],
+    "prompts": []
+  },
+  "expect": {
+    "server": {
+      "command_digest": "sha256:12c6871f14a9ddfe1a7afda4c3d35425410bc4bfe4a19c281e0e4dfff808aec2"
+    },
+    "tools": [
+      {
+        "name": "read_file",
+        "description_hash": "sha256:f83d56c834a0029f639f3db5e497620fcad6f2a8367d31e34238a3a9ae0c2020",
+        "input_schema_hash": "sha256:923b083c9bcab2e3d3e07c7d9b4401688ad9f3d5e2c2f0c48fcd43052bdcb71b",
+        "capabilities": [
+          "fs-read"
+        ],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "path": {
+              "type": [
+                "string"
+              ],
+              "required": true,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:9512f1b4519e48f35f72935fe094fcd3db104cdadcd91de16da13584067ddb9e"
+      }
+    ],
+    "resources": [],
+    "prompts": [],
+    "overall_digest": "sha256:93acc5354965a023f5e937d468ea6afaf20498cb0b7077a8e1b4227310b4e406"
+  }
+}

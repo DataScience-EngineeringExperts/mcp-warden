@@ -1,0 +1,70 @@
+{
+  "id": "malformed/missing-overall-digest",
+  "kind": "malformed",
+  "description": "Top-level overall_digest is required.",
+  "expect": {
+    "error": true
+  },
+  "lock": {
+    "schema_version": 3,
+    "warden_version": "0.0.0",
+    "server": {
+      "command": "python",
+      "args": [
+        "server.py"
+      ],
+      "url": null,
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [
+      {
+        "name": "t",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:df0cd751860cebb7dbf04cb311a379d2ffcef96035486aafc13f2b6d5c610077",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "x": {
+              "type": [
+                "string"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:2bbf6c724227113547e88079aee35fe478aa32f6d35ba6eb70ea8683b7d0b251"
+      }
+    ],
+    "resources": [],
+    "prompts": [],
+    "findings": [],
+    "pin": {
+      "created_at": "2026-01-01T00:00:00Z",
+      "warden_version": "0.0.0",
+      "mcp_protocol_version": "2025-06-18",
+      "approved": false,
+      "approver": null,
+      "approved_at": null,
+      "approved_digest": null,
+      "provenance_version": 1,
+      "pinner": null,
+      "attestations": [],
+      "rotated_at": null,
+      "rotation_count": 0
+    }
+  }
+}

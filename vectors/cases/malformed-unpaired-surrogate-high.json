@@ -1,0 +1,9 @@
+{
+  "id": "malformed/unpaired-surrogate-high",
+  "kind": "malformed",
+  "description": "A lone high surrogate is valid JSON text but not Unicode; it has no UTF-8 form and MUST be rejected, never canonicalized as \\ud800.",
+  "expect": {
+    "error": true
+  },
+  "input_json": "\"\\ud800\""
+}

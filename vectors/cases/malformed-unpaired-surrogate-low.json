@@ -1,0 +1,9 @@
+{
+  "id": "malformed/unpaired-surrogate-low",
+  "kind": "malformed",
+  "description": "A lone low surrogate inside a string MUST be rejected.",
+  "expect": {
+    "error": true
+  },
+  "input_json": "\"a\\udc00b\""
+}

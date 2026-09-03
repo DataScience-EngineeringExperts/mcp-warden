@@ -99,6 +99,13 @@ flowchart TB
 
     specs -. "implemented by" .-> warden
 
+    vectors[("vectors/\nLock Format v1 conformance corpus\n(language-neutral, generated)")]
+    lockts["@mcp-warden/lock\nTypeScript verify-only\n(zero runtime deps)"]
+    specs -. "§12.1 defines" .-> vectors
+    vectors -- "CI conformance job" --> warden
+    vectors -- "CI conformance job" --> lockts
+    repo -- "verify(lock, surface)" --> lockts
+
     warden -- "1. stdio: spawn; HTTP: connect\n2. initialize + tools/list\nresources/list / prompts/list" --> server
     server -- "3. declared surface\n(definitions only)" --> warden
 
@@ -111,6 +118,13 @@ flowchart TB
     gate -- "yes → exit≠0" --> failci["CI build FAILS"]
     gate -- "no → exit 0" --> passci["CI build passes"]
 ```
+
+> **Two implementations, one corpus (DSE-1513).** `vectors/` is the executable definition of
+> MCP Lock Format v1 (`docs/SPEC.md` §12.1). The Python CLI and the zero-dependency TypeScript
+> verifier `@mcp-warden/lock` (`packages/lock-ts`) both reproduce every vector byte-for-byte in
+> the CI `conformance` job, which also proves the gate bites by flipping one hex character and
+> requiring both to fail. The TS package verifies only — capture, signing and `guard` stay in
+> the CLI.
 
 ---
 
