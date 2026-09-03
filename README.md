@@ -52,15 +52,21 @@ Copy-paste runnable against the fixtures shipped in this repo. Requires Python �
 uv venv .venv
 uv pip install --python .venv/bin/python -e ".[dev]"
 
-# 2. Pin a server's declared surface and approve it (TOFU baseline) -> writes the lock
+# 2. Zero-config posture scan of every MCP config already on this machine — Claude Code,
+#    Claude Desktop, Cursor, VS Code, Windsurf, Codex. Static: no spawn, no network.
+#    Reports weak auth, unpinned npx/uvx launches, and every server with no lock, then
+#    prints the exact `pin` command for each. (docs/DOCTOR.md)
+.venv/bin/mcp-warden doctor
+
+# 3. Pin a server's declared surface and approve it (TOFU baseline) -> writes the lock
 .venv/bin/mcp-warden pin python tests/fixtures/clean_server.py \
     --approve --approver you@example.com \
     --lock warden.lock
 
-# 3. Check the same surface against the lock -> exit 0 (no drift)
+# 4. Check the same surface against the lock -> exit 0 (no drift)
 .venv/bin/mcp-warden check python tests/fixtures/clean_server.py --lock warden.lock
 
-# 4. Prove the gate fires: a rug-pulled server drifts -> DRIFT DETECTED, exit 1
+# 5. Prove the gate fires: a rug-pulled server drifts -> DRIFT DETECTED, exit 1
 .venv/bin/mcp-warden check python tests/fixtures/mutated_server.py --lock warden.lock
 ```
 
@@ -359,6 +365,7 @@ run the gate only on push:
 | `mcp-warden lock rotate <lock> [--approver ID] [--actor ID] [--note T] [--json]` | **(v0.3)** Re-attest provenance on an existing baseline without re-capturing the surface; `overall_digest` stays **byte-identical** (WARDEN_LOCK_SCHEMA §8.2). Fails closed on a tampered/inconsistent lock | 0 on success, 2 on missing/invalid/tampered lock |
 | `mcp-warden diff <lock-a> <lock-b> [--json] [--sarif F] [--no-provenance] [--exit-code]` | **(v0.3)** Offline, **redacted** viewer over the drift engine: renders integrity drift between two existing locks (A=baseline, B=current) + a separate informational provenance section. Never re-captures and never prints raw `server.command`/`args` (secret-safe) | 0 (viewer); with `--exit-code`, 1 on **integrity** drift only; 2 on missing/invalid lock |
 | `mcp-warden deploy-gate --policy F --evidence F [--json] [--sarif F]` | **(v1.2)** Fail-closed CI gate for agent deployments: verifies declared eval thresholds, required guardrails, a budget/quota, and a human-approval receipt. Adjudicates evidence — it does **not** run evals. See [`docs/AGENT_GATES.md`](docs/AGENT_GATES.md) | 0 only when every control is satisfied; 1 on any gate finding; 2 on unreadable/malformed input (fail closed) |
+| `mcp-warden doctor [--config F]... [--no-discover] [--json] [--sarif F] [--pin [--yes]]` | **(v1.2)** Zero-config posture scan: discovers every MCP client config on the machine (Claude Code / Claude Desktop / Cursor / VS Code / Windsurf / Codex), runs `auth audit` + `WRD-SUP-*` launch checks per server, reports servers with no `warden.lock` (`WRD-DOCTOR-NO-LOCK`) and prints the exact `pin` command. Static by default; `--pin` is the opt-in that spawns, and refuses non-interactively without `--yes`. See [`docs/DOCTOR.md`](docs/DOCTOR.md) | 0 clean or no configs; 1 on any finding; 2 on unreadable/malformed config or a `--pin` failure (fail closed) |
 | `mcp-warden auth audit <config...> [--json] [--sarif F]` | **(v1.2)** Static MCP auth-posture audit over client/server config: remote endpoints without auth, cleartext `http://`, credential literals committed into config. No server spawn, no network. See [`docs/AGENT_GATES.md`](docs/AGENT_GATES.md) | 0 clean; 1 on any finding; 2 on read/parse error (fail closed) |
 | `mcp-warden check <server-cmd...> \| --url URL --against-community --corpus P\|URL --attester ID=IDENTITY@ISSUER… \| --attesters-file F [--corpus-ref SHA] [--coordinate C] [--min-attesters N]` | **(DSE-1515, phase 1)** Also compare the captured surface to Sigstore-signed attestations by attesters **you pin** (`--attester`/`--attesters-file` is required — the corpus's own list is discovery, never the trust root). The signature binds identity, `overall_digest` **and** the package coordinate (`npm:`/`pypi:` name@version, inferred from `npx`/`uvx`/`pipx run` argv or given explicitly). Only `https://`/`ssh://`/`git@` corpus URLs; unverifiable/unreachable/unpinnable/unpinned-trust is exit 2, never a skip. See [`docs/COMMUNITY_CORPUS.md`](docs/COMMUNITY_CORPUS.md) | **1 on `WRD-CONSENSUS-MISMATCH`/`-SPLIT`** (composes with drift); 0 on match, `-NOVEL` or `-INSUFFICIENT`; 2 fail closed |
 | `mcp-warden-precommit [--lock F] [--timeout N] [--strict] -- <server-cmd...>` | **(v0.3)** pre-commit hook entry point (see [pre-commit hook](#pre-commit-hook--the-local-pre-ci-gate)). Runs the same check verdict path; check-only (never pins, never writes the lock) | 0 clean / **1 drift** / 2 config error; server-unavailable → 0+warning (non-strict) or 2 (`--strict`) |

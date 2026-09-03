@@ -23,6 +23,7 @@ from typing import Any
 
 from .checks_secret import scan_field
 from .models import Finding
+from .redact import redact_secret
 
 #: Header keys whose values carry auth material worth scanning for literals.
 _AUTH_HEADER_KEYS = {"authorization", "x-api-key", "api-key", "apikey", "token"}
@@ -150,11 +151,8 @@ def _scan_mapping_for_literals(mapping: dict[str, Any], target: str) -> list[Fin
 
 
 def _redact(value: str) -> str:
-    """Redact a credential literal to a short, non-recoverable hint."""
-    v = value.strip()
-    if len(v) <= 8:
-        return "***"
-    return f"{v[:4]}...{v[-2:]}"
+    """Redact a credential literal with the house redactor (prefix + length, no suffix)."""
+    return redact_secret(value.strip())
 
 
 def audit_server(name: str, server: dict[str, Any]) -> list[Finding]:

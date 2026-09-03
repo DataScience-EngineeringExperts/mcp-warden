@@ -47,6 +47,23 @@ is the MCP auth posture sound. Both reuse the `check` exit-code contract (0 clea
 | [`tests/test_agent_gates_examples.py`](tests/test_agent_gates_examples.py) | Pins the shipped examples to the per-server verdicts their README claims, so a rule change cannot silently make the docs wrong; also asserts the planted fake credentials never reach a finding field |
 | [`examples/agent-gates/`](examples/agent-gates/) | Runnable demos — a 6-server config (4 flagged / 2 deliberately clean, incl. the `Bearer ${VAR}` embedded-reference shape from #94) and pass/fail deploy evidence, with expected verdicts documented and verified |
 
+## `doctor` — zero-config posture scan (DSE-1516)
+
+The adoption funnel: one command, no arguments, static. Discovers every MCP client config
+on the machine and composes the existing `WRD-AUTH-*` + `WRD-SUP-*` engines plus a
+lock-coverage check per server, then prints the exact `pin` command for anything uncovered.
+
+| Artifact | Purpose |
+|----------|---------|
+| [`docs/DOCTOR.md`](docs/DOCTOR.md) | Contract — the per-platform discovery table, the symlink-escape rule, what runs per server, lock-coverage matching, the static-by-default guarantee, the `--pin` opt-in contract, exit codes |
+| [`src/mcp_warden/doctor_paths.py`](src/mcp_warden/doctor_paths.py) | Pure path enumeration for (platform, home, cwd, env): the per-platform well-known set, the `.git`/home-bounded project walk-up, the symlink-component guard |
+| [`src/mcp_warden/doctor_discovery.py`](src/mcp_warden/doctor_discovery.py) | Fail-closed loaders — union of `mcpServers` + VS Code `servers` (conflicts → `WRD-DOCTOR-AMBIGUOUS-SERVER`), `~/.claude.json` per-project, Codex TOML, string-aware JSONC; per-candidate hard-error / skip accounting |
+| [`src/mcp_warden/doctor_funnel.py`](src/mcp_warden/doctor_funnel.py) | `safe_text` (C0/C1/NEL/zero-width/bidi neutralisation), lock naming, the masking rules and byte-preserving URL redaction behind the printed `pin` command |
+| [`src/mcp_warden/doctor.py`](src/mcp_warden/doctor.py) | Bounded lock discovery, `pin.approved`-aware coverage, per-server composition of `audit_server` + `check_launch_command` + `WRD-DOCTOR-*`, resolved-path de-duplication of `--config` |
+| [`src/mcp_warden/cli_doctor.py`](src/mcp_warden/cli_doctor.py) | `doctor` command body (register idiom): report rendering, JSONL/SARIF, the `--pin`/`--yes` TTY contract |
+| [`tests/test_doctor.py`](tests/test_doctor.py) | Discovery purity per platform, every loader shape, symlink file + directory escape, bounded lock search, coverage matching, composition, funnel redaction |
+| [`tests/test_doctor_security.py`](tests/test_doctor_security.py) | One test per security-review finding (two passes): terminal / bidi injection, `--pin` provenance, masking bypasses, decoy `servers` map, string-aware JSONC, unauthenticated coverage, discovery robustness, walk-up boundary, `--config` de-duplication |
+| [`tests/test_doctor_cli.py`](tests/test_doctor_cli.py) | Exit codes, no-config path, redaction across stdout/JSONL/SARIF, the no-spawn/no-socket/no-DNS assertion, `--pin` refusal + real end-to-end pin, Windows shape via injected `APPDATA` |
 ## Community lock corpus (`check --against-community` — DSE-1515, phase 1)
 
 Multi-attester surface consensus that closes the TOFU hole a single-party lock cannot

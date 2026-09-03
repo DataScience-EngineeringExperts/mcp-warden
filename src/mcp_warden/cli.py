@@ -5,6 +5,7 @@ Commands:
   check <server-cmd...> re-capture + diff vs lock; non-zero exit on drift
   policy lint <file>    lint a policy file
   policy eval <file> <sample>  evaluate one sample call; non-zero exit on deny
+  doctor                zero-config posture scan of every MCP config on the machine
 
 Exit codes:
   check -> non-zero on any drift (WARDEN_LOCK_SCHEMA.md §10.7)
@@ -36,6 +37,7 @@ from .cli_corpus import preflight as consensus_preflight
 from .cli_corpus import validate_flags as consensus_validate_flags
 from .cli_deploy_gate import register as register_deploy_gate_command
 from .cli_diff import register as register_diff_command
+from .cli_doctor import register as register_doctor_command
 from .cli_guard import register as register_guard_commands
 from .cli_lock import register as register_lock_commands
 from .cli_sign import sign_after_pin, verify_lock_signature
@@ -92,6 +94,7 @@ register_lock_commands(app, console, err_console)
 register_diff_command(app, console, err_console)
 register_auth_commands(app, console, err_console)
 register_deploy_gate_command(app, console, err_console)
+register_doctor_command(app, console, err_console)
 
 
 def _split_server_cmd(server_cmd: list[str]) -> tuple[str, list[str]]:
