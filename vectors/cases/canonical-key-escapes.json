@@ -1,0 +1,14 @@
+{
+  "id": "canonical/key-escapes",
+  "kind": "canonical",
+  "description": "Keys are escaped like strings and sorted by their code units.",
+  "input": {
+    "a\"b": 1,
+    "c\\d": 2,
+    "e\nf": 3
+  },
+  "expect": {
+    "jcs": "{\"a\\\"b\":1,\"c\\\\d\":2,\"e\\nf\":3}",
+    "sha256": "sha256:5a1ba7f4ef8adc24403291bf8c05a67b40102bd2c3cfbfbb8a87db9a2022112e"
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "id": "digest/malformed-input-schema",
+  "kind": "digest",
+  "description": "A non-object inputSchema hashes as {} and yields an empty skeleton; it must not fail the digest.",
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [
+      {
+        "name": "weird",
+        "inputSchema": "not-a-schema"
+      },
+      {
+        "name": "weirder",
+        "inputSchema": [
+          1,
+          2
+        ]
+      }
+    ],
+    "resources": [],
+    "prompts": []
+  },
+  "expect": {
+    "server": {
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [
+      {
+        "name": "weird",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {}
+        },
+        "entry_digest": "sha256:6a765bbdeba20bac21a719f1b0f9693311cedce52642d2ba78a45986532c993b"
+      },
+      {
+        "name": "weirder",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {}
+        },
+        "entry_digest": "sha256:afbe420baedfb3a914bf738a0a12d888b7e3d5a282a512f9a164f0ed300a58eb"
+      }
+    ],
+    "resources": [],
+    "prompts": [],
+    "overall_digest": "sha256:dbb3df574496d257c0951c722f2f2edfde333f37fb3d406fa53daf517e22c6de"
+  }
+}

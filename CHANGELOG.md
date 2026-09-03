@@ -59,6 +59,39 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
   community option without `--against-community` is exit 2; whitespace/control
   characters in a coordinate are `UNRESOLVED`; unexpected corpus errors are exit 2 with
   the exception class only.
+- **MCP Lock Format v1 conformance corpus + zero-dependency TypeScript verifier (DSE-1513).**
+  `vectors/` is now the language-neutral, executable definition of a conforming
+  implementation (`docs/SPEC.md` §12.1): 77 vectors — RFC 8785 canonicalization (incl. the
+  UTF-16 key-order rule for astral characters), every field/entry/overall digest, every
+  `WRD-DRIFT-*` class with its severity, ordering and redacted detail, and malformed locks
+  that MUST be rejected — generated from the Python reference by `vectors/tools/generate.py`.
+  `packages/lock-ts` ships `@mcp-warden/lock`, a verify-only TypeScript implementation with
+  **no runtime dependencies** (`verify(lock, surface)`, `digest(surface)`), so a Node MCP
+  server author can verify a lock without a Python toolchain. A new CI `conformance` job runs
+  the corpus through BOTH implementations and proves the gate bites by flipping one hex
+  character and requiring both harnesses to fail.
+- **Four visible spec corrections found while building the corpus.** `WARDEN_LOCK_SCHEMA.md`
+  §3.1 mandated code-point key ordering and called UTF-16 ordering "not permitted" — the
+  opposite of RFC 8785 §3.2.3 and of what the shipped `rfc8785` canonicalizer does; a third
+  implementation written from that sentence would disagree with every lock containing an
+  astral-character key. `docs/SPEC.md` §4 said keys
+  sort by Unicode code point; RFC 8785 (and the reference) sort by UTF-16 code units, which
+  differs for astral characters. §7.5 said a `$ref` MUST NOT be followed; since
+  schema_version 3 the reference follows same-document refs and only non-resolvable refs
+  stay opaque. §12 also named `schema_version` `1` where the current level is `3`.
+- **Security-review remediation of the corpus + verifier (#99).** `verify()` now runs the
+  strict reader unconditionally (the duck-typed "already parsed" shortcut let a lock with
+  no `overall_digest` verify `ok`); every `digest`/`drift`/`malformed` vector is asserted
+  through `verify()` itself. The JCS canonicalizer rejects unpaired UTF-16 surrogates,
+  non-plain objects (`Date`/`Map`/`Buffer`) and nesting past 512 levels instead of
+  emitting a digest the reference can never agree with; new vectors pin all three, plus
+  IEEE-754 number boundaries and astral-character entry sorting. The CI mutation proof
+  now runs a control pass first and requires the failure to name the mutated vector.
+  `@mcp-warden/lock` ships its LICENSE.
+- **Behavior change — a lock at a `schema_version` above the implemented level is now
+  rejected by both readers** (`read_lock` raises a validation error; `parseLock` throws
+  `LockFormatError`). Previously the Python reader accepted e.g. `schema_version: 4` and
+  compared it under level-3 rules — a silent mis-verification (SPEC.md §14.3).
 - **`deploy-gate` — fail-closed CI gate for agent deployments (DSE-1257).** Verifies a
   deploy's evidence against a declared gate policy: required eval suites met their
   thresholds, required guardrails are active, a budget/quota is declared, and a human

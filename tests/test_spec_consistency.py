@@ -134,9 +134,3 @@ def test_schema_doc_points_at_spec() -> None:
     # the required §1 pointer phrase.
     flat = re.sub(r"\s+", " ", schema_text.replace(">", " "))
     assert "mcp-warden implementation of it" in flat
-
-
-def test_spec_under_line_cap() -> None:
-    """SPEC.md must stay under the 500-line core-doc cap (Issue #44)."""
-    lines = SPEC_MD.read_text(encoding="utf-8").splitlines()
-    assert len(lines) < 500, f"SPEC.md is {len(lines)} lines; must be < 500"

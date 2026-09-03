@@ -1,0 +1,61 @@
+{
+  "id": "drift/resource-removed",
+  "kind": "drift",
+  "description": "resource-removed (low).",
+  "lock": {
+    "schema_version": 3,
+    "warden_version": "0.0.0",
+    "server": {
+      "command": "python",
+      "args": [
+        "server.py"
+      ],
+      "url": null,
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [],
+    "resources": [
+      {
+        "uri": "file:///x",
+        "name": "x",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "mime_type": null,
+        "entry_digest": "sha256:02fd8e5cc31f0bfc757a50b63ef2a8397fac85d7650fb18ca8973bbf53af9a20"
+      }
+    ],
+    "prompts": [],
+    "findings": [],
+    "overall_digest": "sha256:cb998c8b01d11dcaf97299174547fbb8719ecf5af7e06c024788e981c279e3ea",
+    "pin": {
+      "created_at": "2026-01-01T00:00:00Z",
+      "warden_version": "0.0.0",
+      "mcp_protocol_version": "2025-06-18",
+      "approved": false,
+      "approver": null,
+      "approved_at": null,
+      "approved_digest": null,
+      "provenance_version": 1,
+      "pinner": null,
+      "attestations": [],
+      "rotated_at": null,
+      "rotation_count": 0
+    }
+  },
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [],
+    "resources": [],
+    "prompts": []
+  },
+  "expect": [
+    {
+      "drift_class": "resource-removed",
+      "severity": "low",
+      "target": "resources/file:///x",
+      "detail": null
+    }
+  ]
+}

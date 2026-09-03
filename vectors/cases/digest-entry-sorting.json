@@ -1,0 +1,129 @@
+{
+  "id": "digest/entry-sorting",
+  "kind": "digest",
+  "description": "Tools/prompts sort by name and resources by uri (code-point order) regardless of input order.",
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [
+      {
+        "name": "b"
+      },
+      {
+        "name": "a"
+      },
+      {
+        "name": "B"
+      },
+      {
+        "name": "_z"
+      }
+    ],
+    "resources": [
+      {
+        "uri": "z://1"
+      },
+      {
+        "uri": "a://1"
+      },
+      {
+        "uri": "A://1"
+      }
+    ],
+    "prompts": [
+      {
+        "name": "p2"
+      },
+      {
+        "name": "p1"
+      }
+    ]
+  },
+  "expect": {
+    "server": {
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [
+      {
+        "name": "B",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {}
+        },
+        "entry_digest": "sha256:d7cac270d09b3f057806b26812b39649c133dd558c90012d64e56f21af4dd11d"
+      },
+      {
+        "name": "_z",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {}
+        },
+        "entry_digest": "sha256:2614db3b8de6b89f2aa19af8ea7ab33d4e42770560feb83da291a22c502179b1"
+      },
+      {
+        "name": "a",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {}
+        },
+        "entry_digest": "sha256:ecf928a63639fff4a1c1e93abe9d51865e90c85c477bf4fb19014915159d979d"
+      },
+      {
+        "name": "b",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {}
+        },
+        "entry_digest": "sha256:d5e3d0aabfcd7f6c58533e6a54300042942ea35fccec776117183c6894a6488c"
+      }
+    ],
+    "resources": [
+      {
+        "uri": "A://1",
+        "name": null,
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "mime_type": null,
+        "entry_digest": "sha256:8f865ca4ec04563ae26b3c4fa8dd7abe79720af31554d18fb21d318444260059"
+      },
+      {
+        "uri": "a://1",
+        "name": null,
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "mime_type": null,
+        "entry_digest": "sha256:44c8dc7526be72e8d3137576c4f5f79fce8fc266e62d9fe6fa072286a37a0287"
+      },
+      {
+        "uri": "z://1",
+        "name": null,
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "mime_type": null,
+        "entry_digest": "sha256:a1113028ac282c7f5648e9023a8a5a85cbabf329029917892e93dccb7696af94"
+      }
+    ],
+    "prompts": [
+      {
+        "name": "p1",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "arguments_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "entry_digest": "sha256:75f46061f64b81c9782df74d5aa94b85176057ea017dbadfc19a76045d486621"
+      },
+      {
+        "name": "p2",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "arguments_hash": "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "entry_digest": "sha256:3c92d5d5d219517ad9e4d3a77c2dd30bf7fe33290c7d3980c392e1cd21dc1a8a"
+      }
+    ],
+    "overall_digest": "sha256:7dae1d01b666375460c723e9aebf1dea99504e145810210234edf587da61a713"
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "id": "drift/schema-modified-ref-redacted",
+  "kind": "drift",
+  "description": "An opaque $ref whose target looks secret is redacted in detail.",
+  "lock": {
+    "schema_version": 3,
+    "warden_version": "0.0.0",
+    "server": {
+      "command": "python",
+      "args": [
+        "server.py"
+      ],
+      "url": null,
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [
+      {
+        "name": "t",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:a4b561683c51b0f143c675f734ed6a99e38c467c8267921c0dec1e278ad898f6",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "a": {
+              "type": null,
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "$ref": "https://example.com/s.json#/apiKey"
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:129daeeab62bd91cb958d605fcb346f5f46b02c0080e2ec0428407e70eb0fb41"
+      }
+    ],
+    "resources": [],
+    "prompts": [],
+    "findings": [],
+    "overall_digest": "sha256:5d4b058d9b9a0e7047c5fd5663ec54d8b09624e12b714b19c8d7992b6cc5ca94",
+    "pin": {
+      "created_at": "2026-01-01T00:00:00Z",
+      "warden_version": "0.0.0",
+      "mcp_protocol_version": "2025-06-18",
+      "approved": false,
+      "approver": null,
+      "approved_at": null,
+      "approved_digest": null,
+      "provenance_version": 1,
+      "pinner": null,
+      "attestations": [],
+      "rotated_at": null,
+      "rotation_count": 0
+    }
+  },
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [
+      {
+        "name": "t",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "a": {
+              "$ref": "https://example.com/s.json#/token2"
+            }
+          }
+        }
+      }
+    ],
+    "resources": [],
+    "prompts": []
+  },
+  "expect": [
+    {
+      "drift_class": "schema-modified",
+      "severity": "high",
+      "target": "tools/t",
+      "detail": "$ref <redacted>→<redacted>"
+    }
+  ]
+}

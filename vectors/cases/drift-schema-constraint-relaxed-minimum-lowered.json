@@ -1,0 +1,99 @@
+{
+  "id": "drift/schema-constraint-relaxed-minimum-lowered",
+  "kind": "drift",
+  "description": "Drift class schema-constraint-relaxed-minimum-lowered (see docs/SPEC.md §8).",
+  "lock": {
+    "schema_version": 3,
+    "warden_version": "0.0.0",
+    "server": {
+      "command": "python",
+      "args": [
+        "server.py"
+      ],
+      "url": null,
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [
+      {
+        "name": "t",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:b2a169bcac4bb60e7c7c477f3d07d829dfbdffb08551b487669e041a64b4d81c",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "a": {
+              "type": [
+                "integer"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true,
+                "minimum": 10
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:e382ae6ad223d4da11caf1f9261a5e70ff7bda38dac52507cdd67a68f25bb50b"
+      }
+    ],
+    "resources": [],
+    "prompts": [],
+    "findings": [],
+    "overall_digest": "sha256:9b223a7e66b7444ef0635ac60853d4a6346a8b183d03bc5b337953a724e7f80c",
+    "pin": {
+      "created_at": "2026-01-01T00:00:00Z",
+      "warden_version": "0.0.0",
+      "mcp_protocol_version": "2025-06-18",
+      "approved": false,
+      "approver": null,
+      "approved_at": null,
+      "approved_digest": null,
+      "provenance_version": 1,
+      "pinner": null,
+      "attestations": [],
+      "rotated_at": null,
+      "rotation_count": 0
+    }
+  },
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [
+      {
+        "name": "t",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "a": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      }
+    ],
+    "resources": [],
+    "prompts": []
+  },
+  "expect": [
+    {
+      "drift_class": "schema-constraint-relaxed",
+      "severity": "medium",
+      "target": "tools/t",
+      "detail": "minimum 10→0"
+    }
+  ]
+}

@@ -198,6 +198,21 @@ uv pip install --python .venv/bin/python -e ".[dev]"
 Runtime dependencies: `mcp` (official MCP Python SDK), `rfc8785`, `pydantic`,
 `typer`, `rich`, `pyyaml`, `anyio`.
 
+### TypeScript verifier — `@mcp-warden/lock` (zero dependencies)
+
+The lock **format** is vendor-neutral ([`docs/SPEC.md`](docs/SPEC.md)), and the ecosystem's
+servers are mostly Node. [`packages/lock-ts`](packages/lock-ts/README.md) is a verify-only
+TypeScript implementation with **no runtime dependencies** and no MCP SDK: hand it a
+`warden.lock` and the surface you observed, get back the same drift verdict as the CLI.
+Both implementations pass the shared conformance corpus under
+[`vectors/`](vectors/README.md) byte-for-byte in CI.
+
+```ts
+import { verify } from "@mcp-warden/lock";
+const { ok, findings } = verify(lockJson, { command: "node", args: ["./build/index.js"], tools, resources, prompts });
+if (!ok) { console.error(findings); process.exit(1); }
+```
+
 ---
 
 ## The pin / check CI demo
