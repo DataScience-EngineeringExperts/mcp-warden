@@ -46,6 +46,10 @@ import warnings
 #: The statement ``_type`` domain separator (raw-bytes / hashedrekord signing).
 #: Byte-identical at sign time and verify time; changing it is a breaking change.
 STATEMENT_TYPE = "mcp-warden-lock-digest/v1"
+#: v2 additionally binds the package COORDINATE the digest was observed for, so a
+#: genuine corpus signature cannot be relocated under another package (CSO C2).
+#: v1 bytes are untouched: ``build_statement(digest)`` is byte-identical to before.
+STATEMENT_TYPE_V2 = "mcp-warden-lock-digest/v2"
 
 #: Lower (inclusive) / upper (exclusive) supported sigstore versions. Outside this
 #: window we ``warnings.warn`` (not error): the API may have shifted under us and a
@@ -132,8 +136,12 @@ def _warn_if_unpinned_version() -> None:
         )
 
 
-def build_statement(overall_digest: str) -> bytes:
+def build_statement(overall_digest: str, coordinate: str | None = None) -> bytes:
     """Build the DETERMINISTIC statement bytes bound to ``overall_digest``.
+
+    With ``coordinate`` (``npm:@org/name@1.2.3``) the statement is the v2 form
+    ``{_type: …/v2, coordinate, digest}`` used by corpus attesters; without it the
+    v1 form is produced byte-for-byte as before.
 
     The statement is canonical JSON: keys sorted, no whitespace, so it is
     byte-identical at sign time and verify time when both recompute it from the
@@ -148,7 +156,10 @@ def build_statement(overall_digest: str) -> bytes:
     Returns:
         The UTF-8 canonical-JSON statement bytes.
     """
-    statement = {"_type": STATEMENT_TYPE, "digest": overall_digest}
+    if coordinate is None:
+        statement = {"_type": STATEMENT_TYPE, "digest": overall_digest}
+    else:
+        statement = {"_type": STATEMENT_TYPE_V2, "coordinate": coordinate, "digest": overall_digest}
     return json.dumps(statement, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
@@ -216,7 +227,19 @@ def sign_statement(statement_bytes: bytes, identity_token: str | None):
     return bundle
 
 
-def verify_statement(statement_bytes: bytes, bundle, identity: str, issuer: str) -> None:
+def make_verifier():
+    """Construct the production ``Verifier`` ONCE; pass it to :func:`verify_statement`.
+
+    ``Verifier.production()`` initialises the TUF trust root (network unless
+    cached), so a corpus run over many entries must not build one per entry
+    (CSO M3).
+    """
+    if not _SIGSTORE_AVAILABLE:
+        raise RuntimeError("sigstore is not installed; run: pip install 'mcp-warden[sigstore]'")
+    return _Verifier.production()
+
+
+def verify_statement(statement_bytes: bytes, bundle, identity: str, issuer: str, *, verifier=None) -> None:
     """Verify a Sigstore ``Bundle`` over ``statement_bytes`` for ``identity``/``issuer``.
 
     On SUCCESS this returns ``None`` (i.e. it simply does not raise). On ANY
@@ -236,6 +259,8 @@ def verify_statement(statement_bytes: bytes, bundle, identity: str, issuer: str)
         identity: The expected certificate SAN identity (e.g. the CI workflow ref).
         issuer: The expected OIDC issuer (e.g.
             ``https://token.actions.githubusercontent.com``).
+        verifier: An existing :func:`make_verifier` result to reuse; ``None``
+            constructs one for this call.
 
     Raises:
         VerificationError: If signature/identity/issuer verification fails.
@@ -248,7 +273,8 @@ def verify_statement(statement_bytes: bytes, bundle, identity: str, issuer: str)
 
     _warn_if_unpinned_version()
 
-    verifier = _Verifier.production()
+    if verifier is None:
+        verifier = _Verifier.production()
     # `policy.Identity` performs EXACT-string equality, not substring/regex:
     # verified against sigstore 4.3.0 verify/policy.py — Identity.verify does
     # `self._identity in all_sans` (set membership over the cert SANs) and

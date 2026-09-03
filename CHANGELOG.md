@@ -32,6 +32,33 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ### Added
 
+- **`check --against-community` — signed multi-attester lock consensus, phase 1
+  (DSE-1515).** Closes the TOFU hole a single-party lock cannot: compares the freshly
+  captured surface to Sigstore-signed attestations filed by independent attesters in a
+  git corpus (`locks/<ecosystem>/<package>/<version>/<attester>.lock` + `.sigstore`,
+  `attesters.json`). Emits `WRD-CONSENSUS-MISMATCH` / `-SPLIT` (high, exit 1),
+  `-NOVEL` (low, exit 0); an unpinnable launch (`-UNRESOLVED`), an unverifiable entry
+  (`-UNVERIFIABLE`: unknown attester, missing/corrupt sidecar, lock whose entries do not
+  reproduce its signed digest) or an unreachable corpus (`-UNREACHABLE`) is exit 2 —
+  never a skip. Compares a new launch-independent **surface digest** (`§6.1` payload minus
+  `server`) so attesters and consumers using different runners agree. Opt-in; default
+  `check` is byte-for-byte unchanged. Every verdict states *consensus attests
+  observation, not safety*. See [`docs/COMMUNITY_CORPUS.md`](docs/COMMUNITY_CORPUS.md).
+  **Phase 2 (the public `mcp-warden-locks` corpus + nightly attester) is pending.**
+  Hardened after security review before merge: **the trust root is the consumer's**
+  (`--attester <id>=<identity>@<issuer>` / `--attesters-file`, required; the corpus's
+  `attesters.json` is discovery only, divergent or duplicate ids are exit 2,
+  `WRD-CONSENSUS-UNPINNED-TRUST`); **signatures bind the package coordinate** via a new
+  v2 statement (`mcp-warden-lock-digest/v2`; `pin --sign --coordinate` / `check --verify
+  --coordinate`; v1 statement bytes are unchanged), so a relocated genuine signature
+  fails; `--min-attesters` (default 2) with `WRD-CONSENSUS-INSUFFICIENT`; corpus URLs
+  limited to `https://`/`ssh://`/`git@` and cloned with `protocol.allow=never` +
+  hooks/symlinks/submodules disabled, `--` separator, scrubbed env; size caps (lock
+  1 MiB, sidecar/attesters 256 KiB, 64 entries) and corpus-root path confinement;
+  `WRD-CONSENSUS-SCHEMA-MISMATCH` for a corpus lock at another lock schema; any
+  community option without `--against-community` is exit 2; whitespace/control
+  characters in a coordinate are `UNRESOLVED`; unexpected corpus errors are exit 2 with
+  the exception class only.
 - **MCP Lock Format v1 conformance corpus + zero-dependency TypeScript verifier (DSE-1513).**
   `vectors/` is now the language-neutral, executable definition of a conforming
   implementation (`docs/SPEC.md` §12.1): 77 vectors — RFC 8785 canonicalization (incl. the

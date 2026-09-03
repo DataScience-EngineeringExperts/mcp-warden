@@ -181,6 +181,29 @@ def compute_overall_digest(
     return hash_value(payload)
 
 
+def surface_digest(lock: WardenLock) -> str:
+    """Launch-independent digest of the DECLARED surface only (DSE-1515).
+
+    ``overall_digest`` (§6.1) binds ``server.command_digest``, so two parties
+    launching the same package through different runners get different overall
+    digests. Community consensus needs to compare what the server *declares*,
+    not how it was started, so this hashes the same payload minus ``server``.
+    It is derived, never stored, and can be recomputed from any lock.
+    """
+    payload = {
+        "schema_version": SCHEMA_VERSION,
+        "tools": [t.entry_digest for t in lock.tools],
+        "resources": [r.entry_digest for r in lock.resources],
+        "prompts": [p.entry_digest for p in lock.prompts],
+    }
+    return hash_value(payload)
+
+
+def lock_is_self_consistent(lock: WardenLock) -> bool:
+    """True when the lock's entries reproduce its stored ``overall_digest``."""
+    return compute_overall_digest(lock.server, lock.tools, lock.resources, lock.prompts) == lock.overall_digest
+
+
 def build_lock(
     surface: CapturedSurface,
     findings: list[Finding],

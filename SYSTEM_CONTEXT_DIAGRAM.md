@@ -86,7 +86,7 @@ flowchart TB
     decision -. "requires production gate" .-> evidence
 
     subgraph ci["CI pipeline (GitHub Actions / local)"]
-        warden["mcp-warden CLI\npin · check · policy · lock rotate · diff\ndeploy-gate · auth audit"]
+        warden["mcp-warden CLI\npin · check (· --against-community) · policy · lock rotate · diff\ndeploy-gate · auth audit"]
     end
 
     subgraph target["Untrusted boundary"]
@@ -223,6 +223,37 @@ flowchart LR
   process group (no orphan) (`GUARD_PROXY_V3.md` §1–§2).
 
 ---
+
+## C4 — `check --against-community` (DSE-1515, phase 1)
+
+```mermaid
+sequenceDiagram
+    participant CI as check --against-community
+    participant P as consumer trust pin (--attester / --attesters-file)
+    participant S as MCP server (untrusted)
+    participant C as corpus (git, append-only, untrusted)
+    participant SG as sigstore verify (one Verifier per run)
+    CI->>P: load pin (none / duplicate → UNPINNED-TRUST, exit 2, no spawn)
+    CI->>CI: resolve coordinate from argv / --coordinate (unpinned, whitespace → exit 2, no spawn)
+    CI->>S: initialize · tools/list · resources/list · prompts/list
+    S-->>CI: declared surface → drift verdict vs warden.lock (unchanged path)
+    CI->>C: https/ssh clone @ --corpus-ref (protocol.allow=never, hooks off, "--") or local path
+    C-->>CI: attesters.json (discovery only) + locks/<eco>/<pkg>/<ver>/<id>.lock + .sigstore
+    CI->>CI: intersect with pin — unpinned id ignored (warn), divergent identity → exit 2
+    CI->>CI: confine paths under corpus root · size caps · schema_version == implemented
+    CI->>SG: verify each bundle over build_statement(overall_digest, DIRECTORY coordinate) for the pinned identity/issuer
+    SG-->>CI: ok / raise (any raise → UNVERIFIABLE, exit 2; relocated signature fails here)
+    CI->>CI: lock entries must reproduce overall_digest → derive surface_digest
+    CI->>CI: MATCH(≥ --min-attesters) · INSUFFICIENT(0) · NOVEL(0) · MISMATCH(1) · SPLIT(1) — "consensus attests observation, not safety"
+```
+
+The corpus is **evidence, not authority**: it never changes the drift verdict, never
+writes a lock, cannot make a failing check pass, and cannot name its own trust root —
+the consumer pin decides whose signatures count. A signature binds identity, digest
+**and** coordinate (v2 statement), so a genuine entry copied under another package is
+rejected. Phase 2 (the public corpus and the sandboxed nightly attester) is pending;
+the flag works today against any corpus that
+follows the layout in `docs/COMMUNITY_CORPUS.md`.
 
 ## Trust boundary (from `docs/THREAT_MODEL.md` §3.3)
 
