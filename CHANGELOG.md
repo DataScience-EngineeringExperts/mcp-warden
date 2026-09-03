@@ -32,6 +32,19 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ### Added
 
+- **`check --against-community` — signed multi-attester lock consensus, phase 1
+  (DSE-1515).** Closes the TOFU hole a single-party lock cannot: compares the freshly
+  captured surface to Sigstore-signed attestations filed by independent attesters in a
+  git corpus (`locks/<ecosystem>/<package>/<version>/<attester>.lock` + `.sigstore`,
+  `attesters.json`). Emits `WRD-CONSENSUS-MISMATCH` / `-SPLIT` (high, exit 1),
+  `-NOVEL` (low, exit 0); an unpinnable launch (`-UNRESOLVED`), an unverifiable entry
+  (`-UNVERIFIABLE`: unknown attester, missing/corrupt sidecar, lock whose entries do not
+  reproduce its signed digest) or an unreachable corpus (`-UNREACHABLE`) is exit 2 —
+  never a skip. Compares a new launch-independent **surface digest** (`§6.1` payload minus
+  `server`) so attesters and consumers using different runners agree. Opt-in; default
+  `check` is byte-for-byte unchanged. Every verdict states *consensus attests
+  observation, not safety*. See [`docs/COMMUNITY_CORPUS.md`](docs/COMMUNITY_CORPUS.md).
+  **Phase 2 (the public `mcp-warden-locks` corpus + nightly attester) is pending.**
 - **`deploy-gate` — fail-closed CI gate for agent deployments (DSE-1257).** Verifies a
   deploy's evidence against a declared gate policy: required eval suites met their
   thresholds, required guardrails are active, a budget/quota is declared, and a human

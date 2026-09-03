@@ -33,7 +33,7 @@ from pathlib import Path
 from .capture import capture_surface_http_sync, capture_surface_sync
 from .checks import run_checks
 from .drift import DriftItem, compute_drift
-from .lockfile import build_lock, read_lock
+from .lockfile import build_lock, read_lock, surface_digest
 from .models import Finding
 
 
@@ -47,6 +47,9 @@ class CheckResult:
 
     findings: list[Finding]
     drift: list[DriftItem]
+    #: Launch-independent digest of the freshly captured surface — what
+    #: ``check --against-community`` compares to the corpus (DSE-1515).
+    surface_digest: str = ""
 
 
 def run_check_full(
@@ -89,7 +92,7 @@ def run_check_full(
     # never written to disk on the check path.
     current = build_lock(surface, findings)
     drift = compute_drift(baseline, current)
-    return CheckResult(findings=findings, drift=drift)
+    return CheckResult(findings=findings, drift=drift, surface_digest=surface_digest(current))
 
 
 def run_check(

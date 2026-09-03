@@ -29,6 +29,8 @@ from .capture import CaptureError, capture_surface_http_sync, capture_surface_sy
 from .check_core import run_check_full
 from .checks import run_checks
 from .cli_auth import register as register_auth_commands
+from .cli_corpus import adjudicate as consensus_adjudicate
+from .cli_corpus import preflight as consensus_preflight
 from .cli_deploy_gate import register as register_deploy_gate_command
 from .cli_diff import register as register_diff_command
 from .cli_guard import register as register_guard_commands
@@ -189,6 +191,19 @@ def check(
     url: Optional[str] = typer.Option(
         None, "--url", help="HTTP/SSE endpoint of a running MCP server (mutually exclusive with server-cmd)"
     ),
+    against_community: bool = typer.Option(
+        False, "--against-community",
+        help="Also compare the observed surface to signed community attestations (needs --corpus)",
+    ),
+    corpus: Optional[str] = typer.Option(
+        None, "--corpus", help="Corpus checkout path, or a git URL (then --corpus-ref is required)"
+    ),
+    corpus_ref: Optional[str] = typer.Option(
+        None, "--corpus-ref", help="Exact 40-hex corpus commit to use (required with a URL)"
+    ),
+    coordinate: Optional[str] = typer.Option(
+        None, "--coordinate", help="Package coordinate <npm|pypi>:<name>@<version> (overrides argv inference)"
+    ),
 ) -> None:
     """Re-capture and verify a server against ``warden.lock``; fail on drift.
 
@@ -217,6 +232,10 @@ def check(
     else:
         command, args = _split_server_cmd(server_cmd)
 
+    # DSE-1515: resolve the corpus coordinate BEFORE spawning — an unpinnable
+    # launch cannot be attested and fails closed without touching the server.
+    coord = consensus_preflight(command, args, corpus, coordinate, err_console) if against_community else None
+
     try:
         # Single source of truth shared with the pre-commit wrapper (precommit.py)
         # so a local hook and CI can never disagree on a drift verdict.
@@ -231,6 +250,14 @@ def check(
     findings = result.findings
     drift = result.drift
 
+    # DSE-1515: consensus runs AFTER the drift verdict on the captured digest and
+    # merges into the same SARIF/JSONL stream; MISMATCH/SPLIT block like drift.
+    blocking = False
+    if coord is not None:
+        verdict = consensus_adjudicate(result.surface_digest, coord, corpus or "", corpus_ref, err_console)
+        findings = [*findings, *verdict.findings]
+        blocking = verdict.blocking
+
     if sarif is not None:
         sarif.write_text(sarif_to_json(build_sarif(findings, drift)), encoding="utf-8")
 
@@ -238,8 +265,11 @@ def check(
         console.print(findings_to_jsonl(findings, drift), end="", soft_wrap=True)
     else:
         _print_check_summary(drift, lock)
+        for f in verdict.findings if coord is not None else []:
+            color = "red" if f.severity == "high" else "yellow"
+            console.print(f"[{color}]{f.rule_id}[/{color}] {f.message}")
 
-    if drift:
+    if drift or blocking:
         raise typer.Exit(code=1)
 
 

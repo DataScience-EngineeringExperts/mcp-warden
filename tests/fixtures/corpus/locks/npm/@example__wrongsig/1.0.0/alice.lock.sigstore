@@ -1,0 +1,1 @@
+{"_fake": "signed over a DIFFERENT digest", "over": "{\"_type\":\"mcp-warden-lock-digest/v1\",\"digest\":\"sha256:0000000000000000000000000000000000000000000000000000000000000000\"}"}

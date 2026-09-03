@@ -1,0 +1,141 @@
+{
+  "schema_version": 3,
+  "warden_version": "0.3.0",
+  "server": {
+    "command": "python",
+    "args": [
+      "tests/fixtures/clean_server.py"
+    ],
+    "command_digest": "sha256:db5131f204944f8a4d13cba802e2a47c576c3932b0eaff0fc0304bba7795904c"
+  },
+  "tools": [
+    {
+      "name": "list_dir",
+      "description_hash": "sha256:86ffef9c802f84e109f8e4ffba6d5dbd379eb1366d427bd5cb46e77ae1f24e3f",
+      "input_schema_hash": "sha256:923b083c9bcab2e3d3e07c7d9b4401688ad9f3d5e2c2f0c48fcd43052bdcb71b",
+      "capabilities": [
+        "fs-read"
+      ],
+      "schema_skeleton": {
+        "props": {
+          "$root": {
+            "type": [
+              "object"
+            ],
+            "required": false,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          },
+          "path": {
+            "type": [
+              "string"
+            ],
+            "required": true,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "entry_digest": "sha256:1a3b7e7ce145db27d63fb3ade3a3d2f6822d1e5b570b62f80a6c2f3de5d17569"
+    },
+    {
+      "name": "read_file",
+      "description_hash": "sha256:66c8359ee4b07085ddc3ff6169eef8f15add705100f66c28ca384c0fff9963e1",
+      "input_schema_hash": "sha256:49430b90983ed64ed10b24073294a1559a487be5a32fe780b93f67c308184e13",
+      "capabilities": [
+        "fs-read"
+      ],
+      "schema_skeleton": {
+        "props": {
+          "$root": {
+            "type": [
+              "object"
+            ],
+            "required": false,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          },
+          "path": {
+            "type": [
+              "string"
+            ],
+            "required": true,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "entry_digest": "sha256:54e67f392b48e7adeaee4760d0827cc46e069b852b56d502d4d0e59791da5164"
+    }
+  ],
+  "resources": [
+    {
+      "uri": "file:///etc/motd",
+      "name": "motd",
+      "description_hash": "sha256:14ec0d6ac27d5638dc9616a064e386f712012886fa96aa756c8cd623bb966e89",
+      "mime_type": "text/plain",
+      "entry_digest": "sha256:911504f35d7216273f99671ab467220b49d527f5be56a538b06b49308e67ebc8"
+    }
+  ],
+  "prompts": [
+    {
+      "name": "summarize",
+      "description_hash": "sha256:6740f991cded1943c70e3bf53ead9f3dcbd6d201e5bc833bbe0a781f454d273d",
+      "arguments_hash": "sha256:c5dbdde6b9ec63a025c51567c4c33496f7dffc2b415b03cd8467d1ded44493ae",
+      "entry_digest": "sha256:a3214cdc0ac5cf658451d52b81aa4f23b4a3b038042d5a2d9635e71f35624945"
+    }
+  ],
+  "findings": [
+    {
+      "rule_id": "WRD-CAP-FS-READ",
+      "severity": "medium",
+      "target": "tools/list_dir",
+      "message": "Tool derives capability 'fs-read' (name token 'list')",
+      "snippet": "name token 'list'"
+    },
+    {
+      "rule_id": "WRD-CAP-FS-READ",
+      "severity": "medium",
+      "target": "tools/read_file",
+      "message": "Tool derives capability 'fs-read' (name token 'read')",
+      "snippet": "name token 'read'"
+    }
+  ],
+  "overall_digest": "sha256:cb20a16ce572cca8f682672c42036e351359d32ca8265e5af3bfc861ab6f9219",
+  "pin": {
+    "created_at": "2026-06-09T21:24:46Z",
+    "warden_version": "0.3.0",
+    "mcp_protocol_version": "2025-11-25",
+    "approved": true,
+    "approver": "ci-bot@example.invalid",
+    "approved_at": "2026-06-09T21:24:46Z",
+    "approved_digest": "sha256:cb20a16ce572cca8f682672c42036e351359d32ca8265e5af3bfc861ab6f9219",
+    "provenance_version": 1,
+    "pinner": {
+      "tool": "mcp-warden",
+      "tool_version": "0.3.0",
+      "actor": null,
+      "environment": null
+    },
+    "attestations": [
+      {
+        "actor": "ci-bot@example.invalid",
+        "role": "approver",
+        "method": "manual",
+        "created_at": "2026-06-09T21:24:46Z",
+        "bound_digest": "sha256:cb20a16ce572cca8f682672c42036e351359d32ca8265e5af3bfc861ab6f9219",
+        "note": null
+      }
+    ],
+    "rotated_at": null,
+    "rotation_count": 0
+  }
+}

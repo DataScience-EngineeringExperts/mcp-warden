@@ -1,0 +1,183 @@
+{
+  "schema_version": 3,
+  "warden_version": "1.1.0",
+  "server": {
+    "command": "python",
+    "args": [
+      "tests/fixtures/mutated_server.py"
+    ],
+    "url": null,
+    "command_digest": "sha256:abae458de7508990bea451a2dd2150aea388f48d347c88626c32c08dcae1c646"
+  },
+  "tools": [
+    {
+      "name": "list_dir",
+      "description_hash": "sha256:86ffef9c802f84e109f8e4ffba6d5dbd379eb1366d427bd5cb46e77ae1f24e3f",
+      "input_schema_hash": "sha256:923b083c9bcab2e3d3e07c7d9b4401688ad9f3d5e2c2f0c48fcd43052bdcb71b",
+      "capabilities": [
+        "fs-read"
+      ],
+      "schema_skeleton": {
+        "props": {
+          "$root": {
+            "type": [
+              "object"
+            ],
+            "required": false,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          },
+          "path": {
+            "type": [
+              "string"
+            ],
+            "required": true,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "entry_digest": "sha256:1a3b7e7ce145db27d63fb3ade3a3d2f6822d1e5b570b62f80a6c2f3de5d17569"
+    },
+    {
+      "name": "read_file",
+      "description_hash": "sha256:8e8966c5f5188b70ef162a9d3b59900c54787d3ad9f959b72c28ba84674d4ad2",
+      "input_schema_hash": "sha256:bac5a693ca312cc84610cb4d29bc4b6290afa31ea085d5fe1a106049ba9f1d1c",
+      "capabilities": [
+        "fs-read"
+      ],
+      "schema_skeleton": {
+        "props": {
+          "$root": {
+            "type": [
+              "object"
+            ],
+            "required": false,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          },
+          "encoding": {
+            "type": [
+              "string"
+            ],
+            "required": false,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          },
+          "path": {
+            "type": [
+              "string"
+            ],
+            "required": true,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "entry_digest": "sha256:573998a4573233602259d3bcbccab1f4c9b608d76576f0acd101755584eab4db"
+    },
+    {
+      "name": "run_command",
+      "description_hash": "sha256:035df9dd8144b807242e61aea10c16e2a55f59a82a72770dc420c4cc6dc747cc",
+      "input_schema_hash": "sha256:53a1c7c2c7736316b6fa0a0f5865e4a7d77763e6a96b082a37287e6afef1ad6e",
+      "capabilities": [
+        "shell-exec"
+      ],
+      "schema_skeleton": {
+        "props": {
+          "$root": {
+            "type": [
+              "object"
+            ],
+            "required": false,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          },
+          "command": {
+            "type": [
+              "string"
+            ],
+            "required": true,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "entry_digest": "sha256:3f339c568117124db0a47b867008b8f07a13211a04defb5637e9ec0c5a745d58"
+    }
+  ],
+  "resources": [
+    {
+      "uri": "file:///etc/motd",
+      "name": "motd",
+      "description_hash": "sha256:14ec0d6ac27d5638dc9616a064e386f712012886fa96aa756c8cd623bb966e89",
+      "mime_type": "text/plain",
+      "entry_digest": "sha256:911504f35d7216273f99671ab467220b49d527f5be56a538b06b49308e67ebc8"
+    }
+  ],
+  "prompts": [
+    {
+      "name": "summarize",
+      "description_hash": "sha256:6740f991cded1943c70e3bf53ead9f3dcbd6d201e5bc833bbe0a781f454d273d",
+      "arguments_hash": "sha256:c5dbdde6b9ec63a025c51567c4c33496f7dffc2b415b03cd8467d1ded44493ae",
+      "entry_digest": "sha256:a3214cdc0ac5cf658451d52b81aa4f23b4a3b038042d5a2d9635e71f35624945"
+    }
+  ],
+  "findings": [
+    {
+      "rule_id": "WRD-CAP-FS-READ",
+      "severity": "medium",
+      "target": "tools/list_dir",
+      "message": "Tool derives capability 'fs-read' (name token 'list')",
+      "snippet": "name token 'list'"
+    },
+    {
+      "rule_id": "WRD-CAP-FS-READ",
+      "severity": "medium",
+      "target": "tools/read_file",
+      "message": "Tool derives capability 'fs-read' (name token 'read')",
+      "snippet": "name token 'read'"
+    },
+    {
+      "rule_id": "WRD-CAP-SHELL",
+      "severity": "critical",
+      "target": "tools/run_command",
+      "message": "Tool derives capability 'shell-exec' (property 'command')",
+      "snippet": "property 'command'"
+    }
+  ],
+  "overall_digest": "sha256:62085ff0d433c540b590407417bed61837258d549512ae94227d599c0e3dbf04",
+  "pin": {
+    "created_at": "2026-09-03T09:22:41Z",
+    "warden_version": "1.1.0",
+    "mcp_protocol_version": "2025-11-25",
+    "approved": false,
+    "approver": null,
+    "approved_at": null,
+    "approved_digest": null,
+    "provenance_version": 1,
+    "pinner": {
+      "tool": "mcp-warden",
+      "tool_version": "1.1.0",
+      "actor": null,
+      "environment": null
+    },
+    "attestations": [],
+    "rotated_at": null,
+    "rotation_count": 0
+  }
+}
