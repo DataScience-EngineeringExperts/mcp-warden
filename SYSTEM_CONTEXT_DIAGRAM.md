@@ -42,6 +42,16 @@ logic) plus a separate informational provenance section. It never prints raw
 > exit-code contract (0/1/2, fail closed) and the shared SARIF + JSONL emitters, so they
 > enter an existing code-scanning pipeline with no new plumbing. Runtime capability
 > brokering remains out of scope (DSE-725). See [`docs/AGENT_GATES.md`](docs/AGENT_GATES.md).
+
+> **`doctor` (DSE-1516)** is the zero-config entry point and sits at the far left of the
+> picture: it reads the MCP client configs already on the developer's machine (Claude
+> Code, Claude Desktop, Cursor, VS Code, Windsurf, Codex — a documented, closed set with a
+> symlink-escape guard) and composes the same `WRD-AUTH-*` / `WRD-SUP-*` engines plus a
+> lock-coverage check per server. It is static by default (no spawn, no network, no DNS)
+> and ends by printing the exact `pin` command for every uncovered server — the on-ramp
+> to the `pin → check` loop below. `--pin` is the single opt-in that crosses into the
+> untrusted boundary, and it refuses non-interactively without `--yes`.
+> See [`docs/DOCTOR.md`](docs/DOCTOR.md).
 >
 > **`action.yml` (Issue #18)** is the primary consumer delivery vehicle for the `check`
 > gate. Consumers pin `DataScience-EngineeringExperts/mcp-warden@<tag>` in their workflow; the composite
@@ -86,7 +96,7 @@ flowchart TB
     decision -. "requires production gate" .-> evidence
 
     subgraph ci["CI pipeline (GitHub Actions / local)"]
-        warden["mcp-warden CLI\npin · check · policy · lock rotate · diff\ndeploy-gate · auth audit"]
+        warden["mcp-warden CLI\ndoctor · pin · check · policy · lock rotate · diff\ndeploy-gate · auth audit"]
     end
 
     subgraph target["Untrusted boundary"]

@@ -32,6 +32,19 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ### Added
 
+- **`doctor` — zero-config MCP posture scan (DSE-1516).** One command, no arguments:
+  discovers every MCP client config already on the machine (Claude Code user + project,
+  Claude Desktop, Cursor, VS Code, Windsurf, Codex — per-platform table in
+  [`docs/DOCTOR.md`](docs/DOCTOR.md)), runs the existing `auth audit` and `WRD-SUP-*`
+  launch checks over each configured server, reports every server no `warden.lock` pins
+  (`WRD-DOCTOR-NO-LOCK`, low), and prints the exact, shell-quoted, secret-masked `pin`
+  command per uncovered server plus the Action snippet. It **composes** existing engines
+  and adds no detection catalog. Static by default — no spawn, no network, no DNS,
+  asserted by a test that makes each of those raise. A discovered path with a symlink
+  component is skipped with a warning so a planted link cannot widen the read set.
+  `--pin` is the single opt-in that launches servers; it refuses in a non-interactive
+  session without `--yes`. Exit 0 clean / 1 any finding / 2 unreadable config (fail closed).
+
 - **`deploy-gate` — fail-closed CI gate for agent deployments (DSE-1257).** Verifies a
   deploy's evidence against a declared gate policy: required eval suites met their
   thresholds, required guardrails are active, a budget/quota is declared, and a human
