@@ -1,0 +1,20 @@
+{
+  "id": "canonical/numbers-es6",
+  "kind": "canonical",
+  "description": "Numbers serialize per ES6 Number::toString (1e21 -> 1e+21, 1.0 -> 1, -0 -> 0, 1e-7).",
+  "input": {
+    "a": 0.1,
+    "b": 1e+21,
+    "c": 100,
+    "d": 1.0,
+    "e": -0.0,
+    "f": 1e-07,
+    "g": 123456789.125,
+    "h": -5,
+    "i": 9007199254740991
+  },
+  "expect": {
+    "jcs": "{\"a\":0.1,\"b\":1e+21,\"c\":100,\"d\":1,\"e\":0,\"f\":1e-7,\"g\":123456789.125,\"h\":-5,\"i\":9007199254740991}",
+    "sha256": "sha256:fd5aa060039901d7e17bab294be8b6d3a96e8e3fdd5a62a7a06fce1bbcdad3b3"
+  }
+}

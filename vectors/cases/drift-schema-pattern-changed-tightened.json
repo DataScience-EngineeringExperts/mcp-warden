@@ -1,0 +1,99 @@
+{
+  "id": "drift/schema-pattern-changed-tightened",
+  "kind": "drift",
+  "description": "pattern changed (not removed) is a tightening with no value echoed.",
+  "lock": {
+    "schema_version": 3,
+    "warden_version": "0.0.0",
+    "server": {
+      "command": "python",
+      "args": [
+        "server.py"
+      ],
+      "url": null,
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [
+      {
+        "name": "t",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:3869ffc1f63177b14b7dcb585502aea5ec86460e27421875ce488e7e0c7427d3",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "a": {
+              "type": [
+                "string"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true,
+                "pattern": "^api_key-AKIA1234567890$"
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:e442b6d06a34dee82a9950871d9fda38d677f9c48283e471bf31590325abd02a"
+      }
+    ],
+    "resources": [],
+    "prompts": [],
+    "findings": [],
+    "overall_digest": "sha256:a70cd89675df6528d229d2ff406baa3b865ef440f3b3a447af353382bef4debf",
+    "pin": {
+      "created_at": "2026-01-01T00:00:00Z",
+      "warden_version": "0.0.0",
+      "mcp_protocol_version": "2025-06-18",
+      "approved": false,
+      "approver": null,
+      "approved_at": null,
+      "approved_digest": null,
+      "provenance_version": 1,
+      "pinner": null,
+      "attestations": [],
+      "rotated_at": null,
+      "rotation_count": 0
+    }
+  },
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [
+      {
+        "name": "t",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "a": {
+              "type": "string",
+              "pattern": "^token-XYZ$"
+            }
+          }
+        }
+      }
+    ],
+    "resources": [],
+    "prompts": []
+  },
+  "expect": [
+    {
+      "drift_class": "schema-constraint-tightened",
+      "severity": "low",
+      "target": "tools/t",
+      "detail": "pattern changed"
+    }
+  ]
+}

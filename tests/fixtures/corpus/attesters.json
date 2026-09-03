@@ -1,0 +1,17 @@
+[
+  {
+    "id": "alice",
+    "certificate_identity": "https://github.com/example/attester-alice/.github/workflows/attest.yml@refs/heads/main",
+    "oidc_issuer": "https://token.actions.githubusercontent.com"
+  },
+  {
+    "id": "bob",
+    "certificate_identity": "https://github.com/example/attester-bob/.github/workflows/attest.yml@refs/heads/main",
+    "oidc_issuer": "https://token.actions.githubusercontent.com"
+  },
+  {
+    "id": "carol",
+    "certificate_identity": "https://github.com/example/attester-carol/.github/workflows/attest.yml@refs/heads/main",
+    "oidc_issuer": "https://token.actions.githubusercontent.com"
+  }
+]

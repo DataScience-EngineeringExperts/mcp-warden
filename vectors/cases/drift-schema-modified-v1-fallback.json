@@ -1,0 +1,73 @@
+{
+  "id": "drift/schema-modified-v1-fallback",
+  "kind": "drift",
+  "description": "Baseline without a schema_skeleton (v1 lock) + changed schema -> single schema-modified (high).",
+  "lock": {
+    "schema_version": 3,
+    "warden_version": "0.0.0",
+    "server": {
+      "command": "python",
+      "args": [
+        "server.py"
+      ],
+      "url": null,
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [
+      {
+        "name": "t",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:a4fa3d2b926b7397a8766e81cfe262ab54af1d77989b8ae754e5b255a4d36485",
+        "capabilities": [],
+        "schema_skeleton": null,
+        "entry_digest": "sha256:506f31170b8d8548ab7a8b6ee0d2bcccc9be92838b0ea241960d2a2b3660cdd8"
+      }
+    ],
+    "resources": [],
+    "prompts": [],
+    "findings": [],
+    "overall_digest": "sha256:11706002c93593ab288945f05f4af753b02291df13110f9425e8061792a8799d",
+    "pin": {
+      "created_at": "2026-01-01T00:00:00Z",
+      "warden_version": "0.0.0",
+      "mcp_protocol_version": "2025-06-18",
+      "approved": false,
+      "approver": null,
+      "approved_at": null,
+      "approved_digest": null,
+      "provenance_version": 1,
+      "pinner": null,
+      "attestations": [],
+      "rotated_at": null,
+      "rotation_count": 0
+    }
+  },
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [
+      {
+        "name": "t",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "a": {},
+            "b": {}
+          }
+        }
+      }
+    ],
+    "resources": [],
+    "prompts": []
+  },
+  "expect": [
+    {
+      "drift_class": "schema-modified",
+      "severity": "high",
+      "target": "tools/t",
+      "detail": null
+    }
+  ]
+}

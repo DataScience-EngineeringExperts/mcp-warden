@@ -1,0 +1,15 @@
+{
+  "id": "canonical/sorted-keys-utf16",
+  "kind": "canonical",
+  "description": "Object keys sort by UTF-16 code units: 'A' < '_' < 'a' < 'b'.",
+  "input": {
+    "b": 1,
+    "a": 2,
+    "A": 3,
+    "_": 4
+  },
+  "expect": {
+    "jcs": "{\"A\":3,\"_\":4,\"a\":2,\"b\":1}",
+    "sha256": "sha256:ec8967c245840cc8553e1ee73ea67e40683bac7fbafa2b853a34cebe10d89312"
+  }
+}

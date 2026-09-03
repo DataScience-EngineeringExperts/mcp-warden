@@ -23,6 +23,7 @@ from typing import Optional
 
 import typer
 from rich.console import Console
+from rich.markup import escape
 from rich.table import Table
 
 from . import __version__
@@ -30,12 +31,17 @@ from .capture import CaptureError, capture_surface_http_sync, capture_surface_sy
 from .check_core import run_check_full
 from .checks import run_checks
 from .cli_auth import register as register_auth_commands
+from .cli_corpus import DEFAULT_MIN_ATTESTERS
+from .cli_corpus import adjudicate as consensus_adjudicate
+from .cli_corpus import preflight as consensus_preflight
+from .cli_corpus import validate_flags as consensus_validate_flags
 from .cli_deploy_gate import register as register_deploy_gate_command
 from .cli_diff import register as register_diff_command
 from .cli_doctor import register as register_doctor_command
 from .cli_guard import register as register_guard_commands
 from .cli_lock import register as register_lock_commands
 from .cli_sign import sign_after_pin, verify_lock_signature
+from .corpus_coordinate import parse_explicit as parse_coordinate
 from .emitters import build_sarif, findings_to_jsonl, sarif_to_json
 from .lockfile import (
     DEFAULT_LOCK_NAME,
@@ -117,6 +123,10 @@ def pin(
     url: Optional[str] = typer.Option(
         None, "--url", help="HTTP/SSE endpoint of a running MCP server (mutually exclusive with server-cmd)"
     ),
+    coordinate: Optional[str] = typer.Option(
+        None, "--coordinate",
+        help="With --sign: bind the package coordinate <npm|pypi>:<name>@<version> into the signature (corpus attesters)",
+    ),
 ) -> None:
     """Pin an MCP server's declared surface into ``warden.lock`` (TOFU baseline).
 
@@ -132,6 +142,12 @@ def pin(
     approver_id = approver or os.environ.get("WARDEN_APPROVER")
     if approve and not approver_id:
         err_console.print("[red]error:[/red] --approve requires --approver <id> or WARDEN_APPROVER env")
+        raise typer.Exit(code=2)
+    if coordinate is not None and not sign:
+        err_console.print("[red]error:[/red] --coordinate requires --sign")
+        raise typer.Exit(code=2)
+    if coordinate is not None and parse_coordinate(coordinate) is None:
+        err_console.print("[red]error:[/red] --coordinate must be <npm|pypi>:<name>@<pinned-version>")
         raise typer.Exit(code=2)
 
     try:
@@ -158,7 +174,8 @@ def pin(
     # signature/bundle/pointer are all OUTSIDE overall_digest, so signing does NOT
     # change the digest of the lock written above.
     if sign:
-        lock_doc = sign_after_pin(lock_doc, lock, identity_token, err_console)
+        coord_text = str(parse_coordinate(coordinate)) if coordinate is not None else None
+        lock_doc = sign_after_pin(lock_doc, lock, identity_token, err_console, coordinate=coord_text)
 
     if sarif is not None:
         sarif.write_text(sarif_to_json(build_sarif(findings)), encoding="utf-8")
@@ -192,6 +209,31 @@ def check(
     url: Optional[str] = typer.Option(
         None, "--url", help="HTTP/SSE endpoint of a running MCP server (mutually exclusive with server-cmd)"
     ),
+    against_community: bool = typer.Option(
+        False, "--against-community",
+        help="Also compare the observed surface to signed community attestations (needs --corpus)",
+    ),
+    corpus: Optional[str] = typer.Option(
+        None, "--corpus", help="Corpus checkout path, or a git URL (then --corpus-ref is required)"
+    ),
+    corpus_ref: Optional[str] = typer.Option(
+        None, "--corpus-ref", help="Exact 40-hex corpus commit to use (required with a URL)"
+    ),
+    coordinate: Optional[str] = typer.Option(
+        None, "--coordinate",
+        help="Package coordinate <npm|pypi>:<name>@<version> (overrides argv inference; with --verify selects the v2 statement)",
+    ),
+    attester: Optional[list[str]] = typer.Option(
+        None, "--attester",
+        help="Trust one attester: <id>=<certificate_identity>@<oidc_issuer> (repeatable; required with --against-community)",
+    ),
+    attesters_file: Optional[Path] = typer.Option(
+        None, "--attesters-file", help="Trust the attesters in this JSON file (same schema as a corpus attesters.json)"
+    ),
+    min_attesters: Optional[int] = typer.Option(
+        None, "--min-attesters", min=1,
+        help=f"Trusted attesters that must agree for a match (default {DEFAULT_MIN_ATTESTERS}; fewer is WRD-CONSENSUS-INSUFFICIENT)",
+    ),
 ) -> None:
     """Re-capture and verify a server against ``warden.lock``; fail on drift.
 
@@ -202,9 +244,22 @@ def check(
     on a clean verify; ANY failure (bad signature, identity mismatch, missing/
     malformed bundle, TUF/network error) exits non-zero (fail closed).
     """
+    consensus_validate_flags(
+        against_community=against_community, verify=verify, corpus=corpus, corpus_ref=corpus_ref,
+        coordinate=coordinate, attester=attester or [], attesters_file=attesters_file,
+        min_attesters=min_attesters, err_console=err_console,
+    )
     if verify:
+        coord_text = None
+        if coordinate is not None:
+            parsed = parse_coordinate(coordinate)
+            if parsed is None:
+                err_console.print("[red]error:[/red] --coordinate must be <npm|pypi>:<name>@<pinned-version>")
+                raise typer.Exit(code=2)
+            coord_text = str(parsed)
         verify_lock_signature(
-            lock, certificate_identity, certificate_oidc_issuer, offline_bundle, console, err_console
+            lock, certificate_identity, certificate_oidc_issuer, offline_bundle, console, err_console,
+            coordinate=coord_text,
         )
         return
 
@@ -220,6 +275,13 @@ def check(
     else:
         command, args = _split_server_cmd(server_cmd)
 
+    # DSE-1515: resolve the corpus coordinate BEFORE spawning — an unpinnable
+    # launch cannot be attested and fails closed without touching the server.
+    coord, pin = (
+        consensus_preflight(command, args, corpus, coordinate, attester or [], attesters_file, err_console)
+        if against_community else (None, {})
+    )
+
     try:
         # Single source of truth shared with the pre-commit wrapper (precommit.py)
         # so a local hook and CI can never disagree on a drift verdict.
@@ -234,6 +296,17 @@ def check(
     findings = result.findings
     drift = result.drift
 
+    # DSE-1515: consensus runs AFTER the drift verdict on the captured digest and
+    # merges into the same SARIF/JSONL stream; MISMATCH/SPLIT block like drift.
+    blocking = False
+    if coord is not None:
+        verdict = consensus_adjudicate(
+            result.surface_digest, coord, corpus or "", corpus_ref, pin,
+            min_attesters if min_attesters is not None else DEFAULT_MIN_ATTESTERS, err_console,
+        )
+        findings = [*findings, *verdict.findings]
+        blocking = verdict.blocking
+
     if sarif is not None:
         sarif.write_text(sarif_to_json(build_sarif(findings, drift)), encoding="utf-8")
 
@@ -241,8 +314,11 @@ def check(
         console.print(findings_to_jsonl(findings, drift), end="", soft_wrap=True)
     else:
         _print_check_summary(drift, lock)
+        for f in verdict.findings if coord is not None else []:
+            color = "red" if f.severity == "high" else "yellow"
+            console.print(f"[{color}]{f.rule_id}[/{color}] {escape(f.message)}")
 
-    if drift:
+    if drift or blocking:
         raise typer.Exit(code=1)
 
 

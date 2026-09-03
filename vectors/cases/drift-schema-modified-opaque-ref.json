@@ -1,0 +1,95 @@
+{
+  "id": "drift/schema-modified-opaque-ref",
+  "kind": "drift",
+  "description": "A remote $ref target changed -> opaque-leaf schema-modified (high) carrying both literals.",
+  "lock": {
+    "schema_version": 3,
+    "warden_version": "0.0.0",
+    "server": {
+      "command": "python",
+      "args": [
+        "server.py"
+      ],
+      "url": null,
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [
+      {
+        "name": "t",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:365d6f14b74d4da9625bfa75cb317351fdf5ca086861b3a3f756849e9561dd2f",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "a": {
+              "type": null,
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "$ref": "https://example.com/a.json#/x"
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:0bf1e1755902e74905d651fc9fc8af39966371065b2d5e8bff34092de00d184d"
+      }
+    ],
+    "resources": [],
+    "prompts": [],
+    "findings": [],
+    "overall_digest": "sha256:a0d36e125a6ce600c0a513f76f6ec692cc9763fc13221e6c8a8b7810042a77ce",
+    "pin": {
+      "created_at": "2026-01-01T00:00:00Z",
+      "warden_version": "0.0.0",
+      "mcp_protocol_version": "2025-06-18",
+      "approved": false,
+      "approver": null,
+      "approved_at": null,
+      "approved_digest": null,
+      "provenance_version": 1,
+      "pinner": null,
+      "attestations": [],
+      "rotated_at": null,
+      "rotation_count": 0
+    }
+  },
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [
+      {
+        "name": "t",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "a": {
+              "$ref": "https://example.com/b.json#/x"
+            }
+          }
+        }
+      }
+    ],
+    "resources": [],
+    "prompts": []
+  },
+  "expect": [
+    {
+      "drift_class": "schema-modified",
+      "severity": "high",
+      "target": "tools/t",
+      "detail": "$ref https://example.com/a.json#/x→https://example.com/b.json#/x"
+    }
+  ]
+}

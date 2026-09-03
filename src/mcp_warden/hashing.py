@@ -40,8 +40,9 @@ def canon(value: Any) -> bytes:
 
     Args:
         value: Any JSON-compatible Python value (dict, list, str, int, float,
-            bool, None). Object keys are sorted by Unicode code point, arrays
-            preserve order, no insignificant whitespace, JCS number formatting.
+            bool, None). Object keys are sorted by UTF-16 code units (RFC 8785
+            §3.2.3 — NOT by code point; the two differ for astral characters),
+            arrays preserve order, no insignificant whitespace, JCS number formatting.
 
     Returns:
         The canonical UTF-8 byte string.

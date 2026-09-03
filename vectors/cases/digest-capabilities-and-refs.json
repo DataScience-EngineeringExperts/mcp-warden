@@ -1,0 +1,367 @@
+{
+  "id": "digest/capabilities-and-refs",
+  "kind": "digest",
+  "description": "Capability derivation from name/property tokens; in-document $ref followed, remote/sibling/cyclic refs are opaque leaves.",
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [
+      {
+        "name": "run_shell_command",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "command": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "name": "writeFile",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            },
+            "content": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "path",
+            "content"
+          ]
+        }
+      },
+      {
+        "name": "fetchUrl",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "url": {
+              "type": "string",
+              "format": "uri"
+            }
+          }
+        }
+      },
+      {
+        "name": "sqlQuery",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "name": "read_file",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      {
+        "name": "refs",
+        "inputSchema": {
+          "type": "object",
+          "$defs": {
+            "name": {
+              "type": "string",
+              "maxLength": 32
+            },
+            "loop": {
+              "$ref": "#/$defs/loop"
+            }
+          },
+          "properties": {
+            "who": {
+              "$ref": "#/$defs/name"
+            },
+            "remote": {
+              "$ref": "https://example.com/s.json#/x"
+            },
+            "sibling": {
+              "$ref": "#/$defs/name",
+              "description": "has a sibling"
+            },
+            "cyclic": {
+              "$ref": "#/$defs/loop"
+            },
+            "escaped": {
+              "$ref": "#/$defs/na%6de"
+            }
+          },
+          "required": [
+            "who"
+          ]
+        }
+      }
+    ],
+    "resources": [],
+    "prompts": []
+  },
+  "expect": {
+    "server": {
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [
+      {
+        "name": "fetchUrl",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:cb501a78243145d5bddf691e00b370d93fe3854903e0e79d4f074fdb1e913cda",
+        "capabilities": [
+          "http-request"
+        ],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "url": {
+              "type": [
+                "string"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true,
+                "format": "uri"
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:458d491dcd951c14b378f89c3a2a281b9d78172459660eff7296d7f15d837fc6"
+      },
+      {
+        "name": "read_file",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:53582d9d7229826e75097ac478787ca403c94ce74e4611571be1b03c706952cc",
+        "capabilities": [
+          "fs-read"
+        ],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "path": {
+              "type": [
+                "string"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:6f11256b978f1aac99fab34e4af12c354c2eda0e993913889adcc34940049bc0"
+      },
+      {
+        "name": "refs",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:010f399170509a48e3be78796b2d9ec358e9a31e880e7fd7affd6624509fc7fc",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "cyclic": {
+              "type": null,
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "_truncated": true
+              }
+            },
+            "escaped": {
+              "type": [
+                "string"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true,
+                "maxLength": 32
+              }
+            },
+            "remote": {
+              "type": null,
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "$ref": "https://example.com/s.json#/x"
+              }
+            },
+            "sibling": {
+              "type": null,
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "$ref": "#/$defs/name"
+              }
+            },
+            "who": {
+              "type": [
+                "string"
+              ],
+              "required": true,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true,
+                "maxLength": 32
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:e9f2249d92aad65b0183931ad0622c874af71453f4734e31a2d2a676022d6ed2"
+      },
+      {
+        "name": "run_shell_command",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:da8c8eacc2f75f7b1ad1225c3ed75e2c43ee31f6d1976d8add615735e4aa9664",
+        "capabilities": [
+          "shell-exec"
+        ],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "command": {
+              "type": [
+                "string"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:64b37b52f763980702dadd1a5ef061d7fc21cc1acc560699c44b9cf2752fa2ec"
+      },
+      {
+        "name": "sqlQuery",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:094ec29d007cce150c65abf0756d79ad5b62a1acfdb6e0841f69f1377ef41761",
+        "capabilities": [
+          "sql-query"
+        ],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "query": {
+              "type": [
+                "string"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:d3e40dab0cc6d677d69c5e6dd1dfa543e3afc301655f2347370f1c1a78219462"
+      },
+      {
+        "name": "writeFile",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:3f4ea9aef3ff7c58f773a492498a98ea9200ac0ca575dcabae7f7c5bfe0f472a",
+        "capabilities": [
+          "fs-write"
+        ],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "content": {
+              "type": [
+                "string"
+              ],
+              "required": true,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "path": {
+              "type": [
+                "string"
+              ],
+              "required": true,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:ce5a6ad17a64ac7b67af67b64f1e7c2cd5a6394c9e49db17309a480131c0cd08"
+      }
+    ],
+    "resources": [],
+    "prompts": [],
+    "overall_digest": "sha256:24de0128af7fbee8c0c6052b802b241ca7774fa8e2454246059acc618db7dad0"
+  }
+}

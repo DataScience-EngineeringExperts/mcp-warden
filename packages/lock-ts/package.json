@@ -1,0 +1,36 @@
+{
+  "name": "@mcp-warden/lock",
+  "version": "0.1.0",
+  "description": "Zero-dependency verifier for MCP Lock Format v1 (warden.lock): RFC 8785 canonicalization, SHA-256 digests, and drift classification.",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DataScience-EngineeringExperts/mcp-warden.git",
+    "directory": "packages/lock-ts"
+  },
+  "homepage": "https://github.com/DataScience-EngineeringExperts/mcp-warden/tree/main/packages/lock-ts",
+  "keywords": ["mcp", "supply-chain", "lockfile", "integrity", "rfc8785", "jcs", "security"],
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "files": ["dist/src", "README.md", "LICENSE"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/test/vectors.test.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "typescript": "5.7.2"
+  }
+}

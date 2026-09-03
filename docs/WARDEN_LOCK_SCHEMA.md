@@ -62,8 +62,11 @@ This is the part `pin` and `check` MUST implement identically.
 
 Given any JSON value, produce a deterministic byte string:
 
-1. **Objects:** keys sorted by Unicode code point (lexicographic on UTF-16 code units is
-   **not** permitted; sort on Unicode scalar values). No insignificant whitespace.
+1. **Objects:** keys sorted by **UTF-16 code units** — exactly what RFC 8785 §3.2.3 requires
+   and what the `rfc8785` library implements. For astral characters this is *not* Unicode
+   scalar-value order; `vectors/cases/canonical-surrogate-key-order.json` pins the rule.
+   (Corrected 2026-09-03: this line previously mandated the opposite.) No insignificant
+   whitespace.
 2. **Arrays:** order preserved **except** where this doc explicitly requires sorting
    (tools by `name`, resources by `uri`, prompts by `name`). Sorting is applied **before**
    canonicalization, by the pinner, so the array order in the file is already canonical.
@@ -160,7 +163,7 @@ input schema's *security-relevant* structure (one `PropFacts` per dotted propert
 recursing `properties` and array `items`). Keeps `type` (sorted tuple), `required`, `enum`,
 and constraints `{maxLength,minLength,minimum,maximum,pattern,format,additionalProperties}`;
 **drops** cosmetic keys (`description`,`title`,`examples`,`default`). Absent
-`additionalProperties` → `true`; `$ref` is an opaque leaf (never followed); cyclic/over-deep
+`additionalProperties` → `true`; a same-document `$ref` is followed into its target (v3, #29) while a remote, sibling-keyed, unresolvable or over-budget `$ref` stays an opaque leaf; cyclic/over-deep
 nodes record `{"_truncated": true}`. Lets `check` classify *what* changed (§6.2). `null` in
 v1 locks; a baseline lacking it falls back to blob-level `schema-modified` until re-pinned.
 

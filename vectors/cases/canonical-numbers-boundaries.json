@@ -1,0 +1,19 @@
+{
+  "id": "canonical/numbers-boundaries",
+  "kind": "canonical",
+  "description": "IEEE-754 boundaries under ES6 Number::toString: the smallest subnormal, the largest finite, the 1e21 exponent switch, a negative exponent form, and 1e-6 (the last fixed-notation negative power).",
+  "input": {
+    "a": 5e-324,
+    "b": 1e-323,
+    "c": 1e+21,
+    "d": 1.7976931348623157e+308,
+    "e": -1e+21,
+    "f": 1.5e+300,
+    "g": 1.2345678901234568e+20,
+    "h": 1e-06
+  },
+  "expect": {
+    "jcs": "{\"a\":5e-324,\"b\":1e-323,\"c\":1e+21,\"d\":1.7976931348623157e+308,\"e\":-1e+21,\"f\":1.5e+300,\"g\":123456789012345680000,\"h\":0.000001}",
+    "sha256": "sha256:1fec7f54e033a8bb7a64ae2c3cf938214da17235388fca58ccfeec9e9a0c84b1"
+  }
+}

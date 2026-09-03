@@ -14,6 +14,20 @@ describe and visualize the implementation that satisfies that contract.
 | 2 | [`SYSTEM_CONTEXT_DIAGRAM.md`](SYSTEM_CONTEXT_DIAGRAM.md) | System context + pin/check sequence (mermaid); trust boundary; `conclave` as dev-time reviewer only; composite GitHub Action + **pre-commit hook** as consumer delivery vehicles |
 | 3 | [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md) | This file |
 
+## Lock Format v1 conformance (`vectors/` + `@mcp-warden/lock` — DSE-1513)
+
+The format is a standard, not a tool: a language-neutral corpus defines conformance and two
+implementations (Python reference, zero-dependency TypeScript) prove it in CI.
+
+| Artifact | Purpose |
+|----------|---------|
+| [`vectors/README.md`](vectors/README.md) | Consumer contract: manifest schema, the four vector kinds, the surface document shape, how a third implementation runs the corpus |
+| [`vectors/manifest.json`](vectors/manifest.json) + [`vectors/cases/`](vectors/cases/) | 77 generated vectors — canonical (RFC 8785), digest, drift (every `WRD-DRIFT-*` class), malformed |
+| [`vectors/tools/generate.py`](vectors/tools/generate.py) | Regenerates the corpus from the Python reference; a corpus diff = a hashed-derivation change = a `schema_version` bump (SPEC §14.2) |
+| [`tests/test_spec_vectors.py`](tests/test_spec_vectors.py) | Python harness over the manifest (honours `MCP_LOCK_VECTORS_DIR`) |
+| [`packages/lock-ts/`](packages/lock-ts/README.md) | `@mcp-warden/lock` — verify-only TypeScript: hand-written JCS, SHA-256, capability + skeleton derivation, drift classifier; `npm test` runs the same corpus |
+| [`.github/workflows/integrity-gate.yml`](.github/workflows/integrity-gate.yml) `conformance` job | Runs both harnesses; mutation proof flips one hex char and requires BOTH to fail |
+
 ## Agent gates (`deploy-gate` + `auth audit` — DSE-1257 / DSE-1258)
 
 Two fail-closed gates extending warden past MCP-surface integrity into the adjacent
@@ -50,6 +64,24 @@ lock-coverage check per server, then prints the exact `pin` command for anything
 | [`tests/test_doctor.py`](tests/test_doctor.py) | Discovery purity per platform, every loader shape, symlink file + directory escape, bounded lock search, coverage matching, composition, funnel redaction |
 | [`tests/test_doctor_security.py`](tests/test_doctor_security.py) | One test per security-review finding (two passes): terminal / bidi injection, `--pin` provenance, masking bypasses, decoy `servers` map, string-aware JSONC, unauthenticated coverage, discovery robustness, walk-up boundary, `--config` de-duplication |
 | [`tests/test_doctor_cli.py`](tests/test_doctor_cli.py) | Exit codes, no-config path, redaction across stdout/JSONL/SARIF, the no-spawn/no-socket/no-DNS assertion, `--pin` refusal + real end-to-end pin, Windows shape via injected `APPDATA` |
+## Community lock corpus (`check --against-community` — DSE-1515, phase 1)
+
+Multi-attester surface consensus that closes the TOFU hole a single-party lock cannot
+see. Compares a launch-independent surface digest to Sigstore-signed attestations in a
+git corpus; every unverifiable condition is exit 2. Phase 2 (the public corpus repo +
+nightly attester) is pending.
+
+| Artifact | Purpose |
+|----------|---------|
+| [`docs/COMMUNITY_CORPUS.md`](docs/COMMUNITY_CORPUS.md) | Contract — the trust model (what the v2 signature binds: identity, digest **and** coordinate; the consumer pin is the trust root, the corpus list is discovery), the surface digest, corpus layout + size caps, `attesters.json`, coordinate grammar, verdict/exit table incl. `UNPINNED-TRUST`/`INSUFFICIENT`/`SCHEMA-MISMATCH`, git transport hardening, phase-2 sandbox contract |
+| [`src/mcp_warden/corpus.py`](src/mcp_warden/corpus.py) | Corpus fetch — local path, or `https://`/`ssh://`/`git@` URL @ exact sha cloned with `protocol.allow=never`, hooks/symlinks/submodules off, `--` separator, scrubbed env — and run orchestration |
+| [`src/mcp_warden/corpus_trust.py`](src/mcp_warden/corpus_trust.py) | Consumer trust pin (`--attester`/`--attesters-file`, required), corpus discovery list, intersection rules (unpinned ignored, divergent/duplicate ids exit 2) |
+| [`src/mcp_warden/corpus_verify.py`](src/mcp_warden/corpus_verify.py) | Per-entry verification — path confinement, size caps, schema-version check, v2 statement bound to the directory coordinate, self-consistency — and the `WRD-CONSENSUS-*` verdict incl. `--min-attesters` |
+| [`src/mcp_warden/corpus_coordinate.py`](src/mcp_warden/corpus_coordinate.py) | `npm:`/`pypi:` coordinate grammar; inference from `npx`/`uvx`/`pipx run` argv; floating specs resolve to nothing (fail closed) |
+| [`src/mcp_warden/cli_corpus.py`](src/mcp_warden/cli_corpus.py) | `check` glue: stray-option validation, trust-pin + coordinate preflight before spawn, consensus adjudication after drift (any unexpected error → exit 2, class name only) |
+| [`src/mcp_warden/lockfile.py`](src/mcp_warden/lockfile.py) | `surface_digest()` (§6.1 payload minus `server`) and `lock_is_self_consistent()` |
+| [`tests/test_corpus.py`](tests/test_corpus.py) / [`tests/test_corpus_cli.py`](tests/test_corpus_cli.py) | Coordinate table incl. whitespace/control rejection, v1-bytes-unchanged + v2 statements, trust pin (required, duplicates, divergence, hostile corpus trust root), relocated sidecar, every verdict incl. `INSUFFICIENT`, every fail-closed path (unknown attester, missing/corrupt/wrong sidecar, tampered entries, size caps, symlink escape, schema mismatch, directory-as-lock, deep JSON, `ext::`/option/`file://` sources never reach git, hardened argv, unreachable/wrong-ref corpus), SARIF/JSONL, stray options, default `check` unchanged |
+| [`tests/fixtures/corpus/`](tests/fixtures/corpus/) | Local corpus with **fake** sidecars accepted only by the test boundary; regenerated by `tests/fixtures/gen_corpus.py` |
 
 ## GitHub Action (`action.yml` — Issue #18)
 
@@ -117,7 +149,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 | Doc | Defines |
 |-----|---------|
 | [`docs/PIN_CHECK_DEMO.md`](docs/PIN_CHECK_DEMO.md) | Full end-to-end pin/check walkthrough, archived out of `README.md` on 2026-08-24 to hold the 500-line core-doc limit |
-| [`docs/SPEC.md`](docs/SPEC.md) | **MCP Lock Format v1** — the vendor-neutral, self-contained format specification any tool can implement: on-disk `warden.lock` schema, RFC 8785 (JCS) canonicalization, SHA-256 `sha256:<hex>` hashing, `overall_digest` construction, the normative drift class + severity table, the optional per-tool inspection block, and a Conformance section + worked example. `WARDEN_LOCK_SCHEMA.md` is the mcp-warden implementation of this format |
+| [`docs/SPEC.md`](docs/SPEC.md) | **MCP Lock Format v1** — the vendor-neutral, self-contained format specification any tool can implement: on-disk `warden.lock` schema, RFC 8785 (JCS) canonicalization, SHA-256 `sha256:<hex>` hashing, `overall_digest` construction, the normative drift class + severity table, the optional per-tool inspection block, and a Conformance section (§12.1: passing `vectors/` **is** conformance) + worked example. `WARDEN_LOCK_SCHEMA.md` is the mcp-warden implementation of this format |
 | [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | **(v0.1)** Positioning, trust model (TOFU + `--approve`), assets/actors, the four threat classes (MCP-DRIFT / MCP-CAPSURF / MCP-SECRET / MCP-SUPPLY), explicit out-of-scope limits, deliberate cuts |
 | [`docs/THREAT_MODEL_V2.md`](docs/THREAT_MODEL_V2.md) | **(v0.2)** Addendum extending the v0.1 model: T-RESULT vectors, the defends (BLOCK) / monitors (fuzzy) / still-does-NOT-defend (T-BEHAVE) table, runtime trust-model notes, retained + added cuts, shadow-default positioning |
 | [`docs/AGENT_TRUST_KERNEL.md`](docs/AGENT_TRUST_KERNEL.md) | **(DSE-714, design contract)** Normative invariants for the future deterministic Agent Trust Kernel: trust boundaries, complete mediation, default deny, non-overridable critical classes, evidence-before-effect, offline operation, residual risks, and bindings for DSE-715 through DSE-717. MCP-Warden v1.1 is explicitly not yet ATK-conformant |
