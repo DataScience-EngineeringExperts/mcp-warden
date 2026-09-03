@@ -1,0 +1,9 @@
+{
+  "id": "malformed/unpaired-surrogate-key",
+  "kind": "malformed",
+  "description": "An unpaired surrogate in an object key MUST be rejected.",
+  "expect": {
+    "error": true
+  },
+  "input_json": "{\"\\ud83d\": 1}"
+}

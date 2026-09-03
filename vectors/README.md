@@ -35,7 +35,7 @@ Every case file is self-contained: `{"id", "kind", "description", ...inputs, "ex
 | `canonical` | `input` — any JSON value | `{jcs, sha256}` — the RFC 8785 text and `sha256:<hex>` of its UTF-8 bytes | SPEC.md §4–§5: UTF-16 key order, ES6 number formatting, escaping rules, the three absence digests |
 | `digest` | `surface` — a declared surface (below) | `{server.command_digest, tools[], resources[], prompts[], overall_digest}` — the full hashed entries exactly as a lock stores them | §5.1 absence rules, §6 server identity, §7 entry digests incl. `capabilities` + `schema_skeleton`, §7 sorting, §8.1 overall digest |
 | `drift` | `lock` — a complete baseline lock document; `surface` — the observed surface | ordered list of `{drift_class, severity, target, detail}` | §8.2 / §8.3: every drift class, severities, per-fact emission, `(target, drift_class)` ordering, detail redaction |
-| `malformed` | `lock` (a JSON document) or `lock_text` (raw text) | `{"error": true}` | a conforming reader MUST reject it (fail closed) |
+| `malformed` | `lock` (a JSON document) or `lock_text` (raw text) — **or** `input_json` (the JSON text of a value for the canonicalizer) | `{"error": true}` | a conforming reader MUST reject the lock (fail closed); with `input_json`, the canonicalizer MUST refuse the value (unpaired surrogates, excessive nesting) rather than produce a digest |
 
 `drift` compares only the four fields above; human-readable messages are implementation
 wording and are not part of the contract.
@@ -63,12 +63,26 @@ A missing key means "absent" and triggers the §5.1 absence rule for that field.
    **byte-for-byte** (digests are lowercase hex; `jcs` is compared as a UTF-8 string).
 3. Treat any mismatch as non-conformance. Do not "fix" a vector to match your output —
    open an issue against the reference instead.
+4. Run the `digest`, `drift` and `malformed` vectors through your **public verify entry
+   point**, not only the primitives — the reference harnesses do (`verify()` in
+   `packages/lock-ts`), because a duck-typed shortcut in the public API is exactly the
+   defect a corpus exists to catch. A `malformed` lock MUST make verification fail
+   closed (throw / non-zero), never yield "no drift".
 
 Both shipped harnesses honour `MCP_LOCK_VECTORS_DIR=<dir>` to point at another copy of
 the corpus; the CI `conformance` job uses that to prove a single flipped hex character
 fails **both** implementations.
 
 ## Known scope boundaries
+
+- **Integers beyond ±(2^53 − 1) are outside the interoperable subset.** The Python
+  reference refuses them (`rfc8785` raises "exceeds safe integer domain"); JavaScript
+  cannot even represent them exactly (`2**63` parses to `9223372036854776000`). Vectors
+  never contain such integers; a surface that does is not portable and the reference
+  will not digest it. Integer-valued *floats* such as `1e21` are fine and are pinned.
+- **Nesting is bounded.** The reference raises past its recursion limit; the TypeScript
+  verifier refuses anything deeper than 512 levels. `malformed/deep-nesting-2000` pins
+  that both reject, not the exact bound.
 
 - Enum ordering inside `schema_skeleton` keys on Python's `json.dumps` text of each value.
   JavaScript cannot distinguish `1.0` from `1`, so vectors never put integer-valued

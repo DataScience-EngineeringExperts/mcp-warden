@@ -111,6 +111,13 @@ def test_drift(entry):
 def test_malformed_is_rejected(entry):
     v = _load(entry)
     assert v["expect"] == {"error": True}
+    if "input_json" in v:
+        # A JSON value the canonicalizer MUST reject: it parses, but is not Unicode text
+        # (unpaired surrogate) or nests past the recursion bound. Either the parser or
+        # canon() refusing it is a rejection; a wrong digest is not.
+        with pytest.raises((ValueError, RecursionError)):
+            canon(json.loads(v["input_json"]))
+        return
     # json.JSONDecodeError and pydantic's ValidationError are both ValueError subclasses.
     with pytest.raises((ValueError, TypeError)):
         doc = json.loads(v["lock_text"]) if "lock_text" in v else v["lock"]

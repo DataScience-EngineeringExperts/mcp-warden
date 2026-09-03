@@ -326,9 +326,12 @@ jobs:
           # production tree must contain exactly one path, the package itself.
           test "$(npm ls --omit=dev --all --parseable | wc -l)" -eq 1
 
-      - name: "Mutation proof: one flipped hex char must fail BOTH harnesses"
+      - name: "Mutation proof: control pass, then one flipped hex char must fail BOTH harnesses"
         run: |
-          rm -rf /tmp/mutated-vectors && cp -r vectors /tmp/mutated-vectors
+          set -o pipefail
+          rm -rf /tmp/control-vectors /tmp/mutated-vectors
+          cp -r vectors /tmp/control-vectors
+          cp -r vectors /tmp/mutated-vectors
           python - <<'PY'
           import json, pathlib
           p = pathlib.Path("/tmp/mutated-vectors/cases/digest-clean-fixture.json")
@@ -337,14 +340,22 @@ jobs:
           d["expect"]["overall_digest"] = h[:-1] + ("0" if h[-1] != "0" else "1")
           p.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
           PY
-          echo "--- Python harness vs mutated corpus (expect FAILURE) ---"
-          if MCP_LOCK_VECTORS_DIR=/tmp/mutated-vectors pytest tests/test_spec_vectors.py -q ; then
+          # Control: an UNMUTATED copy must pass both harnesses through the same env var,
+          # so a failure below is attributable to the mutation and not to a broken harness,
+          # a missing build artifact, or a typo'd MCP_LOCK_VECTORS_DIR.
+          echo "--- Control: both harnesses vs an unmutated copy (expect PASS) ---"
+          MCP_LOCK_VECTORS_DIR=/tmp/control-vectors pytest tests/test_spec_vectors.py -q
+          (cd packages/lock-ts && MCP_LOCK_VECTORS_DIR=/tmp/control-vectors node --test dist/test/vectors.test.js)
+          echo "--- Python harness vs mutated corpus (expect FAILURE naming digest/clean-fixture) ---"
+          if MCP_LOCK_VECTORS_DIR=/tmp/mutated-vectors pytest tests/test_spec_vectors.py -q 2>&1 | tee /tmp/py-mutated.log ; then
             echo "ERROR: Python harness accepted a mutated vector — the conformance gate is broken"
             exit 1
           fi
-          echo "--- TypeScript harness vs mutated corpus (expect FAILURE) ---"
-          if (cd packages/lock-ts && MCP_LOCK_VECTORS_DIR=/tmp/mutated-vectors node --test dist/test/vectors.test.js) ; then
+          grep -q 'digest/clean-fixture' /tmp/py-mutated.log || { echo "ERROR: Python harness failed for a reason other than the mutated vector"; exit 1; }
+          echo "--- TypeScript harness vs mutated corpus (expect FAILURE naming digest/clean-fixture) ---"
+          if (cd packages/lock-ts && MCP_LOCK_VECTORS_DIR=/tmp/mutated-vectors node --test dist/test/vectors.test.js) 2>&1 | tee /tmp/ts-mutated.log ; then
             echo "ERROR: TypeScript harness accepted a mutated vector — the conformance gate is broken"
             exit 1
           fi
-          echo "--- Both harnesses correctly rejected the mutated corpus ---"
+          grep -q 'digest/clean-fixture' /tmp/ts-mutated.log || { echo "ERROR: TypeScript harness failed for a reason other than the mutated vector"; exit 1; }
+          echo "--- Both harnesses correctly rejected the mutated corpus, and named it ---"

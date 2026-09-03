@@ -37,7 +37,7 @@ console.log("surface matches baseline", digest(surface));
 
 | export | purpose |
 |--------|---------|
-| `verify(lock, surface) → { ok, findings, observed_digest }` | drift between a baseline (parsed or raw JSON) and an observed surface |
+| `verify(lock, surface) → { ok, findings, observed_digest }` | drift between a baseline lock document and an observed surface; always runs the strict reader first and throws `LockFormatError` on a malformed lock or one at a newer `schema_version` — it can never return `ok` for a document a conforming reader must reject |
 | `digest(surface) → "sha256:…"` | the `overall_digest` a conforming writer would store for that surface |
 | `parseLock(doc)` | strict structural reader; throws `LockFormatError` (fail closed) |
 | `buildFromSurface(surface)` | the hashed entries (`entry_digest`, `capabilities`, `schema_skeleton`) for a surface |

@@ -2,7 +2,7 @@
   "format": "mcp-lock-v1",
   "schema_version": 3,
   "generator": "vectors/tools/generate.py",
-  "count": 77,
+  "count": 84,
   "vectors": [
     {
       "id": "canonical/sorted-keys-utf16",
@@ -65,6 +65,11 @@
       "file": "cases/canonical-key-escapes.json"
     },
     {
+      "id": "canonical/numbers-boundaries",
+      "kind": "canonical",
+      "file": "cases/canonical-numbers-boundaries.json"
+    },
+    {
       "id": "digest/minimal-single-tool",
       "kind": "digest",
       "file": "cases/digest-minimal-single-tool.json"
@@ -98,6 +103,11 @@
       "id": "digest/enum-constraints-skeleton",
       "kind": "digest",
       "file": "cases/digest-enum-constraints-skeleton.json"
+    },
+    {
+      "id": "digest/entry-sorting-astral",
+      "kind": "digest",
+      "file": "cases/digest-entry-sorting-astral.json"
     },
     {
       "id": "digest/entry-sorting",
@@ -388,6 +398,31 @@
       "id": "malformed/tool-missing-entry-digest",
       "kind": "malformed",
       "file": "cases/malformed-tool-missing-entry-digest.json"
+    },
+    {
+      "id": "malformed/schema-version-above-implemented",
+      "kind": "malformed",
+      "file": "cases/malformed-schema-version-above-implemented.json"
+    },
+    {
+      "id": "malformed/unpaired-surrogate-high",
+      "kind": "malformed",
+      "file": "cases/malformed-unpaired-surrogate-high.json"
+    },
+    {
+      "id": "malformed/unpaired-surrogate-low",
+      "kind": "malformed",
+      "file": "cases/malformed-unpaired-surrogate-low.json"
+    },
+    {
+      "id": "malformed/unpaired-surrogate-key",
+      "kind": "malformed",
+      "file": "cases/malformed-unpaired-surrogate-key.json"
+    },
+    {
+      "id": "malformed/deep-nesting-2000",
+      "kind": "malformed",
+      "file": "cases/malformed-deep-nesting-2000.json"
     }
   ]
 }

@@ -418,7 +418,8 @@ byte-for-byte:
   `overall_digest` for a declared surface (§5.1–§8.1), including entry sorting;
 - `drift` — the ordered `(drift_class, severity, target, detail)` set for a baseline lock
   and an observed surface (§8.2–§8.3);
-- `malformed` — lock documents a conforming reader MUST reject.
+- `malformed` — lock documents a conforming reader MUST reject, and JSON values a
+  conforming canonicalizer MUST refuse (unpaired surrogates, excessive nesting).
 
 The corpus is generated from the reference implementation (`vectors/tools/generate.py`)
 and is regenerated only on a deliberate format change (§14). Two implementations ship
@@ -521,3 +522,9 @@ operator reviews and re-pins to re-attest under the new level. Pre-skeleton (v1)
 degrade gracefully: a baseline lacking a `schema_skeleton` falls back to the coarse
 `schema-modified` (high) until re-pinned (§7.5, §8.3). Additive migration advisories never
 DOWNGRADE a finding.
+
+**14.4 Newer levels.** A reader MUST reject (fail closed) a lock whose `schema_version` is
+**above** the level it implements. It cannot reproduce a derivation it does not know, and
+comparing such a lock under an older level's rules would silently mis-verify — the
+`schema-version-migrated` advisory covers only *older* baselines. Pinned by
+`malformed/schema-version-above-implemented`.

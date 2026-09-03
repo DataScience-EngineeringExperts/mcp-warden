@@ -4,13 +4,37 @@
  * agrees with `src/mcp_warden` byte-for-byte on the conformance corpus.
  *
  * Only the subset the lock format actually exercises is implemented; every
- * function here is pure and total (never throws on JSON-shaped input).
+ * function here is pure and total on JSON-shaped input within `MAX_JSON_DEPTH`;
+ * `deepEqual` throws `DepthError` beyond it (security review of #99).
  */
 
 export type Json = null | boolean | number | string | Json[] | { [k: string]: Json };
 
 export function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/** A JSON object proper: a plain object whose prototype is `Object.prototype` or `null`.
+ *  `Date`, `Map`, `Buffer` and class instances are NOT JSON and must never canonicalize. */
+export function isJsonObject(v: unknown): v is Record<string, unknown> {
+  if (!isPlainObject(v)) return false;
+  const proto: unknown = Object.getPrototypeOf(v);
+  return proto === Object.prototype || proto === null;
+}
+
+/** Maximum nesting any JSON value may have before the verifier refuses it (fail closed). */
+export const MAX_JSON_DEPTH = 512;
+
+export class DepthError extends Error {}
+
+/** Throw `DepthError` if `v` nests deeper than `MAX_JSON_DEPTH`. */
+export function checkDepth(v: unknown, where: string, depth = 0): void {
+  if (depth > MAX_JSON_DEPTH) throw new DepthError(`${where}: nesting deeper than ${MAX_JSON_DEPTH} levels`);
+  if (Array.isArray(v)) {
+    for (const el of v) checkDepth(el, where, depth + 1);
+  } else if (isPlainObject(v)) {
+    for (const k of Object.keys(v)) checkDepth(v[k], where, depth + 1);
+  }
 }
 
 /** Python `str` ordering: compare by Unicode code point (NOT UTF-16 code unit). */
@@ -119,20 +143,21 @@ export function pyStr(v: unknown): string {
 }
 
 /** Structural equality for JSON values, treating `undefined` as `null`. */
-export function deepEqual(a: unknown, b: unknown): boolean {
+export function deepEqual(a: unknown, b: unknown, depth = 0): boolean {
+  if (depth > MAX_JSON_DEPTH) throw new DepthError(`deepEqual: nesting deeper than ${MAX_JSON_DEPTH} levels`);
   const x = a === undefined ? null : a;
   const y = b === undefined ? null : b;
   if (x === y) return true;
   if (typeof x !== typeof y) return false;
   if (Array.isArray(x)) {
     if (!Array.isArray(y) || x.length !== y.length) return false;
-    return x.every((el, i) => deepEqual(el, y[i]));
+    return x.every((el, i) => deepEqual(el, y[i], depth + 1));
   }
   if (isPlainObject(x) && isPlainObject(y)) {
     const kx = Object.keys(x).sort();
     const ky = Object.keys(y).sort();
     if (kx.length !== ky.length || kx.some((k, i) => k !== ky[i])) return false;
-    return kx.every((k) => deepEqual(x[k], y[k]));
+    return kx.every((k) => deepEqual(x[k], y[k], depth + 1));
   }
   return false;
 }

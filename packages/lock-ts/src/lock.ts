@@ -5,7 +5,7 @@
 
 import { deriveCapabilities } from "./capabilities.js";
 import { hashArguments, hashDescription, hashInputSchema, hashValue } from "./digest.js";
-import { cmpCodepoint, isPlainObject } from "./py.js";
+import { checkDepth, cmpCodepoint, isPlainObject } from "./py.js";
 import { extractSkeleton, skeletonFromJson, type Skeleton } from "./skeleton.js";
 
 /** The format level this verifier implements (SPEC.md §14). */
@@ -157,11 +157,30 @@ function promptEntry(raw: unknown, i: number): LockPromptEntry {
   };
 }
 
-/** Parse and structurally validate a lock document; throws `LockFormatError` (fail closed). */
+/**
+ * Parse and structurally validate a lock document; throws `LockFormatError` (fail closed).
+ *
+ * Idempotent: a `Lock` this function returned re-validates to an equal `Lock`, so
+ * `verify()` can call it unconditionally. Any error raised while reading — including a
+ * `DepthError` or a stray `TypeError` — surfaces as `LockFormatError`.
+ */
 export function parseLock(doc: unknown): Lock {
+  try {
+    checkDepth(doc, "lock");
+    return parseLockStrict(doc);
+  } catch (e) {
+    if (e instanceof LockFormatError) throw e;
+    throw new LockFormatError(`lock is not readable: ${(e as Error).message}`);
+  }
+}
+
+function parseLockStrict(doc: unknown): Lock {
   const o = obj(doc, "lock");
   const sv = o["schema_version"];
   if (typeof sv !== "number" || !Number.isInteger(sv) || sv < 1) fail("schema_version must be a positive integer");
+  // A newer level hashes fields by rules this package does not implement; comparing it
+  // under the current rules would silently mis-verify. Refuse (SPEC.md §14.3).
+  if (sv > SCHEMA_VERSION) fail(`schema_version ${sv} is above the implemented level ${SCHEMA_VERSION}`);
   const server = obj(o["server"], "server");
   const args = server["args"] === undefined ? [] : arr(server, "args", "server");
   if (!args.every((a) => typeof a === "string")) fail("server.args must be strings");

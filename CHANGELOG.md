@@ -43,7 +43,7 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
   server author can verify a lock without a Python toolchain. A new CI `conformance` job runs
   the corpus through BOTH implementations and proves the gate bites by flipping one hex
   character and requiring both harnesses to fail.
-- **Three visible spec corrections found while building the corpus.** `WARDEN_LOCK_SCHEMA.md`
+- **Four visible spec corrections found while building the corpus.** `WARDEN_LOCK_SCHEMA.md`
   §3.1 mandated code-point key ordering and called UTF-16 ordering "not permitted" — the
   opposite of RFC 8785 §3.2.3 and of what the shipped `rfc8785` canonicalizer does; a third
   implementation written from that sentence would disagree with every lock containing an
@@ -52,6 +52,19 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
   differs for astral characters. §7.5 said a `$ref` MUST NOT be followed; since
   schema_version 3 the reference follows same-document refs and only non-resolvable refs
   stay opaque. §12 also named `schema_version` `1` where the current level is `3`.
+- **Security-review remediation of the corpus + verifier (#99).** `verify()` now runs the
+  strict reader unconditionally (the duck-typed "already parsed" shortcut let a lock with
+  no `overall_digest` verify `ok`); every `digest`/`drift`/`malformed` vector is asserted
+  through `verify()` itself. The JCS canonicalizer rejects unpaired UTF-16 surrogates,
+  non-plain objects (`Date`/`Map`/`Buffer`) and nesting past 512 levels instead of
+  emitting a digest the reference can never agree with; new vectors pin all three, plus
+  IEEE-754 number boundaries and astral-character entry sorting. The CI mutation proof
+  now runs a control pass first and requires the failure to name the mutated vector.
+  `@mcp-warden/lock` ships its LICENSE.
+- **Behavior change — a lock at a `schema_version` above the implemented level is now
+  rejected by both readers** (`read_lock` raises a validation error; `parseLock` throws
+  `LockFormatError`). Previously the Python reader accepted e.g. `schema_version: 4` and
+  compared it under level-3 rules — a silent mis-verification (SPEC.md §14.3).
 - **`deploy-gate` — fail-closed CI gate for agent deployments (DSE-1257).** Verifies a
   deploy's evidence against a declared gate policy: required eval suites met their
   thresholds, required guardrails are active, a budget/quota is declared, and a human

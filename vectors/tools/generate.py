@@ -15,7 +15,8 @@ Vector kinds (``vectors/README.md`` is the consumer-facing contract):
   canonical  JSON value            -> RFC 8785 bytes + ``sha256:`` digest
   digest     declared surface      -> per-entry hashes, entry digests, overall_digest
   drift      (baseline lock, observed surface) -> ordered drift items
-  malformed  lock document that MUST be rejected by any conforming reader
+  malformed  lock document (or, with ``input_json``, a JSON value) that MUST be
+             rejected by any conforming reader / canonicalizer
 """
 
 from __future__ import annotations
@@ -242,6 +243,11 @@ CANONICAL: list[tuple[str, str, Any]] = [
     ("scalars", "Literals true/false/null and zero.", [True, False, None, "", 0]),
     ("deep-nesting", "Deeply nested empties.", {"a": {"b": {"c": {"d": [[[]]]}}}}),
     ("key-escapes", "Keys are escaped like strings and sorted by their code units.", {'a"b': 1, "c\\d": 2, "e\nf": 3}),
+    (
+        "numbers-boundaries",
+        "IEEE-754 boundaries under ES6 Number::toString: the smallest subnormal, the largest finite, the 1e21 exponent switch, a negative exponent form, and 1e-6 (the last fixed-notation negative power).",
+        {"a": 5e-324, "b": 1e-323, "c": 1e21, "d": 1.7976931348623157e308, "e": -1e21, "f": 1.5e300, "g": 123456789012345680000.0, "h": 0.000001},
+    ),
 ]
 
 DIGEST: list[tuple[str, str, dict[str, Any]]] = [
@@ -314,6 +320,15 @@ DIGEST: list[tuple[str, str, dict[str, Any]]] = [
                     ),
                 )
             ]
+        ),
+    ),
+    (
+        "entry-sorting-astral",
+        "Entry arrays sort by Unicode code point: x (U+0078) < U+E000 < U+1F600. UTF-16 code-unit order would put the astral name first (D83D < E000). JCS object keys INSIDE each entry still sort by UTF-16 — the two orderings coexist.",
+        surface(
+            [tool("\U0001f600x"), tool("\ue000x"), tool("x")],
+            [{"uri": "\U0001f600://1"}, {"uri": "\ue000://1"}, {"uri": "x://1"}],
+            [{"name": "\U0001f600"}, {"name": "\ue000"}, {"name": "x"}],
         ),
     ),
     (
@@ -402,6 +417,11 @@ MALFORMED: list[tuple[str, str, Any]] = [
     ("schema-version-not-integer", "schema_version must be an integer.", None),
     ("missing-pin", "pin is required.", None),
     ("tool-missing-entry-digest", "Every tool entry carries entry_digest.", None),
+    ("schema-version-above-implemented", "schema_version above the implemented level (3) MUST be rejected: a reader cannot reproduce a derivation it does not implement, and comparing under older rules would silently mis-verify.", None),
+    ("unpaired-surrogate-high", "A lone high surrogate is valid JSON text but not Unicode; it has no UTF-8 form and MUST be rejected, never canonicalized as \\ud800.", {"input_json": '"\\ud800"'}),
+    ("unpaired-surrogate-low", "A lone low surrogate inside a string MUST be rejected.", {"input_json": '"a\\udc00b"'}),
+    ("unpaired-surrogate-key", "An unpaired surrogate in an object key MUST be rejected.", {"input_json": '{"\\ud83d": 1}'}),
+    ("deep-nesting-2000", "2000 nested arrays exceed any conforming implementation's recursion bound and MUST be rejected rather than hashed.", {"input_json": "[" * 2000 + "]" * 2000}),
 ]
 
 
@@ -420,6 +440,8 @@ def _malformed_doc(ident: str) -> Any:
         del bad["pin"]
     elif ident == "tool-missing-entry-digest":
         del bad["tools"][0]["entry_digest"]
+    elif ident == "schema-version-above-implemented":
+        bad["schema_version"] = 4
     else:
         raise AssertionError(ident)
     # Sanity: the reference reader MUST reject it (fail closed).
@@ -481,10 +503,18 @@ def main() -> None:
         desc = desc or f"Drift class {ident} (see docs/SPEC.md §8)."
         add("drift", ident, desc, {"lock": lock, "surface": cur, "expect": drift_expect(lock, cur)})
 
-    for ident, desc, text in MALFORMED:
+    for ident, desc, payload in MALFORMED:
         body: dict[str, Any] = {"expect": {"error": True}}
-        if text is not None:
-            body["lock_text"] = text
+        if isinstance(payload, dict):
+            # A JSON value the canonicalizer must refuse. Sanity: the reference refuses it.
+            try:
+                canon(json.loads(payload["input_json"]))
+            except (ValueError, RecursionError):
+                body["input_json"] = payload["input_json"]
+            else:
+                raise AssertionError(f"malformed vector {ident} was canonicalized by the reference")
+        elif payload is not None:
+            body["lock_text"] = payload
         else:
             body["lock"] = _malformed_doc(ident)
         add("malformed", ident, desc, body)
