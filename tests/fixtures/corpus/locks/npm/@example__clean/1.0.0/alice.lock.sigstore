@@ -1,1 +1,1 @@
-{"_fake": "mcp-warden TEST sidecar, not a sigstore bundle", "over": "{\"_type\":\"mcp-warden-lock-digest/v1\",\"digest\":\"sha256:cb20a16ce572cca8f682672c42036e351359d32ca8265e5af3bfc861ab6f9219\"}"}
+{"_fake": "mcp-warden TEST sidecar, not a sigstore bundle", "over": "{\"_type\":\"mcp-warden-lock-digest/v2\",\"coordinate\":\"npm:@example/clean@1.0.0\",\"digest\":\"sha256:cb20a16ce572cca8f682672c42036e351359d32ca8265e5af3bfc861ab6f9219\"}"}

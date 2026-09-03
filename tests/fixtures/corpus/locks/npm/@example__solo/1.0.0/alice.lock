@@ -1,13 +1,12 @@
 {
   "schema_version": 3,
-  "warden_version": "1.1.0",
+  "warden_version": "0.3.0",
   "server": {
     "command": "python",
     "args": [
-      "tests/fixtures/mutated_server.py"
+      "tests/fixtures/clean_server.py"
     ],
-    "url": null,
-    "command_digest": "sha256:abae458de7508990bea451a2dd2150aea388f48d347c88626c32c08dcae1c646"
+    "command_digest": "sha256:db5131f204944f8a4d13cba802e2a47c576c3932b0eaff0fc0304bba7795904c"
   },
   "tools": [
     {
@@ -45,8 +44,8 @@
     },
     {
       "name": "read_file",
-      "description_hash": "sha256:8e8966c5f5188b70ef162a9d3b59900c54787d3ad9f959b72c28ba84674d4ad2",
-      "input_schema_hash": "sha256:bac5a693ca312cc84610cb4d29bc4b6290afa31ea085d5fe1a106049ba9f1d1c",
+      "description_hash": "sha256:66c8359ee4b07085ddc3ff6169eef8f15add705100f66c28ca384c0fff9963e1",
+      "input_schema_hash": "sha256:49430b90983ed64ed10b24073294a1559a487be5a32fe780b93f67c308184e13",
       "capabilities": [
         "fs-read"
       ],
@@ -55,16 +54,6 @@
           "$root": {
             "type": [
               "object"
-            ],
-            "required": false,
-            "enum": null,
-            "constraints": {
-              "additionalProperties": true
-            }
-          },
-          "encoding": {
-            "type": [
-              "string"
             ],
             "required": false,
             "enum": null,
@@ -84,40 +73,7 @@
           }
         }
       },
-      "entry_digest": "sha256:573998a4573233602259d3bcbccab1f4c9b608d76576f0acd101755584eab4db"
-    },
-    {
-      "name": "run_command",
-      "description_hash": "sha256:035df9dd8144b807242e61aea10c16e2a55f59a82a72770dc420c4cc6dc747cc",
-      "input_schema_hash": "sha256:53a1c7c2c7736316b6fa0a0f5865e4a7d77763e6a96b082a37287e6afef1ad6e",
-      "capabilities": [
-        "shell-exec"
-      ],
-      "schema_skeleton": {
-        "props": {
-          "$root": {
-            "type": [
-              "object"
-            ],
-            "required": false,
-            "enum": null,
-            "constraints": {
-              "additionalProperties": true
-            }
-          },
-          "command": {
-            "type": [
-              "string"
-            ],
-            "required": true,
-            "enum": null,
-            "constraints": {
-              "additionalProperties": true
-            }
-          }
-        }
-      },
-      "entry_digest": "sha256:3f339c568117124db0a47b867008b8f07a13211a04defb5637e9ec0c5a745d58"
+      "entry_digest": "sha256:54e67f392b48e7adeaee4760d0827cc46e069b852b56d502d4d0e59791da5164"
     }
   ],
   "resources": [
@@ -151,32 +107,34 @@
       "target": "tools/read_file",
       "message": "Tool derives capability 'fs-read' (name token 'read')",
       "snippet": "name token 'read'"
-    },
-    {
-      "rule_id": "WRD-CAP-SHELL",
-      "severity": "critical",
-      "target": "tools/run_command",
-      "message": "Tool derives capability 'shell-exec' (property 'command')",
-      "snippet": "property 'command'"
     }
   ],
-  "overall_digest": "sha256:62085ff0d433c540b590407417bed61837258d549512ae94227d599c0e3dbf04",
+  "overall_digest": "sha256:cb20a16ce572cca8f682672c42036e351359d32ca8265e5af3bfc861ab6f9219",
   "pin": {
-    "created_at": "2026-09-03T10:01:37Z",
-    "warden_version": "1.1.0",
+    "created_at": "2026-06-09T21:24:46Z",
+    "warden_version": "0.3.0",
     "mcp_protocol_version": "2025-11-25",
-    "approved": false,
-    "approver": null,
-    "approved_at": null,
-    "approved_digest": null,
+    "approved": true,
+    "approver": "ci-bot@example.invalid",
+    "approved_at": "2026-06-09T21:24:46Z",
+    "approved_digest": "sha256:cb20a16ce572cca8f682672c42036e351359d32ca8265e5af3bfc861ab6f9219",
     "provenance_version": 1,
     "pinner": {
       "tool": "mcp-warden",
-      "tool_version": "1.1.0",
+      "tool_version": "0.3.0",
       "actor": null,
       "environment": null
     },
-    "attestations": [],
+    "attestations": [
+      {
+        "actor": "ci-bot@example.invalid",
+        "role": "approver",
+        "method": "manual",
+        "created_at": "2026-06-09T21:24:46Z",
+        "bound_digest": "sha256:cb20a16ce572cca8f682672c42036e351359d32ca8265e5af3bfc861ab6f9219",
+        "note": null
+      }
+    ],
     "rotated_at": null,
     "rotation_count": 0
   }

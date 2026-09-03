@@ -86,8 +86,12 @@ def sign_after_pin(
     lock_path: Path,
     identity_token: str | None,
     err_console: Console,
+    coordinate: str | None = None,
 ) -> WardenLock:
     """Sign a freshly-pinned lock's ``overall_digest`` and write the bundle sidecar.
+
+    ``coordinate`` (``npm:@org/name@1.2.3``) switches to the v2 statement that
+    also binds the package coordinate — what a corpus attester signs (DSE-1515).
 
     Steps (all fail closed): build the deterministic statement from
     ``lock_doc.overall_digest``; Sigstore-sign it; write the bundle JSON to the
@@ -118,7 +122,7 @@ def sign_after_pin(
         err_console.print(f"[red]error:[/red] {_INSTALL_MSG}")
         raise typer.Exit(code=2)
 
-    statement = build_statement(lock_doc.overall_digest)
+    statement = build_statement(lock_doc.overall_digest, coordinate)
     try:
         bundle = sign_statement(statement, identity_token)
         bundle_json = bundle_to_json(bundle)
@@ -205,8 +209,12 @@ def verify_lock_signature(
     offline_bundle: Path | None,
     console: Console,
     err_console: Console,
+    coordinate: str | None = None,
 ) -> None:
     """Verify a lock's Sigstore signature; exit 0 on pass, non-zero on ANY failure.
+
+    ``coordinate`` selects the v2 (coordinate-bound) statement a corpus attester
+    produced with ``pin --sign --coordinate``; without it the v1 statement is used.
 
     Security-critical control flow:
 
@@ -262,7 +270,7 @@ def verify_lock_signature(
 
     # Recompute the statement from the lock's OWN overall_digest. We deliberately
     # ignore the pointer attestation's bound_digest (attacker-controlled).
-    statement = build_statement(lock_doc.overall_digest)
+    statement = build_statement(lock_doc.overall_digest, coordinate)
 
     bundle_path = Path(offline_bundle) if offline_bundle is not None else _sidecar_path_for(lock_path)
     if not bundle_path.exists():

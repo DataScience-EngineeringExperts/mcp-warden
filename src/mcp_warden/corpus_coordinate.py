@@ -17,11 +17,11 @@ from pathlib import PurePosixPath
 from .checks_supply import _is_flag, _is_local_path
 
 #: Explicit ``--coordinate`` grammar: ``<ecosystem>:<name>@<version>``.
-_EXPLICIT = re.compile(r"^(?P<eco>npm|pypi):(?P<name>[^:]+)@(?P<ver>[^@/]+)$")
+_EXPLICIT = re.compile(r"(?P<eco>npm|pypi):(?P<name>[^:]+)@(?P<ver>[^@/]+)\Z")
 #: A concrete version: leading digit, then version chars (never a tag/range).
-_PINNED_VERSION = re.compile(r"^\d[A-Za-z0-9._+\-]*$")
+_PINNED_VERSION = re.compile(r"\d[A-Za-z0-9._+\-]*\Z")
 #: Package-name characters we will ever turn into an on-disk path segment.
-_NAME_CHARS = re.compile(r"^[A-Za-z0-9@._\-/]+$")
+_NAME_CHARS = re.compile(r"[A-Za-z0-9@._\-/]+\Z")
 
 
 @dataclass(frozen=True)
@@ -45,13 +45,21 @@ class Coordinate:
         return PurePosixPath("locks") / self.ecosystem / self.path_segment / self.version
 
 
+def _clean(text: str) -> bool:
+    """No whitespace or control characters anywhere: a trailing newline must not
+    resolve to a coordinate whose directory merely does not exist (CSO M1)."""
+    return bool(text) and not any(ch.isspace() or ord(ch) < 32 or ord(ch) == 0x7F for ch in text)
+
+
 def _validate(eco: str, name: str, version: str) -> Coordinate | None:
     """Reject anything that could escape the corpus tree or float."""
-    if not _NAME_CHARS.match(name) or ".." in name.split("/") or name.startswith("/"):
+    if not _clean(name) or not _clean(version):
+        return None
+    if not _NAME_CHARS.fullmatch(name) or ".." in name.split("/") or name.startswith("/"):
         return None
     if name.count("/") > 1 or (name.count("/") == 1 and not name.startswith("@")):
         return None
-    if not _PINNED_VERSION.match(version):
+    if not _PINNED_VERSION.fullmatch(version):
         return None
     if eco == "pypi":
         name = re.sub(r"[-_.]+", "-", name).lower()
@@ -60,7 +68,7 @@ def _validate(eco: str, name: str, version: str) -> Coordinate | None:
 
 def parse_explicit(text: str) -> Coordinate | None:
     """Parse a user-supplied ``--coordinate`` string; ``None`` if malformed."""
-    m = _EXPLICIT.match(text.strip())
+    m = _EXPLICIT.fullmatch(text)
     if not m:
         return None
     return _validate(m.group("eco"), m.group("name"), m.group("ver"))

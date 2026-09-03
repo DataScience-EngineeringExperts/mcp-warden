@@ -40,14 +40,15 @@ def entry(segment: str, who: str, lock_src: Path, sidecar: str = "ok") -> None:
     lock_path = d / f"{who}.lock"
     shutil.copy(lock_src, lock_path)
     digest = read_lock(lock_path).overall_digest
+    coordinate = f"npm:{segment.replace('__', '/')}@1.0.0"  # DIRECTORY-derived coordinate (v2 statement)
     sc = d / f"{who}.lock.sigstore"
     if sidecar == "ok":
-        doc = {"_fake": "mcp-warden TEST sidecar, not a sigstore bundle", "over": build_statement(digest).decode()}
+        doc = {"_fake": "mcp-warden TEST sidecar, not a sigstore bundle", "over": build_statement(digest, coordinate).decode()}
         sc.write_text(json.dumps(doc) + "\n")
     elif sidecar == "corrupt":
         sc.write_text("this is not json {{{\n")
     elif sidecar == "wrong":
-        doc = {"_fake": "signed over a DIFFERENT digest", "over": build_statement("sha256:" + "0" * 64).decode()}
+        doc = {"_fake": "signed over a DIFFERENT digest", "over": build_statement("sha256:" + "0" * 64, coordinate).decode()}
         sc.write_text(json.dumps(doc) + "\n")
     # sidecar == "missing": write nothing
 
@@ -57,7 +58,11 @@ def main() -> None:
         shutil.rmtree(ROOT)
     ROOT.mkdir(parents=True)
     assert read_lock(CLEAN).overall_digest != read_lock(MUTATED).overall_digest
-    (ROOT / "attesters.json").write_text(json.dumps([attester("alice"), attester("bob")], indent=2) + "\n")
+    # carol is DECLARED by the corpus but the tests never pin her: her entries must be
+    # ignored with a warning, never verified (CSO C3).
+    (ROOT / "attesters.json").write_text(
+        json.dumps([attester("alice"), attester("bob"), attester("carol")], indent=2) + "\n"
+    )
 
     entry("@example__clean", "alice", CLEAN)  # MATCH for the clean fixture
     entry("@example__clean", "bob", CLEAN)
@@ -65,6 +70,8 @@ def main() -> None:
     entry("@example__other", "bob", MUTATED)
     entry("@example__split", "alice", CLEAN)  # SPLIT: attesters disagree
     entry("@example__split", "bob", MUTATED)
+    entry("@example__solo", "alice", CLEAN)  # INSUFFICIENT: one trusted attester, two required
+    entry("@example__unpinned", "carol", CLEAN)  # declared, not pinned -> ignored -> NOVEL
     entry("@example__nosig", "alice", CLEAN, sidecar="missing")  # UNVERIFIABLE
     entry("@example__corrupt", "alice", CLEAN, sidecar="corrupt")  # UNVERIFIABLE
     entry("@example__wrongsig", "alice", CLEAN, sidecar="wrong")  # UNVERIFIABLE (verify fails)

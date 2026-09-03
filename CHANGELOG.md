@@ -45,6 +45,20 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
   `check` is byte-for-byte unchanged. Every verdict states *consensus attests
   observation, not safety*. See [`docs/COMMUNITY_CORPUS.md`](docs/COMMUNITY_CORPUS.md).
   **Phase 2 (the public `mcp-warden-locks` corpus + nightly attester) is pending.**
+  Hardened after security review before merge: **the trust root is the consumer's**
+  (`--attester <id>=<identity>@<issuer>` / `--attesters-file`, required; the corpus's
+  `attesters.json` is discovery only, divergent or duplicate ids are exit 2,
+  `WRD-CONSENSUS-UNPINNED-TRUST`); **signatures bind the package coordinate** via a new
+  v2 statement (`mcp-warden-lock-digest/v2`; `pin --sign --coordinate` / `check --verify
+  --coordinate`; v1 statement bytes are unchanged), so a relocated genuine signature
+  fails; `--min-attesters` (default 2) with `WRD-CONSENSUS-INSUFFICIENT`; corpus URLs
+  limited to `https://`/`ssh://`/`git@` and cloned with `protocol.allow=never` +
+  hooks/symlinks/submodules disabled, `--` separator, scrubbed env; size caps (lock
+  1 MiB, sidecar/attesters 256 KiB, 64 entries) and corpus-root path confinement;
+  `WRD-CONSENSUS-SCHEMA-MISMATCH` for a corpus lock at another lock schema; any
+  community option without `--against-community` is exit 2; whitespace/control
+  characters in a coordinate are `UNRESOLVED`; unexpected corpus errors are exit 2 with
+  the exception class only.
 - **`deploy-gate` — fail-closed CI gate for agent deployments (DSE-1257).** Verifies a
   deploy's evidence against a declared gate policy: required eval suites met their
   thresholds, required guardrails are active, a budget/quota is declared, and a human
