@@ -253,6 +253,7 @@ test("DSE-1527: verify() throws only LockFormatError, even when the observed sur
   assert.ok(caught instanceof LockFormatError, `expected LockFormatError, got ${String(caught)}`);
   assert.ok(!(caught instanceof JcsError) && !(caught instanceof DepthError), "underlying error type must not leak");
   assert.match((caught as Error).message, /observed surface is not verifiable/);
+  assert.ok((caught as Error).cause instanceof JcsError, "the original refusal travels as `cause`");
   // Unpaired surrogate on the observed side takes the same path.
   const bad = { tools: [{ name: "t", inputSchema: { d: "\ud800" } }] } as unknown as Surface;
   assert.throws(() => verify(lock, bad), LockFormatError);

@@ -96,16 +96,16 @@ def _nested_arrays(n: int) -> list:
 
 
 def test_canon_accepts_depth_512_and_refuses_513():
-    from mcp_warden.hashing import MAX_JSON_DEPTH, DepthError
+    from mcp_warden.hashing import MAX_CANON_DEPTH, DepthError
 
-    assert MAX_JSON_DEPTH == 512
-    ok = _nested_arrays(MAX_JSON_DEPTH)
-    assert canon(ok) == b"[" * (MAX_JSON_DEPTH + 1) + b"]" * (MAX_JSON_DEPTH + 1)
+    assert MAX_CANON_DEPTH == 512
+    ok = _nested_arrays(MAX_CANON_DEPTH)
+    assert canon(ok) == b"[" * (MAX_CANON_DEPTH + 1) + b"]" * (MAX_CANON_DEPTH + 1)
     with pytest.raises(DepthError):
-        canon(_nested_arrays(MAX_JSON_DEPTH + 1))
+        canon(_nested_arrays(MAX_CANON_DEPTH + 1))
     # A leaf counts, and objects count like arrays: "leaf" ends up at depth 513.
     deep_obj: dict = {"k": "leaf"}
-    for _ in range(MAX_JSON_DEPTH):
+    for _ in range(MAX_CANON_DEPTH):
         deep_obj = {"k": deep_obj}
     with pytest.raises(DepthError):
         canon(deep_obj)

@@ -93,7 +93,9 @@ is hashed MUST first be canonicalized.
   implementation that merely inherits its host language's recursion limit is NOT
   conformant: two such implementations disagree on the same document. The bound is
   pinned by `vectors/cases/canonical-depth-512-accepted.json` and
-  `vectors/cases/malformed-depth-513-rejected.json`.
+  `vectors/cases/malformed-depth-513-rejected.json`. This bound governs lock documents and
+  surface values only; the content-envelope profile (`docs/CONTENT_ENVELOPE.md`) keeps its
+  own, much smaller, nesting limit.
 
 ---
 

@@ -186,7 +186,7 @@ def _deep(n: int) -> list:
 
 
 def test_read_lock_refuses_nesting_past_the_bound(tmp_path):
-    from mcp_warden.hashing import MAX_JSON_DEPTH
+    from mcp_warden.hashing import MAX_CANON_DEPTH
 
     lock = build_lock(_surface(), [])
     doc = json.loads(lock_to_pretty_json(lock))
@@ -199,14 +199,14 @@ def test_read_lock_refuses_nesting_past_the_bound(tmp_path):
     # One past the bound anywhere in the document -> refused by the explicit check,
     # before schema validation, with an intelligible message.
     hostile = dict(doc)
-    hostile["x"] = _deep(MAX_JSON_DEPTH)  # innermost [] at depth 512 + 1 (the "x" key)
+    hostile["x"] = _deep(MAX_CANON_DEPTH)  # innermost [] at depth 512 + 1 (the "x" key)
     path.write_text(json.dumps(hostile), encoding="utf-8")
     with pytest.raises(ValueError, match="nesting deeper than 512"):
         read_lock(path)
 
     # Exactly at the bound the depth check is silent (whatever schema validation says).
     at_bound = dict(doc)
-    at_bound["x"] = _deep(MAX_JSON_DEPTH - 1)
+    at_bound["x"] = _deep(MAX_CANON_DEPTH - 1)
     path.write_text(json.dumps(at_bound), encoding="utf-8")
     try:
         read_lock(path)

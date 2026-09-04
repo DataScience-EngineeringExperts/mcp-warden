@@ -16,7 +16,9 @@
  */
 
 import { computeDrift, type DriftItem } from "./drift.js";
+import { JcsError } from "./jcs.js";
 import { buildFromSurface, LockFormatError, parseLock, type Surface } from "./lock.js";
+import { DepthError } from "./py.js";
 
 export { canonicalize, hasUnpairedSurrogate, JcsError } from "./jcs.js";
 export { canon, hashArguments, hashDescription, hashInputSchema, hashValue, SHA256_PREFIX } from "./digest.js";
@@ -60,7 +62,8 @@ export function digest(surface: Surface): string {
  * which re-validates identically). Throws `LockFormatError` — and ONLY `LockFormatError`
  * — if the document is not a structurally valid lock at a level this package implements,
  * or if the observed surface cannot be canonicalized (unpaired surrogate, nesting past
- * `MAX_JSON_DEPTH`). A `JcsError`/`DepthError` never escapes this entry point (DSE-1527).
+ * `MAX_JSON_DEPTH`). A `JcsError`/`DepthError` never escapes this entry point — it is
+ * wrapped with the original attached as `cause` (DSE-1527).
  */
 export function verify(lock: unknown, surface: Surface): VerifyResult {
   const baseline = parseLock(lock);
@@ -69,7 +72,12 @@ export function verify(lock: unknown, surface: Surface): VerifyResult {
     const findings = computeDrift(baseline, current);
     return { ok: findings.length === 0, findings, observed_digest: current.overall_digest };
   } catch (e) {
-    if (e instanceof LockFormatError) throw e;
-    throw new LockFormatError(`observed surface is not verifiable: ${(e as Error).message}`);
+    // Only the two fail-closed refusals of the observed surface are folded into the
+    // contract error (with the original as `cause`); anything else is a programming
+    // error and must not be masked.
+    if (e instanceof JcsError || e instanceof DepthError) {
+      throw new LockFormatError(`observed surface is not verifiable: ${e.message}`, { cause: e });
+    }
+    throw e;
   }
 }

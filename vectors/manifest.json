@@ -2,7 +2,7 @@
   "format": "mcp-lock-v1",
   "schema_version": 3,
   "generator": "vectors/tools/generate.py",
-  "count": 86,
+  "count": 87,
   "vectors": [
     {
       "id": "canonical/sorted-keys-utf16",
@@ -428,6 +428,11 @@
       "id": "malformed/deep-nesting-2000",
       "kind": "malformed",
       "file": "cases/malformed-deep-nesting-2000.json"
+    },
+    {
+      "id": "malformed/lock-depth-1200-rejected",
+      "kind": "malformed",
+      "file": "cases/malformed-lock-depth-1200-rejected.json"
     },
     {
       "id": "malformed/depth-513-rejected",

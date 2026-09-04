@@ -427,6 +427,7 @@ MALFORMED: list[tuple[str, str, Any]] = [
     ("unpaired-surrogate-low", "A lone low surrogate inside a string MUST be rejected.", {"input_json": '"a\\udc00b"'}),
     ("unpaired-surrogate-key", "An unpaired surrogate in an object key MUST be rejected.", {"input_json": '{"\\ud83d": 1}'}),
     ("deep-nesting-2000", "2000 nested arrays exceed any conforming implementation's recursion bound and MUST be rejected rather than hashed.", {"input_json": "[" * 2000 + "]" * 2000}),
+    ("lock-depth-1200-rejected", "A lock document nested 1200 levels deep, presented as raw text. A conforming reader MUST refuse it (SPEC.md §4) — whether its JSON parser gives up first or its explicit depth check does — and MUST never surface it as anything but the reader's documented rejection.", "[" * 1200 + "]" * 1200),
     ("depth-513-rejected", "The deepest element sits at depth 513, one past the normative bound (SPEC.md §4). A conforming canonicalizer MUST refuse it — fail closed — rather than produce a digest; one that accepts it because its host recursion limit is larger is not conformant.", {"input_json": "[" * 514 + "]" * 514}),
 ]
 

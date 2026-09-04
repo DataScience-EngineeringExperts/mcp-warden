@@ -324,7 +324,10 @@ def read_lock(path: str | Path) -> WardenLock:
         raise FileNotFoundError(f"lock file not found: {p}")
     try:
         raw = json.loads(p.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
+    except (json.JSONDecodeError, RecursionError) as exc:
+        # RecursionError: the C decoder refuses documents nested past the interpreter's
+        # limit (~1000 on 3.11) before check_depth() ever sees them — still the
+        # documented ValueError, never a bare RecursionError (CSO review of #102).
         raise ValueError(f"lock file {p} is not valid JSON: {exc}") from exc
     try:
         # SPEC.md §4 nesting bound — checked before validation so a hostile document is
