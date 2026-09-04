@@ -83,22 +83,36 @@ _SECRET_REF = re.compile(
 #: ``${T:-${U:-hunter2!}}`` bottoms out on a literal), or itself a placeholder
 #: (CSO F1/N1/N2). ``${VAR:?msg}`` names an error message, never a value.
 _REF_WITH_DEFAULT = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*:?[-+=]((?:[^{}]|\$\{[^{}]*\})*)\}")
+#: ``${VAR:?msg}``: the message is an error string, but a token-shaped run inside it
+#: (``${API_KEY:?9f8e…}``) is a secret parked where the scanner looks away (NF-3).
+_REF_WITH_MESSAGE = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*:?\?((?:[^{}]|\$\{[^{}]*\})*)\}")
 
-#: A path/URI segment that is itself token-shaped (CSO F5/N3): alphanumeric only,
-#: case-blind, and either 20+ characters or 16+ at >= 3.5 bits/char — a lowercase
-#: hex key or a GHSAT-style token is carried, not pointed at. Segments with dots
-#: or underscores (``application_default_credentials.json``) are file names.
+#: A path/URI segment that is itself token-shaped (CSO F5/N3/NF-1): alphanumeric
+#: only and any of — 20+ characters; 16+ at >= 3.5 bits/char; 16+ mixed-case
+#: (``Passw0rdPassw0rd`` is low-entropy but no directory is named that). A
+#: lowercase hex key or a GHSAT-style token is carried, not pointed at. Segments
+#: with dots, underscores or hyphens (``application_default_credentials.json``,
+#: ``my-app``) are file names. Known residual (NF-2): a token that itself contains
+#: a separator (``9f8e-7d6c-…``) is not caught here — tracked as a follow-up.
 _ALNUM_SEGMENT = re.compile(r"[A-Za-z0-9]+")
+_ALNUM_RUN = re.compile(r"[A-Za-z0-9]+")
 _PATH_SEGMENT = re.compile(r"[A-Za-z0-9._~-]+")
 _TOKENISH_MIN_LEN, _TOKENISH_LONG, _TOKENISH_ENTROPY = 16, 20, 3.5
 
 
 def _tokenish_segment(seg: str) -> bool:
-    if not _ALNUM_SEGMENT.fullmatch(seg):
+    if not _ALNUM_SEGMENT.fullmatch(seg) or len(seg) < _TOKENISH_MIN_LEN:
         return False
     if len(seg) >= _TOKENISH_LONG:
         return True
-    return len(seg) >= _TOKENISH_MIN_LEN and shannon_entropy(seg) >= _TOKENISH_ENTROPY
+    mixed_case = seg.lower() != seg and seg.upper() != seg
+    return mixed_case or shannon_entropy(seg) >= _TOKENISH_ENTROPY
+
+
+def _text_carries_a_token(text: str) -> bool:
+    """Any alphanumeric run inside free text (a URI fragment, a ``:?`` message) that
+    is token-shaped (CSO NF-3): ``#9f8e…`` / ``${K:?9f8e…}`` carry the secret."""
+    return any(_tokenish_segment(run) for run in _ALNUM_RUN.findall(text))
 
 
 #: Secret-manager reference URIs — the value names where the secret lives rather
@@ -124,7 +138,10 @@ def _is_secret_locator(v: str) -> bool:
     """A secret-manager URI or credential-file path: names where a secret lives."""
     m = _SECRET_URI.match(v)
     if m:
-        return _segments_are_a_locator(m.group(1).split("#", 1)[0])
+        path, _, fragment = m.group(1).partition("#")
+        if fragment and (not _PATH_SEGMENT.fullmatch(fragment) or _text_carries_a_token(fragment)):
+            return False  # `#key` names a field; `#9f8e…` carries the secret
+        return _segments_are_a_locator(path)
     m = _PATH_PREFIX.match(v)
     return bool(m) and _segments_are_a_locator(v[m.end():])
 
@@ -224,6 +241,8 @@ def _looks_like_secret_ref(value: str) -> bool:
         d = default.strip()
         if d and not _looks_like_secret_ref(d) and not _looks_like_placeholder(d):
             return False
+    if any(_text_carries_a_token(msg) for msg in _REF_WITH_MESSAGE.findall(v)):
+        return False
     remainder = _SECRET_REF.sub(" ", v)
     return _only_scheme_words(remainder)
 

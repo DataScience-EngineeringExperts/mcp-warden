@@ -232,8 +232,12 @@ def test_f1_shell_default_is_a_literal_unless_empty_reference_or_placeholder():
     assert _is_high("${T:-${U:-" + LIT + "}}")
     assert _is_high("Bearer ${TOKEN:-hunter2!}")
     for ref in ("${TOKEN:-}", "${TOKEN:-${OTHER}}", "${TOKEN:-$OTHER}", "${TOKEN:?required}",
-                "${TOKEN?required}", "${T:-${U:-}}", "${T:-${U:-changeme}}"):
+                "${TOKEN?required}", "${T:-${U:-}}", "${T:-${U:-changeme}}",
+                "${API_KEY:?set API_KEY in your shell}"):
         assert not _auth(ref), ref
+    # CSO NF-3: a token parked in the `:?` message is a secret, not an error string.
+    assert _is_high("${API_KEY:?" + LIT24 + "}")
+    assert _is_high("${API_KEY:?Passw0rdPassw0rd}")
     assert not _auth("${TOKEN:-changeme}")  # placeholder default -> still a reference
 
 
@@ -278,11 +282,17 @@ def test_f5_locators_need_two_segments_and_no_token_shaped_segment():
     # is case-blind: 20+ alphanumerics, or 16+ at >= 3.5 bits/char.
     for lit in ("op://" + LIT, "vault://" + LIT, "~/" + LIT, "/etc/" + LIT24, "./" + LIT, "C:\\" + LIT,
                 "op://a/" + LIT24, "~/.config/" + LIT24, "/a/b/" + LIT24, "C:\\Users\\" + LIT24,
-                "~/.config/GHSAT0AAAAAABCDEFGHIJ", "/9j/4AAQSkZJRgABAQAAAQABAAD", "/abc+def=="):
+                "~/.config/GHSAT0AAAAAABCDEFGHIJ", "/9j/4AAQSkZJRgABAQAAAQABAAD", "/abc+def==",
+                "/etc/Passw0rdPassw0rd",                # NF-1: 16 mixed-case, low entropy
+                "~/.config/9f8e7d6c5b4a3e2d",           # entropy branch: 16 hex, H ~ 3.75
+                "op://a/b#" + LIT24,                    # NF-3: token in the URI fragment
+                "vault://secret/data/app#Passw0rdPassw0rd"):
         assert _is_high(lit), lit
     for loc in ("op://Private/GitHub/token", "vault://secret/data/app#key", "~/.config/app/keys.json",
                 "/etc/app/secrets/token", "./secrets/token.txt", "../keys/app.json", "C:\\Users\\me\\keys.json",
-                "~/.config/gcloud/application_default_credentials.json"):
+                "~/.config/gcloud/application_default_credentials.json",
+                "~/.config/aaaabbbbccccdddd/keys.json",  # 16-char low-entropy dir name
+                "~/.config/my-app/keys.json", "op://Private/GitHub/token#credential"):
         assert not _auth(loc), loc
 
 
@@ -295,6 +305,7 @@ def test_f6_ellipsis_is_anchored():
     assert _is_high("abc..." + LIT)
     assert _is_high(LIT24 + "...")
     assert _is_high(LIT + "...x")
+    assert _is_high("correcthorsebatterystaple...")  # tail rule: not a stub, not filler
 
 
 def test_negative_twin_every_benign_prefix_plus_a_real_token_is_still_high():

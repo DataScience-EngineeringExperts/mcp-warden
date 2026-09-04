@@ -171,11 +171,17 @@ follows, each bound pinned by a test with a sub-threshold bypass string:
   `${TOKEN:-9f8e7d6c5b4a}` and `${T:-${U:-hunter2!}}` are committed credentials
   wearing a reference; `${VAR:?msg}` stays a reference.
 - **Locators need >= 2 segments and no token-shaped segment.** Token-shaped is
-  case-blind: an alphanumeric-only segment of 20+ characters, or 16+ at
-  >= 3.5 bits/char. `op://Private/GitHub/token`, `~/.config/app/keys.json` and
+  an alphanumeric-only segment that is 20+ characters, or 16+ at >= 3.5 bits/char,
+  or 16+ mixed-case (`Passw0rdPassw0rd`). Segments with dots, underscores or
+  hyphens are file names. A URI fragment or a `${VAR:?msg}` message is checked
+  the same way: `#key` and `:?required` are fine, `#9f8e…` and `:?9f8e…` are
+  literals. `op://Private/GitHub/token`, `~/.config/app/keys.json` and
   `~/.config/gcloud/application_default_credentials.json` are references;
   `op://9f8e…`, `~/9f8e…`, `~/.config/9f8e7d6c5b4a3e2d1c0b9a8f`,
-  `~/.config/GHSAT0AAAAAABCDEFGHIJ` and `/9j/4AAQ…` are literals.
+  `~/.config/GHSAT0AAAAAABCDEFGHIJ`, `/etc/Passw0rdPassw0rd` and `/9j/4AAQ…` are
+  literals. **Known residual:** a token that itself contains a separator
+  (`9f8e-7d6c-5b4a-…`) reads as a file name and is not caught by this rule —
+  tracked as a follow-up.
 - **Short bare words are an allowlist, not a heuristic.** Only `basic`, `bearer`,
   `token`, `apikey`/`api-key`, `digest`, `negotiate`, `oauth`, `none` are treated
   as scheme/type slots. Everything else — `admin`, `password`, `letmein`,
