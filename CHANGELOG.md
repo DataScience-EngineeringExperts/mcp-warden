@@ -56,7 +56,8 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
   from page one only). A failure on any page after the first is a `CaptureError` (exit
   2) — a partial surface is never pinned — and a cursor chain longer than 256 pages is
   refused. The first-page swallow for capability-less servers is unchanged and is now
-  labelled as the deliberate fail-open it is, with a follow-up ticket to tighten it.
+  labelled as the deliberate fail-open it is; tightening it is DSE-1538, and hashing the
+  `Tool` fields capture still projects away (`annotations`, `outputSchema`) is DSE-1539.
 - **Trust-anchor change for `--url` capture (from the SDK, stated plainly).** mcp 2.x
   moves HTTP to `httpx2`, which verifies TLS against the **operating-system trust store**
   via `truststore` instead of the bundled `certifi` CA set. A `pin --url` / `check --url`

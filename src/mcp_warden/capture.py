@@ -136,8 +136,9 @@ async def _list_all(method: str, list_fn: Any, key: str) -> list[Any] | None:
     caller. That first-page swallow is a deliberate fail-OPEN: a server without the
     capability answers the request with an error, and its surface section is
     recorded as empty rather than aborting the capture. It cannot distinguish
-    "no capability" from "broken server"; tightening that is tracked in the
-    follow-up ticket filed from the #105 review. Every LATER page fails CLOSED —
+    "no capability" from "broken server"; tightening that (capability-aware
+    error handling) is DSE-1538, and hashing the Tool fields capture still
+    projects away (annotations, outputSchema) is DSE-1539. Every LATER page fails CLOSED —
     a partial surface must never be pinned.
     """
     try:
