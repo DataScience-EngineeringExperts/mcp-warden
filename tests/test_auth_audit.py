@@ -105,6 +105,100 @@ def test_cli_audit_malformed_config_exit_two(tmp_path):
     assert result.exit_code == 2
 
 
+def test_reference_forms_found_in_a_real_public_corpus():
+    # Every shape here appeared in a 463-config public scan and was WRONGLY
+    # reported as a committed credential. Each names where a secret lives; none
+    # carries one.
+    for good in (
+        "${GITHUB_TOKEN:-}",            # shell default-expansion
+        "${API_KEY:?required}",         # shell error-if-unset
+        "op://Private/GitHub/token",    # 1Password reference URI
+        "vault://secret/data/app#key",  # Vault reference URI
+        "%USERPROFILE_TOKEN%",          # Windows env expansion
+        "~/.config/app/keys.json",      # path to a credential file
+        "/Users/me/.secrets/token",     # absolute path
+    ):
+        server = {"url": "https://x.example.com", "headers": {"Authorization": good}}
+        assert audit_server("ok", server) == [], f"false positive on {good!r}"
+
+
+def test_placeholders_are_low_severity_not_committed_credentials():
+    # 74% of TOKEN-IN-CONFIG hits in the public corpus were template fill-me-ins.
+    # They are a real (low) finding, but calling them committed credentials is
+    # false and is the noise that gets a gate switched off.
+    for ph in ("YOUR KEY GOES HERE", "<your-api-key>", "xxx", "changeme", "admin", "basic"):
+        server = {"url": "https://x.example.com", "headers": {"Authorization": ph}}
+        rules = _rules(audit_server("ph", server))
+        assert "WRD-AUTH-PLACEHOLDER-SECRET" in rules, f"{ph!r} should be a placeholder"
+        assert "WRD-AUTH-TOKEN-IN-CONFIG" not in rules, f"{ph!r} wrongly called a credential"
+
+
+def test_a_real_opaque_credential_is_still_high_severity():
+    # The placeholder path must not become a bypass for real secrets.
+    server = {"url": "https://x.example.com", "headers": {"Authorization": "aB3xK9mQ7pL2wR5tY8vN4jH6"}}
+    assert "WRD-AUTH-TOKEN-IN-CONFIG" in _rules(audit_server("real", server))
+
+
+def test_short_real_secret_shapes_are_not_downgraded_to_placeholder():
+    # The short-bare-word rule must not swallow a short REAL secret: a digit or any
+    # punctuation beyond -/_ takes the value out of the "scheme word" class.
+    for real in ("hunter2!", "p@ss-w0rd", "Xk9#mQ2p", "a1b2c3d4e5", "t0ken", "p@ssword"):
+        server = {"url": "https://x.example.com", "headers": {"Authorization": real}}
+        rules = _rules(audit_server("real", server))
+        assert "WRD-AUTH-TOKEN-IN-CONFIG" in rules, f"{real!r} wrongly downgraded"
+        assert "WRD-AUTH-PLACEHOLDER-SECRET" not in rules
+
+
+def test_placeholder_words_match_whole_tokens_not_substrings():
+    # `here` must not match inside `adherence`, `fill` not inside `fillmore`.
+    for real in ("adherenceTokenValue", "fillmoreStreetPass", "nonesuchCredential", "exampledotcomPass"):
+        server = {"url": "https://x.example.com", "headers": {"Authorization": real}}
+        rules = _rules(audit_server("sub", server))
+        assert "WRD-AUTH-TOKEN-IN-CONFIG" in rules, f"{real!r} wrongly downgraded"
+    # ...while the same words as WHOLE tokens are placeholders.
+    for ph in ("goes-here", "fill-me-in", "my-api-key", "change_me", "Bearer <token>", "sk-..."):
+        server = {"url": "https://x.example.com", "headers": {"Authorization": ph}}
+        rules = _rules(audit_server("ph", server))
+        assert "WRD-AUTH-PLACEHOLDER-SECRET" in rules, f"{ph!r} should be a placeholder"
+
+
+def test_vendor_shaped_secret_is_never_downgraded_even_if_it_contains_placeholder_words():
+    # A real ghp_ token that happens to spell `example` is still a committed
+    # credential: the vendor scan is the guard, the placeholder heuristic cannot
+    # be used to hide a secret.
+    ghp = "ghp_" + "example" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O"
+    assert len(ghp) == 4 + 36
+    server = {"url": "https://x.example.com", "headers": {"Authorization": ghp}}
+    rules = _rules(audit_server("ghp", server))
+    assert "WRD-SEC-GITHUB" in rules
+    assert "WRD-AUTH-TOKEN-IN-CONFIG" in rules
+    assert "WRD-AUTH-PLACEHOLDER-SECRET" not in rules
+
+
+def test_angle_slot_beside_a_real_literal_is_still_a_credential():
+    server = {"url": "https://x.example.com", "headers": {"Authorization": "Bearer <token> aB3xK9mQ7pL2wR5t"}}
+    rules = _rules(audit_server("mixed", server))
+    assert "WRD-AUTH-TOKEN-IN-CONFIG" in rules
+    assert "WRD-AUTH-PLACEHOLDER-SECRET" not in rules
+
+
+def test_base64_blob_starting_with_slash_is_not_a_credential_path():
+    # `/9j/4AAQ…` is a literal (one directory segment), not a path to a key file.
+    for blob in ("/9j/4AAQSkZJRgABAQAAAQABAAD", "/abc+def=="):
+        server = {"url": "https://x.example.com", "headers": {"Authorization": blob}}
+        assert "WRD-AUTH-TOKEN-IN-CONFIG" in _rules(audit_server("b64", server)), blob
+    # ...while a real credential-file path (>= 2 directories) is a reference.
+    server = {"url": "https://x.example.com", "headers": {"Authorization": "/etc/app/secrets/token"}}
+    assert audit_server("path", server) == []
+
+
+def test_placeholder_finding_is_redacted_like_every_other_snippet():
+    server = {"url": "https://x.example.com", "headers": {"Authorization": "YOUR-KEY-GOES-HERE"}}
+    (f,) = [x for x in audit_server("ph", server) if x.rule_id == "WRD-AUTH-PLACEHOLDER-SECRET"]
+    assert f.severity == "low"
+    assert "YOUR-KEY-GOES-HERE" not in f.snippet and "…" in f.snippet
+
+
 def test_bearer_prefixed_reference_is_not_a_literal():
     # `Bearer ${TOKEN}` is the single most common CORRECT shape for an
     # Authorization header. Flagging it as a committed credential is the

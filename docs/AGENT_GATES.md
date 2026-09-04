@@ -111,6 +111,7 @@ and tracked separately (DSE-725).
 | `WRD-AUTH-NOAUTH` | medium | A remote endpoint declares no auth material |
 | `WRD-AUTH-PLAINTEXT-HTTP` | high | A remote endpoint uses `http://` |
 | `WRD-AUTH-TOKEN-IN-CONFIG` | high | An auth-bearing key holds a literal credential |
+| `WRD-AUTH-PLACEHOLDER-SECRET` | low | An auth-bearing key holds an obvious template fill-me-in (`<your-api-key>`, `YOUR KEY GOES HERE`, `changeme`, `xxx`) — a config that cannot work, not a committed credential |
 | `WRD-AUTH-URL-CREDENTIAL` | high | The endpoint URL embeds a `user:pass@` userinfo credential |
 | `WRD-SEC-*` | varies | Vendor secret patterns found in any config value (shared with `check`) |
 
@@ -121,7 +122,11 @@ Precision matters more than recall for a gate that blocks CI:
 - **Loopback servers** (`localhost`, `127.0.0.1`, `::1`) — not remotely
   reachable, so missing auth is not an exposure.
 - **Secret references, including embedded ones** — `${TOKEN}`, `$TOKEN`,
-  `{{ secret }}` are the correct pattern and are never flagged as literals, and
+  `${TOKEN:-default}` / `${TOKEN:?msg}` (shell expansion forms), `%TOKEN%`
+  (Windows), `{{ secret }}`, secret-manager URIs (`op://`, `vault://`,
+  `awssm://`, `gcpsm://`, `azkv://`, `secretref://`, `keyring://`, `pass://`) and
+  paths to a credential file (`~/.config/app/keys.json`, `/etc/app/secrets/token`)
+  are the correct pattern and are never flagged as literals, and
   that holds when the reference sits *inside* a larger value. **`Bearer ${TOKEN}`
   is correct configuration and is not a finding** — it is the most common shape
   an Authorization header takes, and flagging it was a real false positive found
@@ -133,6 +138,29 @@ Precision matters more than recall for a gate that blocks CI:
   literal sitting beside a reference — is still flagged.
 - **Local stdio servers** — a `command`/`args` entry with no URL and no remote
   transport has no auth posture to audit.
+
+### Placeholders are a separate, low-severity rule
+
+Running the audit over a 463-config public corpus showed that **74 % of
+`WRD-AUTH-TOKEN-IN-CONFIG` hits were template fill-me-ins** — `<your-api-key>`,
+`YOUR KEY GOES HERE`, `changeme`, `xxx`. Calling those committed credentials is
+false, and false highs are what get a gate switched off. They are now
+`WRD-AUTH-PLACEHOLDER-SECRET` (low): a shipped config that cannot work is still a
+finding, just not a leak.
+
+The downgrade is built so it cannot hide a real secret:
+
+- **Vendor scan first.** Any value the `WRD-SEC-*` vendor patterns or the entropy
+  heuristic recognise is reported as a credential regardless of what else it
+  contains — a `ghp_…` token that happens to spell `example` stays high.
+- **Whole-token matching.** Placeholder words match whole tokens of the value
+  (split on non-alphanumerics), never substrings: `adherenceTokenValue` is not
+  `here`, `fillmoreStreetPass` is not `fill`.
+- **Short bare words only.** The "scheme/type word" rule (`admin`, `basic`,
+  `api-key`) accepts at most 11 purely alphabetic characters plus `-`/`_`. A digit
+  or any other punctuation (`hunter2!`, `p@ssword`) disqualifies the value.
+- **Bracketed slots must stand alone.** `Bearer <token>` is a template;
+  `Bearer <token> aB3x…` — a literal sitting beside the slot — is a credential.
 
 ### Usage
 

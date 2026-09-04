@@ -71,7 +71,85 @@ def _safe_url(url: str) -> str:
 
 #: An env/secret-manager reference anywhere in the value: ``${TOKEN}``, ``$TOKEN``,
 #: or ``{{ secret }}``.
-_SECRET_REF = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*\}|\$[A-Za-z_][A-Za-z0-9_]*|\{\{[^}]+\}\}")
+#: ``${VAR}``, ``${VAR:-default}``/``${VAR:?msg}`` (shell expansion with a default),
+#: ``$VAR``, ``{{ secret }}``, and ``%VAR%`` (Windows).
+_SECRET_REF = re.compile(
+    r"\$\{[A-Za-z_][A-Za-z0-9_]*(?:[:\-+?][^}]*)?\}"
+    r"|\$[A-Za-z_][A-Za-z0-9_]*"
+    r"|\{\{[^}]+\}\}"
+    r"|%[A-Za-z_][A-Za-z0-9_]*%"
+)
+
+#: Secret-manager reference URIs — the value names where the secret lives rather
+#: than carrying it. Flagging these punishes operators for doing it right.
+_SECRET_URI = re.compile(
+    r"^(?:op|vault|awssm|gcpsm|azkv|secretref|keyring|pass)://\S+$", re.IGNORECASE
+)
+
+#: A filesystem path pointing at a credential file. The path is not the secret.
+#: A bare absolute path needs >= 2 directory segments of path-safe characters:
+#: a base64 blob that happens to start with ``/`` (``/9j/4AAQ...``) is a literal,
+#: not a path, and must stay a finding.
+_PATH_LIKE = re.compile(
+    r"^(?:~/|\./|\.\./|[A-Za-z]:\\)[^\s]*$"
+    r"|^/(?:[A-Za-z0-9._-]+/){2,}[A-Za-z0-9._-]+$"
+)
+
+#: Obvious fill-me-in values shipped in template/example configs. These are NOT
+#: committed credentials and reporting them as such is the noise that gets a gate
+#: switched off — 74% of the WRD-AUTH-TOKEN-IN-CONFIG hits in a 463-config public
+#: corpus were this, which is why they get their own low-severity rule.
+#:
+#: Matching is on whole tokens (the value split on non-alphanumerics), never on
+#: raw substrings: ``adherenceTokenValue`` does not match ``here`` and
+#: ``fillmoreStreetPass`` does not match ``fill``. Anything a vendor pattern or the
+#: entropy heuristic recognises as a real secret is never downgraded (see
+#: :func:`_scan_mapping_for_literals`).
+_PLACEHOLDER_TOKENS = frozenset({
+    "your", "yours", "placeholder", "example", "changeme", "todo", "tbd", "here",
+    "insert", "replace", "dummy", "sample", "fake", "fill", "redacted",
+    "abc123", "12345", "123456", "1234567890",
+})
+#: Multi-token placeholder phrases, matched as whole consecutive tokens.
+_PLACEHOLDER_PHRASES = ("change-me", "goes-here", "add-your", "put-your", "api-key-here")
+#: Whole-value placeholders that do not tokenise usefully.
+_PLACEHOLDER_EXACT = frozenset({"n/a", "none", "null", "-", "...", "sk-..."})
+_TOKEN_SPLIT = re.compile(r"[^a-z0-9]+")
+_X_RUN = re.compile(r"^x{3,}$")
+#: ``<token>`` / ``<your-api-key>`` — an angle-bracketed slot anywhere in the value.
+_ANGLE_SLOT = re.compile(r"<[^<>]{1,64}>")
+#: A short bare word: purely alphabetic with ``-``/``_`` and no digits or other
+#: punctuation (``admin``, ``basic``, ``api-key``). A scheme/type token, not a
+#: credential — real secrets carry entropy, length, or both. ``hunter2!`` and
+#: ``p@ssword`` are NOT matched (digit / punctuation) and stay high severity.
+_SHORT_BARE_WORD = re.compile(r"^[a-z][a-z_-]{0,10}$")
+
+
+def _looks_like_placeholder(value: str) -> bool:
+    """True when the value is an obvious fill-me-in, not a real credential."""
+    v = value.strip().lower()
+    if not v:
+        return False
+    if v in _PLACEHOLDER_EXACT or "..." in v:
+        return True
+    if _ANGLE_SLOT.search(v):
+        # A bracketed slot counts only when nothing but scheme words sits around
+        # it: ``Bearer <token>`` is a template, ``Bearer <token> aB3x…`` is not.
+        remainder = _ANGLE_SLOT.sub(" ", v)
+        if all(_REF_SURROUND_OK.match(tok) for tok in remainder.split()):
+            return True
+    tokens = [t for t in _TOKEN_SPLIT.split(v) if t]
+    if not tokens:
+        return False
+    if tokens[0] == "my" and len(tokens) > 1:
+        return True
+    if any(t in _PLACEHOLDER_TOKENS or _X_RUN.match(t) for t in tokens):
+        return True
+    joined = "-" + "-".join(tokens) + "-"
+    if any(f"-{phrase}-" in joined for phrase in _PLACEHOLDER_PHRASES):
+        return True
+    return bool(_SHORT_BARE_WORD.match(v))
+
 
 #: What may sit around a reference and still count as "no literal here": an auth
 #: scheme word. Real schemes (Bearer, Token, Basic, ApiKey, Negotiate) are short
@@ -96,6 +174,10 @@ def _looks_like_secret_ref(value: str) -> bool:
     a real literal is still sitting there next to the reference.
     """
     v = value.strip()
+    if _SECRET_URI.match(v) or _PATH_LIKE.match(v):
+        # `op://vault/item/field` or `~/.config/app/keys.json` — the value says
+        # where the secret lives, it does not carry it.
+        return True
     if not _SECRET_REF.search(v):
         return False
     remainder = _SECRET_REF.sub(" ", v)
@@ -132,21 +214,42 @@ def _scan_mapping_for_literals(mapping: dict[str, Any], target: str) -> list[Fin
     for key, value in mapping.items():
         if not isinstance(value, str) or not value:
             continue
-        if _is_auth_key(key) and not _looks_like_secret_ref(value):
-            findings.append(
-                Finding(
-                    rule_id="WRD-AUTH-TOKEN-IN-CONFIG",
-                    severity="high",
-                    target=target,
-                    message=(
-                        f"auth key '{key}' holds a literal credential in config; "
-                        "reference a secret manager (${VAR}) instead"
-                    ),
-                    snippet=_redact(value),
+        # Value-level secret scan (already redacts). Computed first: a value the
+        # vendor patterns or entropy heuristic recognise as a secret is a
+        # credential no matter how it is dressed up, and is never downgraded to
+        # a placeholder or excused as a reference.
+        vendor = scan_field(value, target)
+        if _is_auth_key(key) and (vendor or not _looks_like_secret_ref(value)):
+            if not vendor and _looks_like_placeholder(value):
+                # A template's fill-me-in slot is a real (low) finding — shipping
+                # a config that cannot work — but calling it a committed
+                # credential is false and is what gets the gate switched off.
+                findings.append(
+                    Finding(
+                        rule_id="WRD-AUTH-PLACEHOLDER-SECRET",
+                        severity="low",
+                        target=target,
+                        message=(
+                            f"auth key '{key}' holds a placeholder, not a working "
+                            "credential; wire it to a secret reference (${VAR})"
+                        ),
+                        snippet=_redact(value),
+                    )
                 )
-            )
-        # Value-level secret scan (already redacts).
-        findings.extend(scan_field(value, target))
+            else:
+                findings.append(
+                    Finding(
+                        rule_id="WRD-AUTH-TOKEN-IN-CONFIG",
+                        severity="high",
+                        target=target,
+                        message=(
+                            f"auth key '{key}' holds a literal credential in config; "
+                            "reference a secret manager (${VAR}) instead"
+                        ),
+                        snippet=_redact(value),
+                    )
+                )
+        findings.extend(vendor)
     return findings
 
 
