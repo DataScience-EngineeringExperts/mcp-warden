@@ -41,12 +41,36 @@ class CaptureError(Exception):
 
 
 def _model_dump(obj: Any) -> dict[str, Any]:
-    """Best-effort dict view of an MCP SDK model across pydantic versions."""
+    """Wire-format dict view of an MCP SDK model: camelCase keys, no SDK-default nulls.
+
+    Both flags are load-bearing for digest stability across the ``mcp`` major:
+    the 2.x SDK renamed model fields to snake_case (``input_schema``,
+    ``mime_type``, ``protocol_version``) while the protocol keys stayed camelCase,
+    so a plain ``model_dump()`` under 2.x returns no ``inputSchema`` at all; and
+    2.x added optional fields (``PromptArgument.title``) whose ``None`` default the
+    server never sent, which would otherwise leak into ``arguments_hash``.
+    ``by_alias=True, exclude_none=True`` reproduces what was on the wire and is
+    identical on 1.x and 2.x (tests/test_capture_model_dump.py).
+    """
     if hasattr(obj, "model_dump"):
-        return obj.model_dump()  # pydantic v2
+        return obj.model_dump(by_alias=True, exclude_none=True)  # pydantic v2
     if hasattr(obj, "dict"):
-        return obj.dict()  # pydantic v1 fallback
+        return obj.dict(by_alias=True, exclude_none=True)  # pydantic v1 fallback
     return dict(obj)
+
+
+def _protocol_version(init_result: Any) -> str:
+    """Read the negotiated protocol version whatever the SDK calls the field.
+
+    mcp 1.x exposes ``InitializeResult.protocolVersion``; 2.x renamed it to
+    ``protocol_version``. Attribute access (not a model dump) keeps this total for
+    the duck-typed session objects the HTTP tests inject.
+    """
+    for attr in ("protocolVersion", "protocol_version"):
+        value = getattr(init_result, attr, None)
+        if isinstance(value, str) and value:
+            return value
+    return ""
 
 
 async def _capture_async(command: str, args: list[str], timeout_s: float) -> CapturedSurface:
@@ -58,7 +82,7 @@ async def _capture_async(command: str, args: list[str], timeout_s: float) -> Cap
     async with stdio_client(params) as (read_stream, write_stream):
         async with ClientSession(read_stream, write_stream) as session:
             init_result = await session.initialize()
-            protocol_version = str(getattr(init_result, "protocolVersion", "") or "")
+            protocol_version = _protocol_version(init_result)
 
             tools = await _list_tools(session)
             resources = await _list_resources(session)
@@ -204,7 +228,7 @@ async def _capture_http_async(url: str, timeout_s: float) -> CapturedSurface:
     async with streamable_http_client(url) as (read_stream, write_stream, _get_session_id):
         async with ClientSession(read_stream, write_stream) as session:
             init_result = await session.initialize()
-            protocol_version = str(getattr(init_result, "protocolVersion", "") or "")
+            protocol_version = _protocol_version(init_result)
 
             tools = await _list_tools(session)
             resources = await _list_resources(session)

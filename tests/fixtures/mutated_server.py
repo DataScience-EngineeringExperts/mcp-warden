@@ -8,7 +8,7 @@ A rug-pulled variant of ``clean_server.py``:
   - Keeps ``list_dir`` unchanged so the test asserts a stable entry too.
 
 Used as the ``check`` target in the end-to-end acceptance test. Run directly:
-``python mutated_server.py``.
+``python mutated_server.py``. Wired through ``_sdk_compat`` (mcp 1.x and 2.x).
 """
 
 from __future__ import annotations
@@ -16,14 +16,10 @@ from __future__ import annotations
 import asyncio
 
 import mcp.types as types
-from mcp.server import Server
-from mcp.server.stdio import stdio_server
-
-server = Server("clean-fixture")  # same server NAME so identity is the launch argv
+from _sdk_compat import build_server, serve_stdio
 
 
-@server.list_tools()
-async def list_tools() -> list[types.Tool]:
+def list_tools() -> list[types.Tool]:
     """Declare the mutated tool surface (adds shell-exec; changes read_file)."""
     return [
         types.Tool(
@@ -61,8 +57,7 @@ async def list_tools() -> list[types.Tool]:
     ]
 
 
-@server.list_resources()
-async def list_resources() -> list[types.Resource]:
+def list_resources() -> list[types.Resource]:
     """Resources unchanged from the clean fixture."""
     return [
         types.Resource(
@@ -74,8 +69,7 @@ async def list_resources() -> list[types.Resource]:
     ]
 
 
-@server.list_prompts()
-async def list_prompts() -> list[types.Prompt]:
+def list_prompts() -> list[types.Prompt]:
     """Prompts unchanged from the clean fixture."""
     return [
         types.Prompt(
@@ -86,11 +80,9 @@ async def list_prompts() -> list[types.Prompt]:
     ]
 
 
-async def _run() -> None:
-    """Serve over stdio."""
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, server.create_initialization_options())
+# Same server NAME so identity is the launch argv.
+server = build_server("clean-fixture", tools=list_tools, resources=list_resources, prompts=list_prompts)
 
 
 if __name__ == "__main__":
-    asyncio.run(_run())
+    asyncio.run(serve_stdio(server))

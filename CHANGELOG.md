@@ -30,6 +30,26 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+### Changed
+
+- **`mcp` SDK 2.x is now supported — the `<2` cap from #92 is lifted to `<3` (supersedes
+  #96, DSE-1261).** Lock files resolve to `mcp==2.1.1` (`requirements-dev.lock`,
+  `action/requirements.lock`). Two 2.x changes would have silently altered every
+  committed lock and are absorbed in `capture.py` rather than re-pinned: the SDK renamed
+  model fields to snake_case (`input_schema`, `mime_type`, `protocol_version`) while the
+  protocol keys stayed camelCase, so a plain `model_dump()` returned no `inputSchema` at
+  all; and `PromptArgument` grew a `title` field whose `None` default the server never
+  sent, which leaked into `arguments_hash`. `_model_dump` now returns the wire view
+  (`by_alias=True, exclude_none=True`) and the protocol version is read through it —
+  identical output on 1.x and 2.x, proven by `check` against the committed
+  `clean.warden.lock` and `clean_listchange.warden.lock` under 2.1.1 (`overall_digest`
+  byte-identical; the mutated fixture still drifts) and pinned by
+  `tests/test_capture_model_dump.py`. The three SDK-backed fixture servers are wired
+  through a new `tests/fixtures/_sdk_compat.py` (decorator API on 1.x, `on_*` callbacks on
+  2.x) with their declared surfaces unchanged. Note for lock authors: a server that
+  genuinely sends a non-null `title` on a prompt argument is captured on either SDK line;
+  only SDK-default nulls are dropped.
+
 ### Added
 
 - **`doctor` — zero-config MCP posture scan (DSE-1516).** One command, no arguments:
