@@ -67,6 +67,19 @@ A poisoned server that is poisoned *identically for everyone* matches consensus.
 is the residual risk and it is deliberate: the corpus turns a targeted attack into a
 loud one; it does not review content. Pair it with a static tool-poisoning scanner.
 
+**Evidence suppression — what a corpus can hide.** The corpus can prove an entry is
+genuine; it cannot prove an entry *does not exist*. If the directory for your
+coordinate is absent the verdict is `WRD-CONSENSUS-NOVEL` (advisory, exit 0), and a
+hostile or forked corpus can turn an exit-1 `MISMATCH` into that pass simply by
+withholding the entries. There is no authenticated "no entry" proof in a git tree.
+Two controls close the gap, and you should use both in CI:
+
+- pin `--corpus-ref` to a commit you (or someone you trust) have audited, so the
+  operator cannot swap the tree under you between runs;
+- pass **`--require-consensus`** wherever the coordinate is *expected* to be
+  attested — then `NOVEL` and `INSUFFICIENT` are `high` and **exit 1**, and a run
+  that compared nothing can no longer be green.
+
 **Network.** Verifying a Sigstore bundle initialises the production trust root
 (`Verifier.production()`, TUF). That needs network on first use (cached afterwards);
 an air-gapped runner gets `WRD-CONSENSUS-UNVERIFIABLE` (exit 2) on every run unless
@@ -105,6 +118,13 @@ locks/<ecosystem>/<segment>/<version>/<attester-id>.lock.sigstore
 - `segment` is the package name with `/` replaced by `__`, so the scoped npm package
   `@example/clean` lives under `locks/npm/@example__clean/`. PyPI names are PEP 503
   normalised (`Mcp_Server.Foo` → `mcp-server-foo`).
+  **This mapping is not injective**: an unscoped npm package literally named
+  `@example__clean`, or a name differing only by case on a case-insensitive
+  filesystem, maps to the *same* directory. That collision **fails closed** — the
+  signed statement carries the exact coordinate, so an entry from the other package
+  fails verification (`UNVERIFIABLE`) rather than being counted — but it means such a
+  package cannot share a corpus with its twin. Percent-encoding the segment would
+  lift the restriction if a real `__`-named package ever matters.
 - `<attester-id>` is a `[A-Za-z0-9._-]{1,64}` id that **must** appear in
   `attesters.json` (an entry from an undeclared attester rejects the coordinate) and
   in your pin (otherwise it is ignored).
@@ -157,8 +177,8 @@ server is spawned.
 | Rule | Severity | Meaning | Exit |
 |---|---|---|---|
 | *(match)* | — | ≥ `--min-attesters` trusted attesters saw your surface; one stderr line | 0 |
-| `WRD-CONSENSUS-INSUFFICIENT` | low | fewer trusted attesters agree than `--min-attesters` | 0 (finding is emitted) |
-| `WRD-CONSENSUS-NOVEL` | low | no trusted attestation exists for the coordinate | 0 (finding is emitted) |
+| `WRD-CONSENSUS-INSUFFICIENT` | low (high with `--require-consensus`) | fewer trusted attesters agree than `--min-attesters` | 0 — **1 with `--require-consensus`** |
+| `WRD-CONSENSUS-NOVEL` | low (high with `--require-consensus`) | no trusted attestation exists for the coordinate | 0 — **1 with `--require-consensus`** |
 | `WRD-CONSENSUS-MISMATCH` | high | your surface differs from **every** trusted attested digest | **1** |
 | `WRD-CONSENSUS-SPLIT` | high | trusted attesters disagree among themselves — reported even if you match one | **1** |
 | `WRD-CONSENSUS-UNPINNED-TRUST` | — | no consumer pin, duplicate id, or pin/corpus identity divergence | **2** |
@@ -168,7 +188,8 @@ server is spawned.
 | `WRD-CONSENSUS-UNREACHABLE` | — | corpus path/URL unreachable or not allowed, clone/checkout failed, `--corpus-ref` missing or not `HEAD` | **2** |
 
 Findings go through the same SARIF and `--json` JSONL emitters as static checks and
-drift; the exit code composes with drift (`drift or MISMATCH or SPLIT → 1`). With the
+drift; the exit code composes with drift (`drift or MISMATCH or SPLIT → 1`, and with
+`--require-consensus` also `NOVEL or INSUFFICIENT → 1`). With the
 flag absent, `check` is byte-for-byte unchanged — and any community option given
 *without* `--against-community` is exit 2, never a silent no-op.
 
@@ -181,11 +202,13 @@ mcp-warden check npx -y @foo/server@1.2.3 --lock warden.lock \
     --attester alice=https://github.com/…/attest.yml@refs/heads/main@https://token.actions.githubusercontent.com \
     --attester bob=https://github.com/…/attest.yml@refs/heads/main@https://token.actions.githubusercontent.com
 
-# against a git URL, pinned to an exact corpus commit, trust root from a file you keep
+# against a git URL, pinned to an exact corpus commit, trust root from a file you keep;
+# --require-consensus because CI expects this package to be attested (NOVEL would be a red flag)
 mcp-warden check node ./build/index.js --lock warden.lock \
     --against-community --corpus https://github.com/<org>/mcp-warden-locks.git \
     --corpus-ref 0123456789abcdef0123456789abcdef01234567 \
-    --coordinate npm:@foo/server@1.2.3 --attesters-file trusted-attesters.json
+    --coordinate npm:@foo/server@1.2.3 --attesters-file trusted-attesters.json \
+    --require-consensus
 ```
 
 `--attester` is `<id>=<certificate_identity>@<oidc_issuer>`; the identity itself
@@ -194,9 +217,13 @@ contains `@`, so the issuer is split at the last one. A URL must start with `htt
 with `-` are refused before git runs. The clone is `git -c protocol.allow=never -c
 protocol.https.allow=always -c protocol.ssh.allow=always -c core.hooksPath=/dev/null -c
 core.symlinks=false -c submodule.recurse=false clone --no-checkout -- <url>` with a
-scrubbed environment (`PATH`, `HOME`, `SSH_AUTH_SOCK`, `GIT_SSH_COMMAND`,
-`GIT_TERMINAL_PROMPT=0`), into a temporary directory removed afterwards; the
-checkout's `HEAD` must equal `--corpus-ref`. Requires `mcp-warden[sigstore]`.
+scrubbed environment (`PATH`, `HOME`, `SSH_AUTH_SOCK`, `GIT_TERMINAL_PROMPT=0`;
+`GIT_SSH_COMMAND` is forwarded **only** to the clone of an `ssh://`/`git@` source,
+never for https and never to checkout/rev-parse), into a temporary directory removed
+afterwards; the checkout's `HEAD` must equal `--corpus-ref`. `git` is resolved to an
+absolute path once per process and must be **≥ 2.14.1** (the release that refuses an
+ssh host starting with `-`, which the option-injection defenses above rely on) —
+older or missing git is `UNREACHABLE`. Requires `mcp-warden[sigstore]`.
 
 ### Producing a corpus entry
 
@@ -208,12 +235,13 @@ mcp-warden check --verify --lock alice.lock --coordinate npm:@foo/server@1.2.3 \
     --certificate-identity … --certificate-oidc-issuer …
 ```
 
-## 8. Phase 2 — the live corpus (pending)
+## 8. Phase 2 — the live corpus
 
-Planned, not shipped: a public append-only repo `mcp-warden-locks` (PR-only merges; a
-required check rejects any modify/delete under `locks/`) fed by a nightly attester
-that reads the official MCP registry, spawns each top-N server in a sandbox, and
-opens a PR of `pin --sign --coordinate` outputs containing only *new* paths.
+Live at <https://github.com/DataScience-EngineeringExperts/mcp-warden-locks>: a public
+append-only repo (a required check rejects any modify/delete under `locks/`) fed by a
+nightly attester that spawns each target package in a sandbox and lands
+`pin --sign --coordinate` outputs containing only *new* paths. Its README carries the
+current attester identity to pin and the consumer invocation.
 
 **Sandbox contract an attester must meet** (so a malicious server cannot poison the
 attester itself): ephemeral runner, non-root, network egress cut after package

@@ -30,6 +30,22 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+### Changed
+
+- **`check --against-community` follow-ups from security re-verification (DSE-1528).**
+  New **`--require-consensus`**: `WRD-CONSENSUS-NOVEL` and `-INSUFFICIENT` become `high`
+  and **exit 1**, so a CI job that expects a package to be attested cannot pass because
+  the corpus — or a fork of it — simply withholds the entry (evidence suppression is
+  now documented as the residual limit of a git corpus, with `--corpus-ref` pinning as
+  the other half of the control). `git` is resolved to an absolute path once per
+  process and must be **≥ 2.14.1** (older/missing is `UNREACHABLE`; the ssh option-
+  injection defenses assume that release). `GIT_SSH_COMMAND` is forwarded only to the
+  clone of an `ssh://`/`git@` corpus, never for https and never to checkout/rev-parse.
+  The non-injective coordinate→directory mapping (`@org/name` vs `@org__name`) is
+  documented as fail-closed; a redundant pre-read of each corpus lock was removed (the
+  size cap is enforced by `stat()`); the verifier docstring now states precisely which
+  coordinate the statement is built from.
+
 ### Added
 
 - **`doctor` — zero-config MCP posture scan (DSE-1516).** One command, no arguments:
