@@ -146,10 +146,9 @@ def scan_server(
     if isinstance(command, str) and command:
         args = [str(a) for a in (server.get("args") or [])]
         findings += _retarget(check_launch_command(command, args), target)
-    base = name[: -len("#servers")] if name.endswith("#servers") else name
-    if base in source.ambiguous:
+    if name in source.ambiguous:  # display keys, not a suffix rule: a real `x#servers` is never flagged
         findings.append(_finding(
-            "WRD-DOCTOR-AMBIGUOUS-SERVER", "medium", target, base,
+            "WRD-DOCTOR-AMBIGUOUS-SERVER", "medium", target, name,
             "declared under both mcpServers and servers with different definitions; a decoy map "
             "can hide the one the client loads from an audit — keep exactly one",
         ))

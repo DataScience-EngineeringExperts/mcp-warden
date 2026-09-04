@@ -21,9 +21,15 @@ from .checks_secret import scan_field, shannon_entropy
 #: Everything a terminal or a copy buffer can be tricked by: C0 + DEL, the C1
 #: range (U+009B is CSI and U+009D is OSC on xterm-family terminals in UTF-8
 #: mode), NEL, zero-width and directional marks (U+200B–U+200F), the Unicode
-#: line/paragraph separators, and both bidi-override blocks (Trojan Source,
-#: CVE-2021-42574 — a reordered ``pin`` line still runs in source order).
-_CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f\u200b-\u200f\u2028\u2029\u202a-\u202e\u2066-\u2069]")
+#: line/paragraph separators, both bidi-override blocks (Trojan Source,
+#: CVE-2021-42574 — a reordered ``pin`` line still runs in source order), and
+#: the remaining invisibles: soft hyphen, word joiner + the invisible operators
+#: (U+2060–U+2064), the BOM / zero-width no-break space, and the Unicode Tags
+#: block (U+E0000–U+E007F), which most terminals render as nothing at all.
+_CONTROL = re.compile(
+    r"[\x00-\x1f\x7f-\x9f\u00ad\u200b-\u200f\u2028\u2029\u202a-\u202e\u2060-\u2064"
+    r"\u2066-\u2069\ufeff\U000e0000-\U000e007f]"
+)
 
 
 def safe_text(s: object, max_len: int = 200) -> str:

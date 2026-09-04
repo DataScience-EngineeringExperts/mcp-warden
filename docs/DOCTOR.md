@@ -41,11 +41,15 @@ Every JSON file is loaded as the **union** of its `mcpServers` and `servers` map
 Code reads `servers`; if a file also carried a benign `mcpServers` and only that map
 were audited, a decoy could hide the map the client actually loads. A name present
 under both keys with an identical body is loaded once; with *different* bodies both
-are audited (the second as `<name>#servers`) and each is flagged
-`WRD-DOCTOR-AMBIGUOUS-SERVER` (medium). The JSONC pass (VS Code) is string-aware in
-**both** of its stages — comment stripping and trailing-comma removal — so a value
-such as `"echo {a, }"` is audited and pinned byte-for-byte as the client launches
-it. On Windows the two `%APPDATA%` entries
+are audited and each is flagged `WRD-DOCTOR-AMBIGUOUS-SERVER` (medium). Entries are
+keyed on `(map, name)` and the display key is derived afterwards, unique by
+construction: the `servers` copy is shown as `<name>#servers` with `#` appended until
+the key is free, so `#servers` is **not** a reserved namespace — a server the user
+really named `x#servers` is never overwritten by the synthetic key and, on its own, is
+never flagged ambiguous. The JSONC pass (VS Code) is a single string-aware,
+left-to-right scan — comments and trailing commas are handled in one linear pass — so
+a value such as `"echo {a, }"` is audited and pinned byte-for-byte as the client
+launches it, and a hostile file full of unterminated `/*` cannot wedge the scan. On Windows the two `%APPDATA%` entries
 are simply absent when `APPDATA` is unset — the location is never guessed.
 
 ### Project walk-up boundary
@@ -62,7 +66,10 @@ world-writable `/tmp/.mcp.json`.
 A discovered path with a **symlink at any component below its base** (the home
 directory for user-level entries, the ancestor directory for project-level entries)
 is **skipped with a stderr warning** and its target is never read. An explicit
-`--config PATH` is trusted as given and may be a symlink.
+`--config PATH` is trusted as given and may be a symlink. `--config` paths are
+de-duplicated by **resolved** path (a symlink and its target are one file, scanned
+once with a warning), and an explicit path **replaces** the discovered source for the
+same file — naming it is what makes it `--pin`-eligible (§4).
 
 ### Size cap
 
@@ -103,7 +110,9 @@ buffer can be tricked by becomes `U+FFFD` — C0 + DEL (`U+0000`–`U+001F`, `U+
 the C1 range (`U+0080`–`U+009F`; `U+009B` is CSI and `U+009D` is OSC on xterm-family
 terminals), NEL, the zero-width and directional marks (`U+200B`–`U+200F`), the line
 and paragraph separators (`U+2028`, `U+2029`), and both bidi-override blocks
-(`U+202A`–`U+202E`, `U+2066`–`U+2069` — Trojan Source, CVE-2021-42574) — and the
+(`U+202A`–`U+202E`, `U+2066`–`U+2069` — Trojan Source, CVE-2021-42574), the soft
+hyphen (`U+00AD`), the word joiner and invisible operators (`U+2060`–`U+2064`), the
+BOM (`U+FEFF`), and the Unicode Tags block (`U+E0000`–`U+E007F`) — and the
 string is capped at 200 characters. Rich markup is then escaped where markup is on, and the JSONL / pin
 blocks print with `markup=False`. A server named
 `gh\n  mcp-warden pin sh -c '…'` therefore renders as one line with a visible `�`,
@@ -166,7 +175,10 @@ launch lines carry credentials in shapes the config audit never sees:
   that is auth-shaped (`#token=…`) or token-like is replaced. Scheme and host stay
   visible. When nothing needs masking the URL is printed **byte-for-byte** as it
   appears in the config — never re-encoded — so the lock the user pins from the
-  printed command is the lock `doctor` recognises on the next run.
+  printed command is the lock `doctor` recognises on the next run. "Byte-for-byte" is
+strictly *after* `safe_text()`: a URL carrying a neutralised character or longer than
+2048 characters prints differently from the config, and the lock pinned from that
+printed line will not match `lock_covers` — fix the config value first.
 
 When two server names slug to the same file (`a/b` and `a-b`), the second gets a
 short hash suffix. The block ends with the GitHub Action snippet.
