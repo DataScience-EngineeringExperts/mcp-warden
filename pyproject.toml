@@ -22,7 +22,7 @@ dependencies = [
     # already 2.x-compatible — it calls ClientSession.list_tools(), which 2.0.0
     # keeps — so lifting this cap only needs the three fixture servers ported to
     # the 2.x add_request_handler API.
-    "mcp>=1.27.2,<2",
+    "mcp>=1.27.2,<3",
     "rfc8785>=0.1.4",
     "pydantic>=2.0.0",
     "typer>=0.26.7",
