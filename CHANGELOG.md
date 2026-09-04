@@ -46,9 +46,25 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
   byte-identical; the mutated fixture still drifts) and pinned by
   `tests/test_capture_model_dump.py`. The three SDK-backed fixture servers are wired
   through a new `tests/fixtures/_sdk_compat.py` (decorator API on 1.x, `on_*` callbacks on
-  2.x) with their declared surfaces unchanged. Note for lock authors: a server that
-  genuinely sends a non-null `title` on a prompt argument is captured on either SDK line;
-  only SDK-default nulls are dropped.
+  2.x) with their declared surfaces unchanged. Prompt arguments keep the exact byte
+  shape every released warden hashed: the protocol field set `name` / `description` /
+  `required` is always emitted (`null` when the server omitted the optional), and only
+  keys outside that set — 2.x's `title`, `_meta` — are shed when null; a non-null extra is
+  kept on either SDK line. No `SCHEMA_VERSION` bump.
+- **`nextCursor` pagination in capture.** `tools/list`, `resources/list` and `prompts/list`
+  are now drained across every page (a server that splits its surface used to be pinned
+  from page one only). A failure on any page after the first is a `CaptureError` (exit
+  2) — a partial surface is never pinned — and a cursor chain longer than 256 pages is
+  refused. The first-page swallow for capability-less servers is unchanged and is now
+  labelled as the deliberate fail-open it is, with a follow-up ticket to tighten it.
+- **Trust-anchor change for `--url` capture (from the SDK, stated plainly).** mcp 2.x
+  moves HTTP to `httpx2`, which verifies TLS against the **operating-system trust store**
+  via `truststore` instead of the bundled `certifi` CA set. A `pin --url` / `check --url`
+  against a server whose certificate chains to a corporate or private CA installed in the
+  OS store now succeeds where 1.x failed, and conversely an OS store with a removed or
+  distrusted public root now fails where 1.x succeeded. This is a change in *what
+  warden trusts*, not in what it captures; it is inherited from the SDK and cannot be
+  toggled from the CLI.
 ### Fixed
 
 - **`doctor` follow-ups from the security review of #98 (DSE-1529).** `#servers` is no

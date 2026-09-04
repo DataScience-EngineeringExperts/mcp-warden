@@ -34,3 +34,26 @@ def test_resource_dump_uses_wire_keys():
     res = types.Resource(uri="file:///x", name="n", mimeType="text/plain")
     data = _model_dump(res)
     assert data["mimeType"] == "text/plain" and "mime_type" not in data
+
+
+def test_bare_prompt_argument_hashes_byte_identically_to_every_released_warden():
+    # CSO review of #105, F1: a 1.x ``model_dump()`` always emitted the protocol
+    # field set {name, description, required} with ``null`` for absent optionals,
+    # and every lock ever written hashes those bytes. Dropping the nulls would
+    # have changed ``arguments_hash`` for any prompt with a bare argument.
+    from mcp_warden.capture import _normalize_prompt_argument
+    from mcp_warden.hashing import canon, hash_arguments
+
+    norm = _normalize_prompt_argument(types.PromptArgument(name="text"))
+    assert canon([norm]) == b'[{"description":null,"name":"text","required":null}]'
+    assert hash_arguments([norm]) == hash_arguments(
+        [{"description": None, "name": "text", "required": None}]
+    )
+    assert "title" not in norm  # 2.x-only field, absent from the wire -> shed
+
+
+def test_non_null_extra_prompt_argument_fields_are_kept():
+    from mcp_warden.capture import _normalize_prompt_argument
+
+    norm = _normalize_prompt_argument({"name": "n", "title": "Nice", "title2": None})
+    assert norm == {"name": "n", "description": None, "required": None, "title": "Nice"}

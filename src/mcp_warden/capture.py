@@ -16,6 +16,7 @@ from typing import Any
 
 import anyio
 from mcp import ClientSession, StdioServerParameters
+from mcp import types as mcp_types
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamable_http_client
 
@@ -98,15 +99,78 @@ async def _capture_async(command: str, args: list[str], timeout_s: float) -> Cap
     )
 
 
-async def _list_tools(session: ClientSession) -> list[CapturedTool]:
-    """Run ``tools/list`` and normalize results. Empty list if unsupported."""
+#: Hard cap on ``nextCursor`` pages per list call. A cursor chain that never
+#: terminates is a server that never declares a surface; refuse rather than pin
+#: a truncated one (CSO review of #105, F3).
+MAX_LIST_PAGES = 256
+
+#: The protocol field set of a prompt argument. Always emitted — ``null`` when the
+#: server omitted the optional — because that is the byte shape the 1.x SDK's
+#: ``model_dump()`` produced and every released warden hashed into
+#: ``arguments_hash``. Keys outside this set (2.x's ``title``, ``_meta``) are shed
+#: when null so an SDK-side default never enters the digest (CSO review of #105, F1).
+_PROMPT_ARGUMENT_KEYS = ("name", "description", "required")
+
+
+def _normalize_prompt_argument(arg: Any) -> dict[str, Any]:
+    """Return the digest-stable dict form of a prompt argument (see ``_PROMPT_ARGUMENT_KEYS``)."""
+    data = arg if isinstance(arg, dict) else _model_dump(arg)
+    norm: dict[str, Any] = {key: data.get(key) for key in _PROMPT_ARGUMENT_KEYS}
+    norm.update({k: v for k, v in data.items() if k not in _PROMPT_ARGUMENT_KEYS and v is not None})
+    return norm
+
+
+def _next_cursor(result: Any) -> str | None:
+    """The ``nextCursor`` of a list result, on either SDK line; ``None`` when the page is last."""
+    for attr in ("nextCursor", "next_cursor"):
+        value = getattr(result, attr, None)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+async def _list_all(method: str, list_fn: Any, key: str) -> list[Any] | None:
+    """Drain every ``nextCursor`` page of a ``list_*`` call.
+
+    Returns ``None`` when the FIRST page is unavailable, ``[]``-equivalent for the
+    caller. That first-page swallow is a deliberate fail-OPEN: a server without the
+    capability answers the request with an error, and its surface section is
+    recorded as empty rather than aborting the capture. It cannot distinguish
+    "no capability" from "broken server"; tightening that is tracked in the
+    follow-up ticket filed from the #105 review. Every LATER page fails CLOSED —
+    a partial surface must never be pinned.
+    """
     try:
-        result = await session.list_tools()
-    except Exception as exc:  # server may not declare the tools capability
-        logger.info("tools/list unavailable: %s", exc)
+        result = await list_fn()
+    except Exception as exc:  # fail-open on the first page only (see docstring)
+        logger.info("%s unavailable: %s", method, exc)
+        return None
+    items: list[Any] = list(getattr(result, key, []) or [])
+    cursor = _next_cursor(result)
+    pages = 1
+    while cursor is not None:
+        pages += 1
+        if pages > MAX_LIST_PAGES:
+            raise CaptureError(
+                f"{method}: cursor chain exceeded {MAX_LIST_PAGES} pages; "
+                "refusing to pin a surface that never terminates"
+            )
+        try:
+            result = await list_fn(params=mcp_types.PaginatedRequestParams(cursor=cursor))
+        except Exception as exc:
+            raise CaptureError(f"{method}: page {pages} failed after a partial surface: {exc}") from exc
+        items.extend(getattr(result, key, []) or [])
+        cursor = _next_cursor(result)
+    return items
+
+
+async def _list_tools(session: ClientSession) -> list[CapturedTool]:
+    """Run ``tools/list`` (all pages) and normalize results. Empty list if unsupported."""
+    items = await _list_all("tools/list", session.list_tools, "tools")
+    if items is None:
         return []
     out: list[CapturedTool] = []
-    for tool in getattr(result, "tools", []) or []:
+    for tool in items:
         data = _model_dump(tool)
         out.append(
             CapturedTool(
@@ -119,14 +183,12 @@ async def _list_tools(session: ClientSession) -> list[CapturedTool]:
 
 
 async def _list_resources(session: ClientSession) -> list[CapturedResource]:
-    """Run ``resources/list`` and normalize results. Empty list if unsupported."""
-    try:
-        result = await session.list_resources()
-    except Exception as exc:
-        logger.info("resources/list unavailable: %s", exc)
+    """Run ``resources/list`` (all pages) and normalize results. Empty list if unsupported."""
+    items = await _list_all("resources/list", session.list_resources, "resources")
+    if items is None:
         return []
     out: list[CapturedResource] = []
-    for res in getattr(result, "resources", []) or []:
+    for res in items:
         data = _model_dump(res)
         out.append(
             CapturedResource(
@@ -140,19 +202,17 @@ async def _list_resources(session: ClientSession) -> list[CapturedResource]:
 
 
 async def _list_prompts(session: ClientSession) -> list[CapturedPrompt]:
-    """Run ``prompts/list`` and normalize results. Empty list if unsupported."""
-    try:
-        result = await session.list_prompts()
-    except Exception as exc:
-        logger.info("prompts/list unavailable: %s", exc)
+    """Run ``prompts/list`` (all pages) and normalize results. Empty list if unsupported."""
+    items = await _list_all("prompts/list", session.list_prompts, "prompts")
+    if items is None:
         return []
     out: list[CapturedPrompt] = []
-    for prompt in getattr(result, "prompts", []) or []:
+    for prompt in items:
         data = _model_dump(prompt)
         arguments = data.get("arguments")
         norm_args: list[dict[str, Any]] | None = None
         if isinstance(arguments, list):
-            norm_args = [a if isinstance(a, dict) else _model_dump(a) for a in arguments]
+            norm_args = [_normalize_prompt_argument(a) for a in arguments]
         out.append(
             CapturedPrompt(
                 name=str(data.get("name", "")),
