@@ -242,6 +242,11 @@ CANONICAL: list[tuple[str, str, Any]] = [
     ("empty-array", "The empty array — the §5.1 absent-arguments digest.", []),
     ("scalars", "Literals true/false/null and zero.", [True, False, None, "", 0]),
     ("deep-nesting", "Deeply nested empties.", {"a": {"b": {"c": {"d": [[[]]]}}}}),
+    (
+        "depth-512-accepted",
+        "The deepest element sits at depth 512 — the root is depth 0 and each enclosing array/object adds one — which is the normative maximum (SPEC.md §4). A conforming canonicalizer MUST accept it; one that inherits a smaller host recursion limit is not conformant.",
+        json.loads("[" * 513 + "]" * 513),
+    ),
     ("key-escapes", "Keys are escaped like strings and sorted by their code units.", {'a"b': 1, "c\\d": 2, "e\nf": 3}),
     (
         "numbers-boundaries",
@@ -422,6 +427,7 @@ MALFORMED: list[tuple[str, str, Any]] = [
     ("unpaired-surrogate-low", "A lone low surrogate inside a string MUST be rejected.", {"input_json": '"a\\udc00b"'}),
     ("unpaired-surrogate-key", "An unpaired surrogate in an object key MUST be rejected.", {"input_json": '{"\\ud83d": 1}'}),
     ("deep-nesting-2000", "2000 nested arrays exceed any conforming implementation's recursion bound and MUST be rejected rather than hashed.", {"input_json": "[" * 2000 + "]" * 2000}),
+    ("depth-513-rejected", "The deepest element sits at depth 513, one past the normative bound (SPEC.md §4). A conforming canonicalizer MUST refuse it — fail closed — rather than produce a digest; one that accepts it because its host recursion limit is larger is not conformant.", {"input_json": "[" * 514 + "]" * 514}),
 ]
 
 

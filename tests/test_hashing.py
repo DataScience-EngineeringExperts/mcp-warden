@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 
+import pytest
+
 from mcp_warden.hashing import (
     canon,
     hash_arguments,
@@ -80,3 +82,42 @@ def test_schema_change_changes_digest():
     base = {"type": "object", "properties": {"path": {"type": "string"}}}
     changed = {"type": "object", "properties": {"path": {"type": "string"}, "enc": {"type": "string"}}}
     assert hash_input_schema(base) != hash_input_schema(changed)
+
+
+# --- DSE-1527: normative nesting bound (SPEC.md §4) ---------------------------
+
+
+def _nested_arrays(n: int) -> list:
+    """``n`` enclosing arrays around an empty array: the innermost ``[]`` sits at depth ``n``."""
+    v: list = []
+    for _ in range(n):
+        v = [v]
+    return v
+
+
+def test_canon_accepts_depth_512_and_refuses_513():
+    from mcp_warden.hashing import MAX_JSON_DEPTH, DepthError
+
+    assert MAX_JSON_DEPTH == 512
+    ok = _nested_arrays(MAX_JSON_DEPTH)
+    assert canon(ok) == b"[" * (MAX_JSON_DEPTH + 1) + b"]" * (MAX_JSON_DEPTH + 1)
+    with pytest.raises(DepthError):
+        canon(_nested_arrays(MAX_JSON_DEPTH + 1))
+    # A leaf counts, and objects count like arrays: "leaf" ends up at depth 513.
+    deep_obj: dict = {"k": "leaf"}
+    for _ in range(MAX_JSON_DEPTH):
+        deep_obj = {"k": deep_obj}
+    with pytest.raises(DepthError):
+        canon(deep_obj)
+
+
+def test_depth_error_is_a_value_error_raised_before_serialization():
+    from mcp_warden.hashing import DepthError, check_depth
+
+    assert issubclass(DepthError, ValueError)
+    with pytest.raises(DepthError, match="nesting deeper than 512"):
+        check_depth(_nested_arrays(600), where="probe")
+    # Iterative: far past any recursion limit, still a clean DepthError.
+    check = _nested_arrays(5000)
+    with pytest.raises(DepthError):
+        check_depth(check)

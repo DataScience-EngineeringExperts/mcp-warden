@@ -17,6 +17,8 @@ from typing import Any
 
 from . import SCHEMA_VERSION, __version__
 from .hashing import (
+    DepthError,
+    check_depth,
     hash_arguments,
     hash_description,
     hash_input_schema,
@@ -324,6 +326,13 @@ def read_lock(path: str | Path) -> WardenLock:
         raw = json.loads(p.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
         raise ValueError(f"lock file {p} is not valid JSON: {exc}") from exc
+    try:
+        # SPEC.md §4 nesting bound — checked before validation so a hostile document is
+        # refused by an explicit, iterative check rather than by wherever the interpreter
+        # happens to run out of stack (DSE-1527).
+        check_depth(raw, where=f"lock file {p}")
+    except DepthError as exc:
+        raise ValueError(f"lock file {p} exceeds the nesting bound: {exc}") from exc
     try:
         return WardenLock.model_validate(raw)
     except Exception as exc:

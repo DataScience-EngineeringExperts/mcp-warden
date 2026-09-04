@@ -8,7 +8,7 @@
  * what drifted — with the same rule ids, severities and ordering as the Python
  * reference. Conformance is defined by the corpus under `vectors/`.
  *
- * Fail-closed contract: `verify()` ALWAYS runs the strict reader (`parseLock`) on
+ * Fail-closed contract: `verify()` throws `LockFormatError` and nothing else. It ALWAYS runs the strict reader (`parseLock`) on
  * the lock it is given — a document a conforming reader must reject (missing
  * `overall_digest`, a `schema_version` above the level this package implements,
  * malformed entries, excessive nesting) throws `LockFormatError` and can never
@@ -16,7 +16,7 @@
  */
 
 import { computeDrift, type DriftItem } from "./drift.js";
-import { buildFromSurface, parseLock, type Surface } from "./lock.js";
+import { buildFromSurface, LockFormatError, parseLock, type Surface } from "./lock.js";
 
 export { canonicalize, hasUnpairedSurrogate, JcsError } from "./jcs.js";
 export { canon, hashArguments, hashDescription, hashInputSchema, hashValue, SHA256_PREFIX } from "./digest.js";
@@ -57,12 +57,19 @@ export function digest(surface: Surface): string {
  * Compare an observed surface against a baseline lock document.
  *
  * `lock` is the raw JSON document (or a `Lock` previously returned by `parseLock`,
- * which re-validates identically). Throws `LockFormatError` if the document is not
- * a structurally valid lock at a level this package implements — fail closed.
+ * which re-validates identically). Throws `LockFormatError` — and ONLY `LockFormatError`
+ * — if the document is not a structurally valid lock at a level this package implements,
+ * or if the observed surface cannot be canonicalized (unpaired surrogate, nesting past
+ * `MAX_JSON_DEPTH`). A `JcsError`/`DepthError` never escapes this entry point (DSE-1527).
  */
 export function verify(lock: unknown, surface: Surface): VerifyResult {
   const baseline = parseLock(lock);
-  const current = buildFromSurface(surface);
-  const findings = computeDrift(baseline, current);
-  return { ok: findings.length === 0, findings, observed_digest: current.overall_digest };
+  try {
+    const current = buildFromSurface(surface);
+    const findings = computeDrift(baseline, current);
+    return { ok: findings.length === 0, findings, observed_digest: current.overall_digest };
+  } catch (e) {
+    if (e instanceof LockFormatError) throw e;
+    throw new LockFormatError(`observed surface is not verifiable: ${(e as Error).message}`);
+  }
 }

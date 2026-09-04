@@ -26,6 +26,36 @@ logger = logging.getLogger("mcp_warden.hashing")
 #: Public prefix for every digest emitted by mcp-warden.
 SHA256_PREFIX = "sha256:"
 
+#: Normative nesting bound (docs/SPEC.md §4): the document root is depth 0 and every
+#: enclosing array/object adds one; an element at depth > MAX_JSON_DEPTH MUST be refused,
+#: never hashed. ``@mcp-warden/lock`` enforces the same constant. Without an explicit
+#: check the reference silently accepted 513–~990 levels (up to the interpreter's
+#: recursion limit) while the TypeScript verifier refused them — two conforming
+#: implementations disagreeing on one document (DSE-1527).
+MAX_JSON_DEPTH = 512
+
+
+class DepthError(ValueError):
+    """A JSON value nests deeper than :data:`MAX_JSON_DEPTH` (fail closed)."""
+
+
+def check_depth(value: Any, *, where: str = "value") -> None:
+    """Raise :class:`DepthError` if ``value`` nests deeper than :data:`MAX_JSON_DEPTH`.
+
+    Iterative (explicit stack) so the check itself can never trip the interpreter's
+    recursion limit on the very input it exists to refuse. Leaves count: a scalar at
+    depth 513 is as much a violation as a container there.
+    """
+    stack: list[tuple[Any, int]] = [(value, 0)]
+    while stack:
+        node, depth = stack.pop()
+        if depth > MAX_JSON_DEPTH:
+            raise DepthError(f"{where}: nesting deeper than {MAX_JSON_DEPTH} levels")
+        if isinstance(node, dict):
+            stack.extend((child, depth + 1) for child in node.values())
+        elif isinstance(node, (list, tuple)):
+            stack.extend((child, depth + 1) for child in node)
+
 
 def hash_bytes(payload: bytes, *, domain: DigestDomain) -> str:
     """Hash exact bytes under a closed content-envelope digest domain."""
@@ -48,8 +78,11 @@ def canon(value: Any) -> bytes:
         The canonical UTF-8 byte string.
 
     Raises:
+        DepthError: If ``value`` nests deeper than :data:`MAX_JSON_DEPTH` (SPEC.md §4);
+            a ``ValueError`` subclass, raised before any serialization is attempted.
         ValueError: If ``value`` is not JSON-serializable under JCS.
     """
+    check_depth(value)
     try:
         return rfc8785.dumps(value)
     except Exception as exc:  # rfc8785 raises a variety of types on bad input

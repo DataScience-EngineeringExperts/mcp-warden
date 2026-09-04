@@ -18,7 +18,7 @@ import pytest
 
 from mcp_warden.drift import compute_drift
 from mcp_warden.hashing import canon, hash_value
-from mcp_warden.lockfile import build_lock
+from mcp_warden.lockfile import build_lock, read_lock
 from mcp_warden.models import (
     CapturedPrompt,
     CapturedResource,
@@ -108,17 +108,20 @@ def test_drift(entry):
 
 
 @pytest.mark.parametrize("entry", _by_kind("malformed"))
-def test_malformed_is_rejected(entry):
+def test_malformed_is_rejected(entry, tmp_path):
     v = _load(entry)
     assert v["expect"] == {"error": True}
     if "input_json" in v:
         # A JSON value the canonicalizer MUST reject: it parses, but is not Unicode text
-        # (unpaired surrogate) or nests past the recursion bound. Either the parser or
-        # canon() refusing it is a rejection; a wrong digest is not.
+        # (unpaired surrogate) or nests past the §4 bound. Either the parser or canon()
+        # refusing it is a rejection; a wrong digest is not.
         with pytest.raises((ValueError, RecursionError)):
             canon(json.loads(v["input_json"]))
         return
-    # json.JSONDecodeError and pydantic's ValidationError are both ValueError subclasses.
-    with pytest.raises((ValueError, TypeError)):
-        doc = json.loads(v["lock_text"]) if "lock_text" in v else v["lock"]
-        WardenLock.model_validate(doc)
+    # Through the PUBLIC reader, exactly as a consumer hits it (vectors/README.md step 4):
+    # read_lock() must refuse. JSON errors, schema errors (pydantic ValidationError) and
+    # the nesting bound (DepthError) all surface as ValueError from read_lock.
+    path = tmp_path / "warden.lock"
+    path.write_text(v["lock_text"] if "lock_text" in v else json.dumps(v["lock"]), encoding="utf-8")
+    with pytest.raises(ValueError):
+        read_lock(path)
