@@ -69,94 +69,129 @@ def _safe_url(url: str) -> str:
     return f"{scheme}://{_host_of(url)}"
 
 
-#: An env/secret-manager reference anywhere in the value: ``${TOKEN}``, ``$TOKEN``,
-#: or ``{{ secret }}``.
-#: ``${VAR}``, ``${VAR:-default}``/``${VAR:?msg}`` (shell expansion with a default),
-#: ``$VAR``, ``{{ secret }}``, and ``%VAR%`` (Windows).
+#: An env/secret-manager reference anywhere in the value: ``${TOKEN}``,
+#: ``${TOKEN:-default}`` / ``${TOKEN:?msg}`` (shell expansion forms, one level of
+#: nesting), ``$TOKEN``, ``{{ secret }}``, and ``%TOKEN%`` (Windows).
 _SECRET_REF = re.compile(
-    r"\$\{[A-Za-z_][A-Za-z0-9_]*(?:[:\-+?][^}]*)?\}"
+    r"\$\{[A-Za-z_][A-Za-z0-9_]*(?:[:\-+?](?:[^{}]|\$\{[^{}]*\})*)?\}"
     r"|\$[A-Za-z_][A-Za-z0-9_]*"
     r"|\{\{[^}]+\}\}"
     r"|%[A-Za-z_][A-Za-z0-9_]*%"
 )
+#: ``${VAR:-D}`` / ``${VAR:+D}`` (colon optional): D is *substituted text* and is a
+#: literal unless it is empty, itself a reference, or itself a placeholder (CSO F1 —
+#: ``${TOKEN:-aB3x…}`` is a committed credential wearing a reference). ``${VAR:?msg}``
+#: names an error message, never a value, and stays a plain reference.
+_REF_WITH_DEFAULT = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*:?[-+]((?:[^{}]|\$\{[^{}]*\})*)\}")
+
+#: A path segment / URI segment that is itself token-shaped: mixed-case
+#: alphanumeric, 16+ chars. ``op://…/aB3xK9mQ7pL2wR5tY8vN`` and
+#: ``~/.config/aB3xK9mQ7pL2wR5tY8vN`` carry the secret; they do not point at it.
+_TOKENISH_SEGMENT = re.compile(r"(?=.*[a-z])(?=.*[A-Z])[A-Za-z0-9]{16,}")
+_PATH_SEGMENT = re.compile(r"[A-Za-z0-9._~-]+")
 
 #: Secret-manager reference URIs — the value names where the secret lives rather
-#: than carrying it. Flagging these punishes operators for doing it right.
+#: than carrying it. Requires a ``/``-separated path of >= 2 segments after the
+#: scheme, none of them token-shaped (CSO F5).
 _SECRET_URI = re.compile(
-    r"^(?:op|vault|awssm|gcpsm|azkv|secretref|keyring|pass)://\S+$", re.IGNORECASE
+    r"^(?:op|vault|awssm|gcpsm|azkv|secretref|keyring|pass)://(\S+)$", re.IGNORECASE
 )
+#: A filesystem path pointing at a credential file. Every branch (``~/``, ``./``,
+#: ``../``, ``/``, ``C:\``) needs >= 2 path-safe segments, none token-shaped, so a
+#: base64 blob that happens to start with ``/`` stays a literal (CSO F5).
+_PATH_PREFIX = re.compile(r"^(?:~/|\./|\.\./|/|[A-Za-z]:[\\/])")
 
-#: A filesystem path pointing at a credential file. The path is not the secret.
-#: A bare absolute path needs >= 2 directory segments of path-safe characters:
-#: a base64 blob that happens to start with ``/`` (``/9j/4AAQ...``) is a literal,
-#: not a path, and must stay a finding.
-_PATH_LIKE = re.compile(
-    r"^(?:~/|\./|\.\./|[A-Za-z]:\\)[^\s]*$"
-    r"|^/(?:[A-Za-z0-9._-]+/){2,}[A-Za-z0-9._-]+$"
-)
 
-#: Obvious fill-me-in values shipped in template/example configs. These are NOT
-#: committed credentials and reporting them as such is the noise that gets a gate
-#: switched off — 74% of the WRD-AUTH-TOKEN-IN-CONFIG hits in a 463-config public
-#: corpus were this, which is why they get their own low-severity rule.
-#:
-#: Matching is on whole tokens (the value split on non-alphanumerics), never on
-#: raw substrings: ``adherenceTokenValue`` does not match ``here`` and
-#: ``fillmoreStreetPass`` does not match ``fill``. Anything a vendor pattern or the
-#: entropy heuristic recognises as a real secret is never downgraded (see
-#: :func:`_scan_mapping_for_literals`).
+def _segments_are_a_locator(rest: str) -> bool:
+    segs = [seg for seg in re.split(r"[\\/]+", rest) if seg]
+    if len(segs) < 2:
+        return False
+    return all(_PATH_SEGMENT.fullmatch(seg) and not _TOKENISH_SEGMENT.fullmatch(seg) for seg in segs)
+
+
+def _is_secret_locator(v: str) -> bool:
+    """A secret-manager URI or credential-file path: names where a secret lives."""
+    m = _SECRET_URI.match(v)
+    if m:
+        return _segments_are_a_locator(m.group(1).split("#", 1)[0])
+    m = _PATH_PREFIX.match(v)
+    return bool(m) and _segments_are_a_locator(v[m.end():])
+
+
+#: Strong placeholder tokens — a value is a fill-me-in only if at least one of
+#: these is present as a WHOLE token and every other token is filler (CSO F2).
 _PLACEHOLDER_TOKENS = frozenset({
     "your", "yours", "placeholder", "example", "changeme", "todo", "tbd", "here",
     "insert", "replace", "dummy", "sample", "fake", "fill", "redacted",
     "abc123", "12345", "123456", "1234567890",
 })
+#: Filler that may accompany a strong token without making the value a secret:
+#: the thing being named (``key``, ``token``), connectives, and vendor names.
+_FILLER_TOKENS = frozenset({
+    "key", "api", "apikey", "token", "secret", "password", "pass", "access", "auth",
+    "id", "value", "string", "goes", "me", "in", "the", "a", "an", "to", "with", "my",
+    "name", "bearer", "github", "gitlab", "openai", "anthropic", "slack", "aws",
+    "google", "azure", "notion", "stripe", "brave", "tavily", "exa", "firecrawl",
+})
 #: Multi-token placeholder phrases, matched as whole consecutive tokens.
 _PLACEHOLDER_PHRASES = ("change-me", "goes-here", "add-your", "put-your", "api-key-here")
 #: Whole-value placeholders that do not tokenise usefully.
-_PLACEHOLDER_EXACT = frozenset({"n/a", "none", "null", "-", "...", "sk-..."})
+_PLACEHOLDER_EXACT = frozenset({"n/a", "none", "null", "-"})
+#: Default credentials are real, working secrets (CSO F4). They never take the
+#: short-bare-word downgrade; ``changeme`` is a strong placeholder token instead.
+_DEFAULT_CREDENTIALS = frozenset({
+    "changeit", "raspberry", "postgres", "grafana", "elastic", "letmein", "guest",
+    "toor", "admin", "password", "root", "secret", "test",
+})
 _TOKEN_SPLIT = re.compile(r"[^a-z0-9]+")
 _X_RUN = re.compile(r"^x{3,}$")
-#: ``<token>`` / ``<your-api-key>`` — an angle-bracketed slot anywhere in the value.
+#: ``<token>`` / ``<your-api-key>`` — an angle-bracketed slot.
 _ANGLE_SLOT = re.compile(r"<[^<>]{1,64}>")
-#: A short bare word: purely alphabetic with ``-``/``_`` and no digits or other
-#: punctuation (``admin``, ``basic``, ``api-key``). A scheme/type token, not a
-#: credential — real secrets carry entropy, length, or both. ``hunter2!`` and
-#: ``p@ssword`` are NOT matched (digit / punctuation) and stay high severity.
+#: A short bare word: purely alphabetic with ``-``/``_``, no digits or other
+#: punctuation (``basic``, ``api-key``). A scheme/type token, not a credential.
+#: ``hunter2!`` and ``p@ssword`` are NOT matched and stay high severity.
 _SHORT_BARE_WORD = re.compile(r"^[a-z][a-z_-]{0,10}$")
+#: Auth scheme words that may sit beside a reference or a slot and still count as
+#: "no literal here". A closed set (CSO F3): any other alphabetic run — including
+#: a short alphabetic secret such as ``correcthorse`` — is a literal.
+_SCHEME_WORDS = frozenset({"bearer", "token", "basic", "apikey", "negotiate", "digest"})
+
+
+def _only_scheme_words(text: str) -> bool:
+    return all(tok.lower() in _SCHEME_WORDS for tok in text.split())
 
 
 def _looks_like_placeholder(value: str) -> bool:
-    """True when the value is an obvious fill-me-in, not a real credential."""
+    """True when the value is an obvious fill-me-in, not a real credential.
+
+    Bounded on purpose (CSO F2): a value of 16+ characters that contains a digit
+    and any non-placeholder token is never downgraded, whatever else it says.
+    """
     v = value.strip().lower()
     if not v:
         return False
-    if v in _PLACEHOLDER_EXACT or "..." in v:
-        return True
-    if _ANGLE_SLOT.search(v):
-        # A bracketed slot counts only when nothing but scheme words sits around
-        # it: ``Bearer <token>`` is a template, ``Bearer <token> aB3x…`` is not.
-        remainder = _ANGLE_SLOT.sub(" ", v)
-        if all(_REF_SURROUND_OK.match(tok) for tok in remainder.split()):
-            return True
     tokens = [t for t in _TOKEN_SPLIT.split(v) if t]
+    strong = [t for t in tokens if t in _PLACEHOLDER_TOKENS or _X_RUN.match(t)]
+    if len(v) >= 16 and any(ch.isdigit() for ch in v) and len(strong) < len(tokens):
+        return False
+    if v in _PLACEHOLDER_EXACT or v == "..." or v.endswith("..."):
+        return True
+    if _ANGLE_SLOT.search(v) and _only_scheme_words(_ANGLE_SLOT.sub(" ", v)):
+        return True
     if not tokens:
         return False
-    if tokens[0] == "my" and len(tokens) > 1:
-        return True
-    if any(t in _PLACEHOLDER_TOKENS or _X_RUN.match(t) for t in tokens):
-        return True
     joined = "-" + "-".join(tokens) + "-"
-    if any(f"-{phrase}-" in joined for phrase in _PLACEHOLDER_PHRASES):
+    phrase_tokens: set[str] = set()
+    for phrase in _PLACEHOLDER_PHRASES:
+        if f"-{phrase}-" in joined:
+            phrase_tokens.update(phrase.split("-"))
+    filler_ok = all(
+        t in _PLACEHOLDER_TOKENS or t in _FILLER_TOKENS or t in phrase_tokens or _X_RUN.match(t)
+        for t in tokens
+    )
+    if filler_ok and (strong or phrase_tokens or (tokens[0] == "my" and len(tokens) > 1)):
         return True
-    return bool(_SHORT_BARE_WORD.match(v))
-
-
-#: What may sit around a reference and still count as "no literal here": an auth
-#: scheme word. Real schemes (Bearer, Token, Basic, ApiKey, Negotiate) are short
-#: and purely alphabetic — deliberately strict, because anything longer or
-#: containing digits/punctuation is far more likely to BE the credential than to
-#: name the scheme carrying it.
-_REF_SURROUND_OK = re.compile(r"^[A-Za-z]{1,12}$")
+    return bool(_SHORT_BARE_WORD.match(v)) and v not in _DEFAULT_CREDENTIALS
 
 
 def _looks_like_secret_ref(value: str) -> bool:
@@ -168,20 +203,23 @@ def _looks_like_secret_ref(value: str) -> bool:
     as a committed credential is a false positive that gets the whole gate
     switched off.
 
-    Conservative by construction: a reference must be present, and once every
-    reference is removed, whatever remains may only be scheme words and
-    separators. ``Bearer ${T}`` passes; ``Bearer abc123 ${T}`` does not, because
-    a real literal is still sitting there next to the reference.
+    Conservative by construction: a reference must be present; once every
+    reference is removed, whatever remains may only be auth scheme words
+    (``Bearer ${T}`` passes; ``Bearer abc123 ${T}`` and ``correcthorse ${T}`` do
+    not); and a ``${VAR:-default}`` counts only when the default is empty, itself
+    a reference, or itself a placeholder.
     """
     v = value.strip()
-    if _SECRET_URI.match(v) or _PATH_LIKE.match(v):
-        # `op://vault/item/field` or `~/.config/app/keys.json` — the value says
-        # where the secret lives, it does not carry it.
+    if _is_secret_locator(v):
         return True
     if not _SECRET_REF.search(v):
         return False
+    for default in _REF_WITH_DEFAULT.findall(v):
+        d = default.strip()
+        if d and not _SECRET_REF.fullmatch(d) and not _looks_like_placeholder(d):
+            return False
     remainder = _SECRET_REF.sub(" ", v)
-    return all(_REF_SURROUND_OK.match(tok) for tok in remainder.split())
+    return _only_scheme_words(remainder)
 
 
 def _server_has_auth(server: dict[str, Any]) -> bool:

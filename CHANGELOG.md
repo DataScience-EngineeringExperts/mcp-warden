@@ -36,11 +36,15 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
   (low), not committed credentials.** Running the audit over a 463-config public
   corpus showed 74 % of `WRD-AUTH-TOKEN-IN-CONFIG` hits were fill-me-ins
   (`<your-api-key>`, `YOUR KEY GOES HERE`, `changeme`, `xxx`) — the false highs that
-  get a gate switched off. The downgrade cannot hide a real secret: any value the
-  vendor patterns or entropy heuristic recognise stays high; placeholder words match
-  whole tokens, never substrings (`adherenceTokenValue` is not `here`); the
-  short-bare-word rule rejects digits and punctuation (`hunter2!` stays high); and
-  a bracketed slot beside a literal (`Bearer <token> aB3x…`) is a credential.
+  get a gate switched off. The downgrade is bounded, and the bound is stated in
+  [`docs/AGENT_GATES.md`](docs/AGENT_GATES.md): vendor-pattern and entropy hits
+  (24+ chars at >= 4.0 bits/char) are classified as credentials before it runs;
+  below that, a value is a placeholder only when every token is a placeholder or
+  filler word, a 16+-char value with a digit and any real token is never
+  downgraded, only a closed scheme set may sit beside a reference,
+  `${VAR:-default}` counts only for an empty/reference/placeholder default,
+  locators need two segments with none token-shaped, and default credentials
+  (`admin`, `letmein`, …) stay high.
 - **Reference forms found in the same corpus are no longer flagged as literals:**
   `${VAR:-default}` / `${VAR:?msg}` shell expansions, `%VAR%` (Windows),
   secret-manager URIs (`op://`, `vault://`, `awssm://`, `gcpsm://`, `azkv://`,

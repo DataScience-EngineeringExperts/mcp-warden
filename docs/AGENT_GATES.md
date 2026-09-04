@@ -148,19 +148,36 @@ false, and false highs are what get a gate switched off. They are now
 `WRD-AUTH-PLACEHOLDER-SECRET` (low): a shipped config that cannot work is still a
 finding, just not a leak.
 
-The downgrade is built so it cannot hide a real secret:
+**The bound, stated honestly.** The downgrade is guaranteed not to hide a value
+the `WRD-SEC-*` vendor patterns match, or one the entropy heuristic catches
+(**24+ characters at >= 4.0 bits/char, >= 80 % alphanumeric**) — those are
+reported as credentials before the placeholder logic runs. A *shorter* or
+*low-entropy* secret (a lowercase hex key, a passphrase) is outside that guard,
+and for those the placeholder heuristic is the only line. It is bounded as
+follows, each bound pinned by a test with the concrete bypass string:
 
-- **Vendor scan first.** Any value the `WRD-SEC-*` vendor patterns or the entropy
-  heuristic recognise is reported as a credential regardless of what else it
-  contains — a `ghp_…` token that happens to spell `example` stays high.
-- **Whole-token matching.** Placeholder words match whole tokens of the value
-  (split on non-alphanumerics), never substrings: `adherenceTokenValue` is not
-  `here`, `fillmoreStreetPass` is not `fill`.
-- **Short bare words only.** The "scheme/type word" rule (`admin`, `basic`,
-  `api-key`) accepts at most 11 purely alphabetic characters plus `-`/`_`. A digit
-  or any other punctuation (`hunter2!`, `p@ssword`) disqualifies the value.
-- **Bracketed slots must stand alone.** `Bearer <token>` is a template;
-  `Bearer <token> aB3x…` — a literal sitting beside the slot — is a credential.
+- **Whole-token matching, every token accounted for.** A value is a placeholder
+  only if at least one *strong* placeholder token (`your`, `example`, `changeme`,
+  `xxx`, …) is present as a whole token **and every other token is filler**
+  (`key`, `token`, `goes`, a vendor name). One placeholder word does not launder
+  the rest: `example-aB3xK9` is a credential. Hard floor: a value of 16+
+  characters containing a digit and any non-placeholder token is never
+  downgraded.
+- **Closed scheme set.** Only `Bearer`, `Token`, `Basic`, `ApiKey`, `Negotiate`,
+  `Digest` may sit beside a reference or a `<slot>` — `correcthorse ${TOKEN}` is
+  a literal.
+- **`${VAR:-default}` is a reference only when the default is empty, itself a
+  reference, or itself a placeholder.** `${TOKEN:-aB3x…}` is a committed
+  credential wearing a reference; `${VAR:?msg}` stays a reference.
+- **Locators need >= 2 segments and no token-shaped segment** (mixed-case
+  alphanumeric, 16+ chars): `op://Private/GitHub/token` and
+  `~/.config/app/keys.json` are references; `op://aB3x…`, `~/aB3x…`, `/9j/4AAQ…`
+  are literals.
+- **Default credentials are secrets.** `admin`, `password`, `letmein`, `changeit`,
+  `postgres`, `root`, … never take the short-bare-word downgrade. The rule that
+  does (`basic`, `api-key`) accepts at most 11 purely alphabetic characters plus
+  `-`/`_`; a digit or other punctuation (`hunter2!`) disqualifies.
+- **`...` is anchored** — the whole value or its tail (`sk-...`), never a substring.
 
 ### Usage
 
