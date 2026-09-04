@@ -42,6 +42,7 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
   `mcp.json`). `safe_text` also neutralises the soft hyphen, `U+2060`–`U+2064`, the BOM,
   and the Unicode Tags block. `docs/DOCTOR.md` now documents `--config` resolved-path
   de-duplication / explicit-replaces-discovered and the `safe_text` caveat on printed URLs.
+## [1.2.0] — 2026-09-04
 
 ### Added
 
