@@ -199,7 +199,13 @@ def test_placeholder_finding_is_redacted_like_every_other_snippet():
     assert "YOUR-KEY-GOES-HERE" not in f.snippet and "…" in f.snippet
 
 
-REAL = "aB3xK9mQ7pL2wR5tY8vN4jH6"  # 24 mixed-case alnum: token-shaped, no vendor prefix
+# Sub-threshold literals: NOT caught by the vendor patterns or the entropy guard
+# (24 chars at >= 4.0 bits/char), so every assertion below exercises the
+# placeholder/reference logic itself and fails on the pre-fix code.
+LIT = "9f8e7d6c5b4a"                    # 12-char lowercase hex
+LIT24 = "9f8e7d6c5b4a3e2d1c0b9a8f"      # 24-char lowercase hex, H ~ 3.92 bits/char
+# Entropy-path control: 24 mixed-case alnum, H >= 4.0 — caught by checks_secret.
+REAL = "aB3xK9mQ7pL2wR5tY8vN4jH6"
 
 
 def _auth(value):
@@ -211,25 +217,38 @@ def _is_high(value):
     return "WRD-AUTH-TOKEN-IN-CONFIG" in rules and "WRD-AUTH-PLACEHOLDER-SECRET" not in rules
 
 
+def _is_low(value):
+    return "WRD-AUTH-PLACEHOLDER-SECRET" in _auth(value)
+
+
 def test_f1_shell_default_is_a_literal_unless_empty_reference_or_placeholder():
-    # CSO F1: `${VAR:-D}` substitutes D — a secret hidden as the default is a credential.
-    assert _is_high("${TOKEN:-" + REAL + "}")
-    assert _is_high("${TOKEN-" + REAL + "}")
-    assert _is_high("${TOKEN:+" + REAL + "}")
+    # CSO F1/N1/N2: `${VAR:-D}` substitutes D — a secret hidden as the default is a
+    # credential, at any nesting depth, and `:=` is an assignment form too.
+    assert _is_high("${TOKEN:-" + LIT + "}")
+    assert _is_high("${TOKEN-" + LIT + "}")
+    assert _is_high("${TOKEN:+" + LIT + "}")
+    assert _is_high("${TOKEN:=hunter2!}")
+    assert _is_high("${T:-${U:-hunter2!}}")
+    assert _is_high("${T:-${U:-" + LIT + "}}")
     assert _is_high("Bearer ${TOKEN:-hunter2!}")
-    for ref in ("${TOKEN:-}", "${TOKEN:-${OTHER}}", "${TOKEN:-$OTHER}", "${TOKEN:?required}", "${TOKEN?required}"):
+    for ref in ("${TOKEN:-}", "${TOKEN:-${OTHER}}", "${TOKEN:-$OTHER}", "${TOKEN:?required}",
+                "${TOKEN?required}", "${T:-${U:-}}", "${T:-${U:-changeme}}"):
         assert not _auth(ref), ref
     assert not _auth("${TOKEN:-changeme}")  # placeholder default -> still a reference
 
 
 def test_f2_placeholder_needs_every_token_to_be_filler_and_has_a_hard_floor():
     # CSO F2: one placeholder word does not launder the rest of the value.
-    assert _is_high("example-aB3xK9")             # < 16 chars, still not all filler
-    assert _is_high("your-key-" + REAL)           # >= 16, digit, non-placeholder token -> floor
-    assert _is_high("placeholder" + REAL)         # strong token glued to a real one
-    assert _is_high("YOUR KEY GOES HERE 12345 " + REAL)
-    assert "WRD-AUTH-PLACEHOLDER-SECRET" in _auth("your-github-token")
-    assert "WRD-AUTH-PLACEHOLDER-SECRET" in _auth("YOUR KEY GOES HERE")
+    assert _is_high("example-" + LIT)             # strong token + a real one
+    assert _is_high("your-key-" + LIT)
+    assert _is_high("placeholder" + LIT)
+    assert _is_high("YOUR KEY GOES HERE 12345 " + LIT)
+    # CSO N5: the floor applies only when a non-filler token is present — an all-
+    # filler value stays a placeholder however long or digit-laden it is.
+    assert _is_low("your-api-key-goes-here-12345")
+    assert _is_low("YOUR_API_KEY_1234567890")
+    assert _is_low("your-github-token")
+    assert _is_low("YOUR KEY GOES HERE")
 
 
 def test_f3_only_a_closed_set_of_scheme_words_may_sit_beside_a_reference():
@@ -239,47 +258,60 @@ def test_f3_only_a_closed_set_of_scheme_words_may_sit_beside_a_reference():
     assert _is_high("correcthorse <token>")
     for scheme in ("Bearer", "Token", "Basic", "ApiKey", "Negotiate", "Digest", "bearer"):
         assert not _auth(scheme + " ${TOKEN}"), scheme
-        assert "WRD-AUTH-PLACEHOLDER-SECRET" in _auth(scheme + " <token>"), scheme
+        assert _is_low(scheme + " <token>"), scheme
 
 
-def test_f4_default_credentials_are_never_downgraded():
-    # CSO F4: `admin` / `letmein` are working secrets, not template slots.
-    for cred in ("changeit", "raspberry", "postgres", "grafana", "elastic", "letmein",
-                 "guest", "toor", "admin", "password", "root", "secret", "test"):
+def test_f4_short_bare_words_are_placeholders_only_from_a_closed_allowlist():
+    # CSO F4/N4: the downgrade is an allowlist of scheme/type slots. Everything else
+    # — default and dictionary passwords included — is a working secret.
+    for cred in ("changeit", "raspberry", "postgres", "grafana", "elastic", "letmein", "guest",
+                 "toor", "admin", "password", "root", "secret", "test", "qwerty", "welcome",
+                 "dragon", "iloveyou", "hunter", "monkey"):
         assert _is_high(cred), cred
-    assert "WRD-AUTH-PLACEHOLDER-SECRET" in _auth("changeme")
+    for slot in ("basic", "Bearer", "token", "apikey", "api-key", "api_key", "digest", "negotiate", "oauth", "none"):
+        assert _is_low(slot), slot
+    assert _is_low("changeme")  # strong placeholder token, not the allowlist
 
 
 def test_f5_locators_need_two_segments_and_no_token_shaped_segment():
-    # CSO F5: a URI/path that CARRIES the secret is not a locator.
-    for lit in ("op://" + REAL, "vault://" + REAL, "op://a/" + REAL, "~/" + REAL, "~/.config/" + REAL,
-                "/etc/" + REAL, "/a/b/" + REAL, "./" + REAL, "C:\\" + REAL, "C:\\Users\\" + REAL,
-                "/9j/4AAQSkZJRgABAQAAAQABAAD", "/abc+def=="):
+    # CSO F5/N3: a URI/path that CARRIES the secret is not a locator. Token-shaped
+    # is case-blind: 20+ alphanumerics, or 16+ at >= 3.5 bits/char.
+    for lit in ("op://" + LIT, "vault://" + LIT, "~/" + LIT, "/etc/" + LIT24, "./" + LIT, "C:\\" + LIT,
+                "op://a/" + LIT24, "~/.config/" + LIT24, "/a/b/" + LIT24, "C:\\Users\\" + LIT24,
+                "~/.config/GHSAT0AAAAAABCDEFGHIJ", "/9j/4AAQSkZJRgABAQAAAQABAAD", "/abc+def=="):
         assert _is_high(lit), lit
     for loc in ("op://Private/GitHub/token", "vault://secret/data/app#key", "~/.config/app/keys.json",
-                "/etc/app/secrets/token", "./secrets/token.txt", "../keys/app.json", "C:\\Users\\me\\keys.json"):
+                "/etc/app/secrets/token", "./secrets/token.txt", "../keys/app.json", "C:\\Users\\me\\keys.json",
+                "~/.config/gcloud/application_default_credentials.json"):
         assert not _auth(loc), loc
 
 
 def test_f6_ellipsis_is_anchored():
-    # CSO F6: `...` marks a placeholder only as the whole value or its tail.
-    assert "WRD-AUTH-PLACEHOLDER-SECRET" in _auth("sk-...")
-    assert "WRD-AUTH-PLACEHOLDER-SECRET" in _auth("your-key...")
-    assert "WRD-AUTH-PLACEHOLDER-SECRET" in _auth("...")
-    assert _is_high("abc..." + REAL)
-    assert _is_high(REAL + "...x")
+    # CSO F6: `...` marks a placeholder only as the whole value or the tail of a
+    # stub / all-filler value — never a substring, never behind a real token.
+    assert _is_low("sk-...")
+    assert _is_low("your-key...")
+    assert _is_low("...")
+    assert _is_high("abc..." + LIT)
+    assert _is_high(LIT24 + "...")
+    assert _is_high(LIT + "...x")
 
 
 def test_negative_twin_every_benign_prefix_plus_a_real_token_is_still_high():
-    # For each shape the audit deliberately excuses, the same shape carrying a real
-    # token must still be a committed credential.
+    # For each shape the audit deliberately excuses, the same shape carrying a
+    # sub-threshold literal must still be a committed credential.
     for prefix, suffix in (
         ("Bearer ", ""), ("Token ", ""), ("Basic ", ""), ("ApiKey ", ""), ("Negotiate ", ""), ("Digest ", ""),
-        ("${TOKEN:-", "}"), ("<token> ", ""), ("op://Private/GitHub/", ""), ("~/.config/app/", ""),
-        ("your-key-", ""), ("changeme-", ""), ("example/", ""), ("", "..."), ("<your-api-key>", ""),
+        ("${TOKEN:-", "}"), ("${T:-${U:-", "}}"), ("<token> ", ""), ("op://Private/GitHub/", ""),
+        ("~/.config/app/", ""), ("your-key-", ""), ("changeme-", ""), ("example/", ""), ("", "..."),
+        ("<your-api-key>", ""),
     ):
-        value = prefix + REAL + suffix
+        value = prefix + LIT24 + suffix
         assert _is_high(value), value
+    # Entropy-path control: the same shapes with a >= 4.0 bits/char token are caught
+    # by checks_secret before the placeholder logic runs.
+    assert _is_high("op://Private/GitHub/" + REAL)
+    assert "WRD-SEC-ENTROPY" in _auth("your-key-" + REAL)
 
 
 def test_bearer_prefixed_reference_is_not_a_literal():

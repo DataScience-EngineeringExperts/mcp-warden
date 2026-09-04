@@ -42,9 +42,11 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
   below that, a value is a placeholder only when every token is a placeholder or
   filler word, a 16+-char value with a digit and any real token is never
   downgraded, only a closed scheme set may sit beside a reference,
-  `${VAR:-default}` counts only for an empty/reference/placeholder default,
-  locators need two segments with none token-shaped, and default credentials
-  (`admin`, `letmein`, …) stay high.
+  `${VAR:-default}` / `${VAR:=default}` counts only for an empty, reference
+  (recursively) or placeholder default, locators need two segments with none
+  token-shaped (case-blind: 20+ alphanumerics or 16+ at >= 3.5 bits/char), and
+  short bare words are downgraded only from a closed allowlist of scheme/type
+  slots — `admin`, `qwerty`, `letmein` stay high.
 - **Reference forms found in the same corpus are no longer flagged as literals:**
   `${VAR:-default}` / `${VAR:?msg}` shell expansions, `%VAR%` (Windows),
   secret-manager URIs (`op://`, `vault://`, `awssm://`, `gcpsm://`, `azkv://`,

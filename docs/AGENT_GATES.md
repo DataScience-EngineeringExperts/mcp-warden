@@ -154,30 +154,35 @@ the `WRD-SEC-*` vendor patterns match, or one the entropy heuristic catches
 reported as credentials before the placeholder logic runs. A *shorter* or
 *low-entropy* secret (a lowercase hex key, a passphrase) is outside that guard,
 and for those the placeholder heuristic is the only line. It is bounded as
-follows, each bound pinned by a test with the concrete bypass string:
+follows, each bound pinned by a test with a sub-threshold bypass string:
 
 - **Whole-token matching, every token accounted for.** A value is a placeholder
   only if at least one *strong* placeholder token (`your`, `example`, `changeme`,
   `xxx`, …) is present as a whole token **and every other token is filler**
   (`key`, `token`, `goes`, a vendor name). One placeholder word does not launder
-  the rest: `example-aB3xK9` is a credential. Hard floor: a value of 16+
-  characters containing a digit and any non-placeholder token is never
-  downgraded.
+  the rest: `example-9f8e7d6c5b4a` is a credential. Hard floor: unless every
+  token is placeholder/filler, a value of 16+ characters containing a digit is
+  never downgraded (`YOUR_API_KEY_1234567890` is all filler and stays low).
 - **Closed scheme set.** Only `Bearer`, `Token`, `Basic`, `ApiKey`, `Negotiate`,
   `Digest` may sit beside a reference or a `<slot>` — `correcthorse ${TOKEN}` is
   a literal.
-- **`${VAR:-default}` is a reference only when the default is empty, itself a
-  reference, or itself a placeholder.** `${TOKEN:-aB3x…}` is a committed
-  credential wearing a reference; `${VAR:?msg}` stays a reference.
-- **Locators need >= 2 segments and no token-shaped segment** (mixed-case
-  alphanumeric, 16+ chars): `op://Private/GitHub/token` and
-  `~/.config/app/keys.json` are references; `op://aB3x…`, `~/aB3x…`, `/9j/4AAQ…`
-  are literals.
-- **Default credentials are secrets.** `admin`, `password`, `letmein`, `changeit`,
-  `postgres`, `root`, … never take the short-bare-word downgrade. The rule that
-  does (`basic`, `api-key`) accepts at most 11 purely alphabetic characters plus
-  `-`/`_`; a digit or other punctuation (`hunter2!`) disqualifies.
-- **`...` is anchored** — the whole value or its tail (`sk-...`), never a substring.
+- **`${VAR:-default}` / `${VAR:=default}` is a reference only when the default is
+  empty, itself a reference (recursively), or itself a placeholder.**
+  `${TOKEN:-9f8e7d6c5b4a}` and `${T:-${U:-hunter2!}}` are committed credentials
+  wearing a reference; `${VAR:?msg}` stays a reference.
+- **Locators need >= 2 segments and no token-shaped segment.** Token-shaped is
+  case-blind: an alphanumeric-only segment of 20+ characters, or 16+ at
+  >= 3.5 bits/char. `op://Private/GitHub/token`, `~/.config/app/keys.json` and
+  `~/.config/gcloud/application_default_credentials.json` are references;
+  `op://9f8e…`, `~/9f8e…`, `~/.config/9f8e7d6c5b4a3e2d1c0b9a8f`,
+  `~/.config/GHSAT0AAAAAABCDEFGHIJ` and `/9j/4AAQ…` are literals.
+- **Short bare words are an allowlist, not a heuristic.** Only `basic`, `bearer`,
+  `token`, `apikey`/`api-key`, `digest`, `negotiate`, `oauth`, `none` are treated
+  as scheme/type slots. Everything else — `admin`, `password`, `letmein`,
+  `qwerty`, `welcome`, `hunter2!` — is a working secret and stays high.
+- **`...` is anchored** — the whole value, or the tail of a short stub (`sk-...`)
+  or an all-filler value (`your-key...`); never a substring, never behind a real
+  token.
 
 ### Usage
 
