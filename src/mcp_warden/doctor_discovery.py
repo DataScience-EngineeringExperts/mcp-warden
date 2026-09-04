@@ -20,13 +20,13 @@ argv is byte-for-byte what the client launches.
 from __future__ import annotations
 
 import json
-import re
 import tomllib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .doctor_jsonc import strip_jsonc
 from .doctor_paths import (
     FMT_CLAUDE_JSON,
     FMT_CODEX_TOML,
@@ -53,9 +53,10 @@ MAX_CONFIG_BYTES = 8 * 1024 * 1024
 class ConfigSource:
     """One discovered (or explicitly given) map of MCP servers.
 
-    ``ambiguous`` names every server declared under *both* ``mcpServers`` and
-    ``servers`` with different definitions; the second definition is kept
-    under ``<name>#servers`` so both get audited and the collision is reported.
+    ``ambiguous`` holds the display keys of every entry declared under *both*
+    ``mcpServers`` and ``servers`` with different definitions; the ``servers``
+    copy is kept under a unique ``<name>#servers…`` key so both get audited and
+    the collision is reported on each.
     """
 
     client: str
@@ -84,55 +85,52 @@ class DoctorError(ValueError):
     """Raised on an unreadable or malformed config (fail closed, exit 2)."""
 
 
-# --- JSONC ---------------------------------------------------------------------
-
-_STRING = r'"(?:[^"\\]|\\.)*"'
-_COMMENT_PASS = re.compile(rf"{_STRING}|//[^\n]*|/\*.*?\*/", re.S)
-_COMMA_PASS = re.compile(rf"{_STRING}|,(\s*[}}\]])", re.S)
-
-
-def strip_jsonc(text: str) -> str:
-    """Remove ``//`` / ``/* */`` comments and trailing commas — outside strings only.
-
-    Both passes tokenise string literals first and return them verbatim, so a
-    ``"//"`` or ``"echo {a, }"`` inside a value is never touched. Anything the
-    tokeniser cannot pair degrades to invalid JSON, which fails closed.
-    """
-    no_comments = _COMMENT_PASS.sub(lambda m: m.group(0) if m.group(0)[0] == '"' else " ", text)
-    return _COMMA_PASS.sub(lambda m: m.group(0) if m.group(0)[0] == '"' else m.group(1), no_comments)
-
-
 # --- loaders -------------------------------------------------------------------
 
 
-def _servers_from_doc(doc: Any, where: str) -> tuple[dict[str, dict[str, Any]], tuple[str, ...]]:
-    """Extract ``{name: server}`` from a parsed document — the UNION of both keys.
+_MAPS = ("mcpServers", "servers")
 
-    A name present under both ``mcpServers`` and ``servers`` with an identical
-    body is loaded once. With *different* bodies both are kept — the second as
-    ``<name>#servers`` — and the name is returned as ambiguous: a decoy map is
-    itself a signal (``WRD-DOCTOR-AMBIGUOUS-SERVER``).
+
+def _servers_from_doc(doc: Any, where: str) -> tuple[dict[str, dict[str, Any]], tuple[str, ...]]:
+    """Extract ``{display: server}`` from a parsed document — the UNION of both maps.
+
+    Entries are keyed on ``(map, name)`` first; the display key is derived
+    afterwards so it is *unique by construction*: a name present under both
+    ``mcpServers`` and ``servers`` with an identical body is loaded once; with
+    *different* bodies both are kept — the ``servers`` copy as ``<name>#servers``,
+    with ``#`` appended until the key is free, so a server the user really named
+    ``x#servers`` is never overwritten. The returned ``ambiguous`` tuple holds the
+    **display keys** of every colliding entry (not a bare-name suffix rule), so a
+    user-named ``x#servers`` on its own is never flagged (CSO review of #98, N8).
     """
     if not isinstance(doc, dict):
         raise DoctorError(f"{where}: top-level config must be an object")
-    out: dict[str, dict[str, Any]] = {}
-    ambiguous: list[str] = []
-    for key in ("mcpServers", "servers"):
+    entries: dict[tuple[str, str], dict[str, Any]] = {}
+    for key in _MAPS:
         raw = doc.get(key)
         if raw is None:
             continue
         if not isinstance(raw, dict):
             raise DoctorError(f"{where}: {key} must be an object")
         for k, v in raw.items():
-            if not isinstance(v, dict):
-                continue
-            name = str(k)
-            if name in out:
-                if out[name] == v:
-                    continue
-                ambiguous.append(name)
-                name = f"{name}#servers"
-            out[name] = v
+            if isinstance(v, dict):
+                entries[(key, str(k))] = v
+    out: dict[str, dict[str, Any]] = {}
+    ambiguous: list[str] = []
+    for (map_key, name), body in entries.items():
+        other = entries.get((_MAPS[0], name)) if map_key == _MAPS[1] else None
+        if other is not None and other == body:
+            continue  # identical under both maps: one server, loaded once
+        display = name
+        if other is not None:
+            display = f"{name}#servers"
+            while display in out:
+                display += "#"
+            ambiguous += [name, display]  # mcpServers entries load first, under their own name
+        elif display in out:  # a real name colliding with a synthetic key: keep both
+            while display in out:
+                display += "#"
+        out[display] = body
     return out, tuple(ambiguous)
 
 
