@@ -30,6 +30,10 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.2.0] — 2026-09-04
+
 ### Added
 
 - **`doctor` — zero-config MCP posture scan (DSE-1516).** One command, no arguments:
