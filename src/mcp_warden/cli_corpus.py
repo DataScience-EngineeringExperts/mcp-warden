@@ -22,6 +22,7 @@ from .corpus import (
     RULE_UNVERIFIABLE,
     ConsensusResult,
     CorpusError,
+    _is_url,
     run_consensus,
 )
 from .corpus_coordinate import Coordinate, resolve_coordinate
@@ -93,6 +94,14 @@ def adjudicate(
     pin: dict[str, Attester], min_attesters: int, err_console: Console, *, require_consensus: bool = False,
 ) -> ConsensusResult:
     """Run the consensus verdict; exit 2 on any fail-closed corpus condition."""
+    if require_consensus and corpus_ref is None and not _is_url(corpus):
+        # CSO #106 L3: strict mode only closes the evidence-suppression gap together
+        # with a pinned tree; an unpinned checkout can be swapped between runs.
+        err_console.print(
+            "[yellow]warning:[/yellow] --require-consensus against an unpinned local corpus "
+            f"({escape(corpus)}): pass --corpus-ref <sha> so the tree cannot change between runs",
+            soft_wrap=True,
+        )
     try:
         result = run_consensus(
             observed_digest, coord, corpus, corpus_ref, pin, min_attesters, require_consensus=require_consensus

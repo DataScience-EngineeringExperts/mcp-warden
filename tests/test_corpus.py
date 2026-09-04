@@ -520,6 +520,7 @@ def test_git_argv_is_hardened_and_source_is_last(monkeypatch, tmp_path, _fresh_g
     assert Path(git_bin).is_absolute() and clone[0] == git_bin  # resolved once, absolute (N4)
     assert clone[1:1 + len(corpus._GIT_CONFIG)] == corpus._GIT_CONFIG
     assert "protocol.allow=never" in clone and "core.hooksPath=/dev/null" in clone
+    assert "credential.helper=" in clone and "core.askPass=" in clone  # CSO #106 L1
     assert clone[-3] == "--" and clone[-2] == "https://example.invalid/corpus.git"
     assert all(a[0] == git_bin and a[1:1 + len(corpus._GIT_CONFIG)] == corpus._GIT_CONFIG for a, _ in gits)
     for _a, k in seen:

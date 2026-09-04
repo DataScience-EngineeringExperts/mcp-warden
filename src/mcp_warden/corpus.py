@@ -74,6 +74,10 @@ _GIT_CONFIG: list[str] = [
     "-c", "core.hooksPath=/dev/null",
     "-c", "core.symlinks=false",
     "-c", "submodule.recurse=false",
+    # A ~/.gitconfig credential.helper / core.askPass is an arbitrary program git
+    # would exec on an https clone; empty values disable both (CSO #106 L1).
+    "-c", "credential.helper=",
+    "-c", "core.askPass=",
 ]
 #: Environment git may see. Everything else (proxies, GIT_* overrides, tokens)
 #: is dropped so the caller's environment cannot redirect the clone.

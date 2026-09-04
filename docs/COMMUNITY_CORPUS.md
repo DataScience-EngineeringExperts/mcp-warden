@@ -216,7 +216,9 @@ contains `@`, so the issuer is split at the last one. A URL must start with `htt
 `ssh://` or `git@` — `ext::`, `file://`, `git://`, scp shorthand and anything starting
 with `-` are refused before git runs. The clone is `git -c protocol.allow=never -c
 protocol.https.allow=always -c protocol.ssh.allow=always -c core.hooksPath=/dev/null -c
-core.symlinks=false -c submodule.recurse=false clone --no-checkout -- <url>` with a
+core.symlinks=false -c submodule.recurse=false -c credential.helper= -c core.askPass=
+clone --no-checkout -- <url>` (the last two disable any credential helper or askpass
+program a `~/.gitconfig` would otherwise make git exec) with a
 scrubbed environment (`PATH`, `HOME`, `SSH_AUTH_SOCK`, `GIT_TERMINAL_PROMPT=0`;
 `GIT_SSH_COMMAND` is forwarded **only** to the clone of an `ssh://`/`git@` source,
 never for https and never to checkout/rev-parse), into a temporary directory removed

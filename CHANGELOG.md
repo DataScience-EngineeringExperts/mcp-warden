@@ -45,6 +45,7 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
   documented as fail-closed; a redundant pre-read of each corpus lock was removed (the
   size cap is enforced by `stat()`); the verifier docstring now states precisely which
   coordinate the statement is built from.
+
 ### Fixed
 
 - **`doctor` follow-ups from the security review of #98 (DSE-1529).** `#servers` is no

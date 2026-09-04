@@ -180,6 +180,7 @@ def test_require_consensus_blocks_novel_and_insufficient(monkeypatch, tmp_path):
     r = _check("--coordinate", "npm:@example/unknown@1.0.0", "--require-consensus", json_out=True)
     assert r.exit_code == 1 and _jsonl_rules(r.stdout) == [RULE_NOVEL]
     assert "--require-consensus" in r.stdout
+    assert "unpinned local corpus" in r.output  # CSO #106 L3: strict + unpinned tree warns
     r = _check("--coordinate", "npm:@example/solo@1.0.0", "--require-consensus", json_out=True)
     assert r.exit_code == 1 and _jsonl_rules(r.stdout) == [RULE_INSUFFICIENT]
     # a real match still exits 0 under the flag, and the SARIF carries the high-severity finding
@@ -190,6 +191,17 @@ def test_require_consensus_blocks_novel_and_insufficient(monkeypatch, tmp_path):
     assert r.exit_code == 1
     doc = json.loads(sarif.read_text())
     assert any(res["ruleId"] == RULE_NOVEL and res["level"] == "error" for res in doc["runs"][0]["results"])
+
+
+def test_require_consensus_unpinned_warning_is_silent_when_ref_is_pinned(monkeypatch):
+    # CSO #106 L3: the warning is about the missing pin, not about strict mode itself.
+    install_fake_verify(monkeypatch)
+    r = _check("--coordinate", "npm:@example/clean@1.0.0")  # no strict flag → no warning
+    assert r.exit_code == 0 and "unpinned local corpus" not in r.output
+    sha = os.popen(f"git -C {CORPUS} rev-parse HEAD 2>/dev/null").read().strip()
+    if len(sha) == 40:  # fixture lives inside the repo checkout; pin its HEAD
+        r = _check("--coordinate", "npm:@example/clean@1.0.0", "--require-consensus", "--corpus-ref", sha)
+        assert "unpinned local corpus" not in r.output
 
 
 def test_unverifiable_corpus_is_exit_two_without_traceback(monkeypatch):
