@@ -30,6 +30,19 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+### Fixed
+
+- **`doctor` follow-ups from the security review of #98 (DSE-1529).** `#servers` is no
+  longer a reserved namespace: config entries are keyed on `(map, name)` and the display
+  key is derived afterwards, unique by construction, so a server the user really named
+  `x#servers` is neither overwritten by the synthetic `mcpServers`/`servers` collision
+  key nor falsely flagged `WRD-DOCTOR-AMBIGUOUS-SERVER`; ambiguity is recorded per
+  display key. `strip_jsonc` is one string-aware linear pass (the regex form
+  back-tracked once per unterminated `/*` and went quadratic on a hostile VS Code
+  `mcp.json`). `safe_text` also neutralises the soft hyphen, `U+2060`–`U+2064`, the BOM,
+  and the Unicode Tags block. `docs/DOCTOR.md` now documents `--config` resolved-path
+  de-duplication / explicit-replaces-discovered and the `safe_text` caveat on printed URLs.
+
 ### Added
 
 - **`doctor` — zero-config MCP posture scan (DSE-1516).** One command, no arguments:
