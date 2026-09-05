@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from mcp_warden.lockfile import build_lock, lock_to_pretty_json, read_lock, write_lock
 from mcp_warden.models import (
     Attestation,
@@ -171,3 +173,42 @@ def test_lock_stores_hashes_not_raw_text():
     # Raw description text must NOT appear in the lock.
     assert "Read a file" not in text
     assert "description_hash" in text
+
+
+# --- DSE-1527: read_lock enforces the SPEC.md §4 nesting bound ------------------
+
+
+def _deep(n: int) -> list:
+    v: list = []
+    for _ in range(n):
+        v = [v]
+    return v
+
+
+def test_read_lock_refuses_nesting_past_the_bound(tmp_path):
+    from mcp_warden.hashing import MAX_CANON_DEPTH
+
+    lock = build_lock(_surface(), [])
+    doc = json.loads(lock_to_pretty_json(lock))
+    path = tmp_path / "warden.lock"
+
+    # Control: the document as written reads back.
+    path.write_text(json.dumps(doc), encoding="utf-8")
+    assert read_lock(path).overall_digest == lock.overall_digest
+
+    # One past the bound anywhere in the document -> refused by the explicit check,
+    # before schema validation, with an intelligible message.
+    hostile = dict(doc)
+    hostile["x"] = _deep(MAX_CANON_DEPTH)  # innermost [] at depth 512 + 1 (the "x" key)
+    path.write_text(json.dumps(hostile), encoding="utf-8")
+    with pytest.raises(ValueError, match="nesting deeper than 512"):
+        read_lock(path)
+
+    # Exactly at the bound the depth check is silent (whatever schema validation says).
+    at_bound = dict(doc)
+    at_bound["x"] = _deep(MAX_CANON_DEPTH - 1)
+    path.write_text(json.dumps(at_bound), encoding="utf-8")
+    try:
+        read_lock(path)
+    except ValueError as exc:
+        assert "nesting deeper" not in str(exc)

@@ -32,6 +32,19 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ### Fixed
 
+- **Normative nesting bound: 512 (DSE-1527).** The TypeScript verifier refused JSON nested
+  past 512 levels while the Python reference accepted anything up to the interpreter's
+  ~1000-frame recursion limit, so two conforming implementations disagreed on the same
+  document. `docs/SPEC.md` §4 now names 512 as the maximum depth (root = 0, each
+  enclosing array/object adds one); `canon()` and `read_lock()` enforce it with an
+  explicit, iterative check that raises a typed `DepthError` (a `ValueError`) before any
+  serialization; `vectors/` gains `canonical/depth-512-accepted` and
+  `malformed/depth-513-rejected` so both harnesses pin the exact bound. `@mcp-warden/lock`'s
+  `verify()` now throws only `LockFormatError` — a canonicalizer or depth failure on the
+  observed surface no longer leaks as `JcsError`/`DepthError` — and the Python vector
+  harness routes every `malformed` lock through `read_lock()`, the public reader, as
+  `vectors/README.md` asks of every implementation.
+
 - **`doctor` follow-ups from the security review of #98 (DSE-1529).** `#servers` is no
   longer a reserved namespace: config entries are keyed on `(map, name)` and the display
   key is derived afterwards, unique by construction, so a server the user really named
