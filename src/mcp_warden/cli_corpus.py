@@ -22,6 +22,7 @@ from .corpus import (
     RULE_UNVERIFIABLE,
     ConsensusResult,
     CorpusError,
+    _is_url,
     run_consensus,
 )
 from .corpus_coordinate import Coordinate, resolve_coordinate
@@ -38,7 +39,7 @@ def _fail(err_console: Console, exc: CorpusError) -> NoReturn:
 def validate_flags(
     *, against_community: bool, verify: bool, corpus: str | None, corpus_ref: str | None,
     coordinate: str | None, attester: list[str], attesters_file: Path | None,
-    min_attesters: int | None, err_console: Console,
+    min_attesters: int | None, require_consensus: bool = False, err_console: Console,
 ) -> None:
     """A community option without ``--against-community`` is a mistake, not a no-op (CSO L1)."""
     if against_community and verify:
@@ -55,6 +56,7 @@ def validate_flags(
         name for name, val in (
             ("--corpus", corpus), ("--corpus-ref", corpus_ref), ("--attester", attester or None),
             ("--attesters-file", attesters_file), ("--min-attesters", min_attesters),
+            ("--require-consensus", require_consensus or None),
         ) if val is not None
     ]
     if coordinate is not None and not verify:  # --coordinate is also valid with --verify (v2 statements)
@@ -89,11 +91,21 @@ def preflight(
 
 def adjudicate(
     observed_digest: str, coord: Coordinate, corpus: str, corpus_ref: str | None,
-    pin: dict[str, Attester], min_attesters: int, err_console: Console,
+    pin: dict[str, Attester], min_attesters: int, err_console: Console, *, require_consensus: bool = False,
 ) -> ConsensusResult:
     """Run the consensus verdict; exit 2 on any fail-closed corpus condition."""
+    if require_consensus and corpus_ref is None and not _is_url(corpus):
+        # CSO #106 L3: strict mode only closes the evidence-suppression gap together
+        # with a pinned tree; an unpinned checkout can be swapped between runs.
+        err_console.print(
+            "[yellow]warning:[/yellow] --require-consensus against an unpinned local corpus "
+            f"({escape(corpus)}): pass --corpus-ref <sha> so the tree cannot change between runs",
+            soft_wrap=True,
+        )
     try:
-        result = run_consensus(observed_digest, coord, corpus, corpus_ref, pin, min_attesters)
+        result = run_consensus(
+            observed_digest, coord, corpus, corpus_ref, pin, min_attesters, require_consensus=require_consensus
+        )
     except CorpusError as exc:
         _fail(err_console, exc)
     except Exception as exc:  # noqa: BLE001 - a hostile corpus must not turn into exit 1 + traceback

@@ -85,8 +85,11 @@ def install_fake_verify(monkeypatch, calls: list | None = None):
     monkeypatch.setattr(corpus_verify, "verify_statement", _verify)
 
 
-def run(observed, coord, source=str(CORPUS), ref=None, pin=None, min_attesters=2):
-    return run_consensus(observed, coord, source, ref, consumer_pin() if pin is None else pin, min_attesters)
+def run(observed, coord, source=str(CORPUS), ref=None, pin=None, min_attesters=2, require_consensus=False):
+    return run_consensus(
+        observed, coord, source, ref, consumer_pin() if pin is None else pin, min_attesters,
+        require_consensus=require_consensus,
+    )
 
 
 def _rules(result):
@@ -483,25 +486,103 @@ def test_unsafe_sources_never_reach_git(monkeypatch, source):
     assert ei.value.rule_id == RULE_UNREACHABLE
 
 
-def test_git_argv_is_hardened_and_source_is_last(monkeypatch, tmp_path):
-    seen: list[list[str]] = []
+def _fake_git(seen: list[list[str]], version: str = "git version 2.44.0"):
+    """A subprocess.run stand-in answering --version and faking clone/checkout/rev-parse."""
 
     def _fake_run(argv, **kw):
-        seen.append(argv)
+        seen.append((argv, kw))
         assert "shell" not in kw
-        assert kw["env"]["GIT_TERMINAL_PROMPT"] == "0" and set(kw["env"]) <= {*corpus._GIT_ENV_KEYS, "GIT_TERMINAL_PROMPT"}
-        if argv[-2:-1] and "clone" in argv:
+        if argv[-1] == "--version":
+            return subprocess.CompletedProcess(argv, 0, stdout=version + "\n", stderr="")
+        if "clone" in argv:
             Path(argv[-1]).mkdir(parents=True)
         return subprocess.CompletedProcess(argv, 0, stdout="0" * 40 + "\n", stderr="")
 
-    monkeypatch.setattr(subprocess, "run", _fake_run)
+    return _fake_run
+
+
+@pytest.fixture
+def _fresh_git_state(monkeypatch):
+    """Reset the once-per-process git resolution so each test sees its own fake."""
+    monkeypatch.setattr(corpus, "_GIT_BIN", None)
+    monkeypatch.setattr(corpus, "_GIT_VERSION_OK", None)
+
+
+def test_git_argv_is_hardened_and_source_is_last(monkeypatch, tmp_path, _fresh_git_state):
+    seen: list = []
+    monkeypatch.setattr(subprocess, "run", _fake_git(seen))
+    monkeypatch.setenv("GIT_SSH_COMMAND", "ssh -i /tmp/evil")
     with fetch_corpus("https://example.invalid/corpus.git", "0" * 40):
         pass
-    clone = seen[0]
-    assert clone[:1] == ["git"] and clone[1:1 + len(corpus._GIT_CONFIG)] == corpus._GIT_CONFIG
+    gits = [(a, k) for a, k in seen if a[-1] != "--version"]
+    clone, kw = gits[0]
+    git_bin = corpus._git_binary()
+    assert Path(git_bin).is_absolute() and clone[0] == git_bin  # resolved once, absolute (N4)
+    assert clone[1:1 + len(corpus._GIT_CONFIG)] == corpus._GIT_CONFIG
     assert "protocol.allow=never" in clone and "core.hooksPath=/dev/null" in clone
+    assert "credential.helper=" in clone and "core.askPass=" in clone  # CSO #106 L1
     assert clone[-3] == "--" and clone[-2] == "https://example.invalid/corpus.git"
-    assert all(a[0] == "git" and a[1:1 + len(corpus._GIT_CONFIG)] == corpus._GIT_CONFIG for a in seen)
+    assert all(a[0] == git_bin and a[1:1 + len(corpus._GIT_CONFIG)] == corpus._GIT_CONFIG for a, _ in gits)
+    for _a, k in seen:
+        assert k["env"]["GIT_TERMINAL_PROMPT"] == "0"
+        assert set(k["env"]) <= {*corpus._GIT_ENV_KEYS, "GIT_TERMINAL_PROMPT"}
+        assert "GIT_SSH_COMMAND" not in k["env"]  # https source: never forwarded (N4)
+
+
+def test_git_ssh_command_is_forwarded_only_for_ssh_sources(monkeypatch, _fresh_git_state):
+    seen: list = []
+    monkeypatch.setattr(subprocess, "run", _fake_git(seen))
+    monkeypatch.setenv("GIT_SSH_COMMAND", "ssh -i /home/ci/deploy_key")
+    with fetch_corpus("git@github.com:example/corpus.git", "0" * 40):
+        pass
+    envs = {a[-3] if "clone" in a else a[-1]: k["env"] for a, k in seen}
+    clone_env = next(k["env"] for a, k in seen if "clone" in a)
+    assert clone_env["GIT_SSH_COMMAND"] == "ssh -i /home/ci/deploy_key"
+    # every other invocation (--version, checkout, rev-parse) stays scrubbed
+    for a, k in seen:
+        if "clone" not in a:
+            assert "GIT_SSH_COMMAND" not in k["env"]
+    assert envs  # sanity: something ran
+
+
+@pytest.mark.parametrize("version, ok", [
+    ("git version 2.14.1", True),
+    ("git version 2.44.0 (Apple Git-150)", True),
+    ("git version 2.14.0", False),
+    ("git version 2.13.6", False),
+    ("git version 1.9.1", False),
+])
+def test_git_version_floor(monkeypatch, _fresh_git_state, version, ok):
+    # DSE-1528 N3: the ssh option-injection defenses assume git >= 2.14.1.
+    seen: list = []
+    monkeypatch.setattr(subprocess, "run", _fake_git(seen, version=version))
+    if ok:
+        with fetch_corpus("https://example.invalid/corpus.git", "0" * 40):
+            pass
+        assert any("clone" in a for a, _ in seen)
+    else:
+        with pytest.raises(CorpusError) as ei:
+            with fetch_corpus("https://example.invalid/corpus.git", "0" * 40):
+                pass
+        assert ei.value.rule_id == RULE_UNREACHABLE and "older than" in str(ei.value)
+        assert not any("clone" in a for a, _ in seen)  # refused before any clone
+
+
+def test_unparseable_git_version_is_unreachable(monkeypatch, _fresh_git_state):
+    seen: list = []
+    monkeypatch.setattr(subprocess, "run", _fake_git(seen, version="gitt vershun ?"))
+    with pytest.raises(CorpusError) as ei:
+        with fetch_corpus("https://example.invalid/corpus.git", "0" * 40):
+            pass
+    assert ei.value.rule_id == RULE_UNREACHABLE
+
+
+def test_missing_git_is_unreachable(monkeypatch, _fresh_git_state):
+    monkeypatch.setattr(corpus.shutil, "which", lambda _name: None)
+    with pytest.raises(CorpusError) as ei:
+        with fetch_corpus("https://example.invalid/corpus.git", "0" * 40):
+            pass
+    assert ei.value.rule_id == RULE_UNREACHABLE and "not installed" in str(ei.value)
 
 
 def test_fetch_url_clones_at_exact_ref_and_cleans_up(corpus_repo, monkeypatch):
@@ -567,3 +648,27 @@ def test_tampered_entries_under_a_valid_signature_are_rejected(monkeypatch, tmp_
     with pytest.raises(CorpusError) as ei:
         verified_digests(tmp_path, CLEAN, consumer_pin())
     assert ei.value.rule_id == RULE_UNVERIFIABLE and "reproduce" in str(ei.value)
+
+
+# --- --require-consensus (DSE-1528 N2) -----------------------------------------
+
+
+def test_require_consensus_makes_novel_and_insufficient_blocking():
+    novel = consensus(CLEAN_DIGEST, CLEAN, {}, require_consensus=True)
+    assert [f.rule_id for f in novel.findings] == [RULE_NOVEL]
+    assert novel.findings[0].severity == "high" and novel.blocking and novel.strict
+    assert "--require-consensus" in novel.findings[0].message
+    solo = consensus(CLEAN_DIGEST, CLEAN, {"alice": CLEAN_DIGEST}, min_attesters=2, require_consensus=True)
+    assert [f.rule_id for f in solo.findings] == [RULE_INSUFFICIENT] and solo.blocking
+    # the default stays advisory
+    assert not consensus(CLEAN_DIGEST, CLEAN, {}).blocking
+    assert not consensus(CLEAN_DIGEST, CLEAN, {"alice": CLEAN_DIGEST}, min_attesters=2).blocking
+    # a real match is unaffected by the flag
+    both = consensus(CLEAN_DIGEST, CLEAN, {"alice": CLEAN_DIGEST, "bob": CLEAN_DIGEST}, require_consensus=True)
+    assert both.findings == [] and not both.blocking
+
+
+def test_run_consensus_threads_require_consensus(monkeypatch):
+    install_fake_verify(monkeypatch)
+    r = run(CLEAN_DIGEST, Coordinate("npm", "@example/unknown", "1.0.0"), str(CORPUS), None, require_consensus=True)
+    assert [f.rule_id for f in r.findings] == [RULE_NOVEL] and r.blocking and r.strict

@@ -78,7 +78,7 @@ def test_requires_consumer_trust_pin():
 @pytest.mark.parametrize(
     "flags",
     [["--corpus", "x"], ["--corpus-ref", "0" * 40], ["--coordinate", "npm:a@1.0.0"], ["--attester", "a=b@c"],
-     ["--attesters-file", "x"], ["--min-attesters", "1"]],
+     ["--attesters-file", "x"], ["--min-attesters", "1"], ["--require-consensus"]],
 )
 def test_community_options_without_the_flag_are_an_error(flags):
     # CSO L1: a typo'd invocation must not exit 0 having compared nothing.
@@ -171,6 +171,37 @@ def test_insufficient_attesters_and_min_attesters_flag(monkeypatch):
     assert r.exit_code == 0 and _jsonl_rules(r.stdout) == [RULE_INSUFFICIENT]
     r = _check("--coordinate", "npm:@example/solo@1.0.0", "--min-attesters", "1", json_out=True)
     assert r.exit_code == 0 and _jsonl_rules(r.stdout) == []
+
+
+def test_require_consensus_blocks_novel_and_insufficient(monkeypatch, tmp_path):
+    # DSE-1528 N2: a CI job that expects the coordinate to be attested must not pass
+    # because the corpus (or a fork of it) merely has no entry.
+    install_fake_verify(monkeypatch)
+    r = _check("--coordinate", "npm:@example/unknown@1.0.0", "--require-consensus", json_out=True)
+    assert r.exit_code == 1 and _jsonl_rules(r.stdout) == [RULE_NOVEL]
+    assert "--require-consensus" in r.stdout
+    assert "unpinned local corpus" in r.output  # CSO #106 L3: strict + unpinned tree warns
+    r = _check("--coordinate", "npm:@example/solo@1.0.0", "--require-consensus", json_out=True)
+    assert r.exit_code == 1 and _jsonl_rules(r.stdout) == [RULE_INSUFFICIENT]
+    # a real match still exits 0 under the flag, and the SARIF carries the high-severity finding
+    r = _check("--coordinate", "npm:@example/solo@1.0.0", "--require-consensus", "--min-attesters", "1")
+    assert r.exit_code == 0
+    sarif = tmp_path / "strict.sarif"
+    r = _check("--coordinate", "npm:@example/unknown@1.0.0", "--require-consensus", sarif=sarif)
+    assert r.exit_code == 1
+    doc = json.loads(sarif.read_text())
+    assert any(res["ruleId"] == RULE_NOVEL and res["level"] == "error" for res in doc["runs"][0]["results"])
+
+
+def test_require_consensus_unpinned_warning_is_silent_when_ref_is_pinned(monkeypatch):
+    # CSO #106 L3: the warning is about the missing pin, not about strict mode itself.
+    install_fake_verify(monkeypatch)
+    r = _check("--coordinate", "npm:@example/clean@1.0.0")  # no strict flag → no warning
+    assert r.exit_code == 0 and "unpinned local corpus" not in r.output
+    sha = os.popen(f"git -C {CORPUS} rev-parse HEAD 2>/dev/null").read().strip()
+    if len(sha) == 40:  # fixture lives inside the repo checkout; pin its HEAD
+        r = _check("--coordinate", "npm:@example/clean@1.0.0", "--require-consensus", "--corpus-ref", sha)
+        assert "unpinned local corpus" not in r.output
 
 
 def test_unverifiable_corpus_is_exit_two_without_traceback(monkeypatch):
