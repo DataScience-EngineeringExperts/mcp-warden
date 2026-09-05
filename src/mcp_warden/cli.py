@@ -234,6 +234,10 @@ def check(
         None, "--min-attesters", min=1,
         help=f"Trusted attesters that must agree for a match (default {DEFAULT_MIN_ATTESTERS}; fewer is WRD-CONSENSUS-INSUFFICIENT)",
     ),
+    require_consensus: bool = typer.Option(
+        False, "--require-consensus",
+        help="Strict: WRD-CONSENSUS-NOVEL / -INSUFFICIENT also fail (exit 1) — for CI that expects the coordinate to be attested",
+    ),
 ) -> None:
     """Re-capture and verify a server against ``warden.lock``; fail on drift.
 
@@ -247,7 +251,7 @@ def check(
     consensus_validate_flags(
         against_community=against_community, verify=verify, corpus=corpus, corpus_ref=corpus_ref,
         coordinate=coordinate, attester=attester or [], attesters_file=attesters_file,
-        min_attesters=min_attesters, err_console=err_console,
+        min_attesters=min_attesters, require_consensus=require_consensus, err_console=err_console,
     )
     if verify:
         coord_text = None
@@ -303,6 +307,7 @@ def check(
         verdict = consensus_adjudicate(
             result.surface_digest, coord, corpus or "", corpus_ref, pin,
             min_attesters if min_attesters is not None else DEFAULT_MIN_ATTESTERS, err_console,
+            require_consensus=require_consensus,
         )
         findings = [*findings, *verdict.findings]
         blocking = verdict.blocking

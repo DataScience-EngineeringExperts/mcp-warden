@@ -85,6 +85,17 @@ is hashed MUST first be canonicalized.
   canonicalizer. Therefore an optional field that is simply not present contributes
   nothing to a digest, and a baseline that omits it is byte-identical to one written
   before the field existed.
+- **Nesting bound (normative):** the *depth* of an element is the number of arrays and
+  objects enclosing it; the document root is depth 0. A conforming implementation MUST
+  accept any value whose deepest element is at depth **512** and MUST refuse — fail closed,
+  never hash — any value containing an element at depth greater than 512, both when
+  canonicalizing a surface value (§4–§5) and when reading a lock document (§3). An
+  implementation that merely inherits its host language's recursion limit is NOT
+  conformant: two such implementations disagree on the same document. The bound is
+  pinned by `vectors/cases/canonical-depth-512-accepted.json` and
+  `vectors/cases/malformed-depth-513-rejected.json`. This bound governs lock documents and
+  surface values only; the content-envelope profile (`docs/CONTENT_ENVELOPE.md`) keeps its
+  own, much smaller, nesting limit.
 
 ---
 
@@ -419,7 +430,7 @@ byte-for-byte:
 - `drift` — the ordered `(drift_class, severity, target, detail)` set for a baseline lock
   and an observed surface (§8.2–§8.3);
 - `malformed` — lock documents a conforming reader MUST reject, and JSON values a
-  conforming canonicalizer MUST refuse (unpaired surrogates, excessive nesting).
+  conforming canonicalizer MUST refuse (unpaired surrogates, nesting past the §4 bound).
 
 The corpus is generated from the reference implementation (`vectors/tools/generate.py`)
 and is regenerated only on a deliberate format change (§14). Two implementations ship

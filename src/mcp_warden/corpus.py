@@ -74,14 +74,73 @@ _GIT_CONFIG: list[str] = [
     "-c", "core.hooksPath=/dev/null",
     "-c", "core.symlinks=false",
     "-c", "submodule.recurse=false",
+    # A ~/.gitconfig credential.helper / core.askPass is an arbitrary program git
+    # would exec on an https clone; empty values disable both (CSO #106 L1).
+    "-c", "credential.helper=",
+    "-c", "core.askPass=",
 ]
 #: Environment git may see. Everything else (proxies, GIT_* overrides, tokens)
 #: is dropped so the caller's environment cannot redirect the clone.
-_GIT_ENV_KEYS = ("PATH", "HOME", "SSH_AUTH_SOCK", "GIT_SSH_COMMAND")
+_GIT_ENV_KEYS = ("PATH", "HOME", "SSH_AUTH_SOCK")
+#: Forwarded ONLY for ``ssh://`` / ``git@`` sources: on an https corpus it is
+#: dead weight, and in CI with an attacker-writable env it is arbitrary exec
+#: (CSO re-verify N4). ``SSH_AUTH_SOCK`` stays so deploy-key/agent auth works.
+_GIT_ENV_SSH_KEYS = ("GIT_SSH_COMMAND",)
+_SSH_PREFIXES: tuple[str, ...] = ("ssh://", "git@")
+
+#: Oldest git whose ``ssh://`` URL handling refuses a host starting with ``-``
+#: (CVE-2017-1000117); the option-injection defenses above assume it.
+MIN_GIT_VERSION = (2, 14, 1)
+_GIT_VERSION_RE = re.compile(r"git version (\d+)\.(\d+)(?:\.(\d+))?")
+
+#: Resolved once per process (CSO re-verify N4): an absolute path, so a later
+#: ``PATH`` change cannot swap the binary under us. ``None`` = not yet resolved.
+_GIT_BIN: str | None = None
+_GIT_VERSION_OK: bool | None = None
 
 
 def _is_url(source: str) -> bool:
     return source.startswith(_URL_PREFIXES)
+
+
+def _is_ssh(source: str) -> bool:
+    return source.startswith(_SSH_PREFIXES)
+
+
+def _git_binary() -> str:
+    """Absolute path of ``git``, resolved once; UNREACHABLE when absent."""
+    global _GIT_BIN
+    if _GIT_BIN is None:
+        found = shutil.which("git")
+        if found is None:
+            raise CorpusError(RULE_UNREACHABLE, "git is not installed; cannot fetch or inspect a corpus checkout")
+        _GIT_BIN = str(Path(found).resolve())
+    return _GIT_BIN
+
+
+def _ensure_git_version() -> None:
+    """Refuse a git older than :data:`MIN_GIT_VERSION` (checked once per process)."""
+    global _GIT_VERSION_OK
+    if _GIT_VERSION_OK:
+        return
+    try:
+        out = subprocess.run(
+            [_git_binary(), "--version"], check=True, capture_output=True, text=True,
+            timeout=_GIT_TIMEOUT_S, env=_git_env(False),
+        ).stdout
+    except (subprocess.SubprocessError, OSError) as exc:
+        raise CorpusError(RULE_UNREACHABLE, f"cannot determine git version ({type(exc).__name__})") from exc
+    m = _GIT_VERSION_RE.search(out)
+    if m is None:
+        raise CorpusError(RULE_UNREACHABLE, f"cannot parse git version from {out.strip()[:60]!r}")
+    have = tuple(int(x or 0) for x in m.groups())
+    if have < MIN_GIT_VERSION:
+        raise CorpusError(
+            RULE_UNREACHABLE,
+            f"git {'.'.join(map(str, have))} is older than the required "
+            f"{'.'.join(map(str, MIN_GIT_VERSION))} (ssh URL option-injection defenses)",
+        )
+    _GIT_VERSION_OK = True
 
 
 def _reject_unsafe_source(source: str) -> None:
@@ -94,23 +153,28 @@ def _reject_unsafe_source(source: str) -> None:
         )
 
 
-def _git_env() -> dict[str, str]:
-    env = {k: os.environ[k] for k in _GIT_ENV_KEYS if k in os.environ}
+def _git_env(ssh: bool) -> dict[str, str]:
+    keys = (*_GIT_ENV_KEYS, *(_GIT_ENV_SSH_KEYS if ssh else ()))
+    env = {k: os.environ[k] for k in keys if k in os.environ}
     env["GIT_TERMINAL_PROMPT"] = "0"
     return env
 
 
 def _git_argv(args: list[str]) -> list[str]:
-    """``git <hardening> <args>`` — the single place every git argv is built."""
-    return ["git", *_GIT_CONFIG, *args]
+    """``<abs git> <hardening> <args>`` — the single place every git argv is built."""
+    return [_git_binary(), *_GIT_CONFIG, *args]
 
 
-def _git(args: list[str], cwd: Path | None = None) -> str:
-    """Run one git command as an argv list (never a shell); any failure is UNREACHABLE."""
+def _git(args: list[str], cwd: Path | None = None, *, ssh: bool = False) -> str:
+    """Run one git command as an argv list (never a shell); any failure is UNREACHABLE.
+
+    ``ssh`` forwards ``GIT_SSH_COMMAND`` — only the clone of an ssh source needs it.
+    """
+    _ensure_git_version()
     try:
         out = subprocess.run(
             _git_argv(args), cwd=cwd, check=True, capture_output=True, text=True,
-            timeout=_GIT_TIMEOUT_S, env=_git_env(),
+            timeout=_GIT_TIMEOUT_S, env=_git_env(ssh),
         )
     except subprocess.TimeoutExpired as exc:
         raise CorpusError(RULE_UNREACHABLE, f"git {args[0]} timed out after {_GIT_TIMEOUT_S:.0f}s") from exc
@@ -138,11 +202,9 @@ def fetch_corpus(source: str, ref: str | None) -> Iterator[Path]:
     if _is_url(source):
         if ref is None:
             raise CorpusError(RULE_UNREACHABLE, "--corpus-ref is required when --corpus is a URL")
-        if shutil.which("git") is None:
-            raise CorpusError(RULE_UNREACHABLE, "git is not installed; cannot fetch a corpus URL")
         with tempfile.TemporaryDirectory(prefix="warden-corpus-") as tmp:
             dest = Path(tmp) / "corpus"
-            _git(["clone", "--quiet", "--no-checkout", "--", source, str(dest)])
+            _git(["clone", "--quiet", "--no-checkout", "--", source, str(dest)], ssh=_is_ssh(source))
             _git(["checkout", "--quiet", ref], cwd=dest)
             if _head_sha(dest) != ref:
                 raise CorpusError(RULE_UNREACHABLE, f"corpus HEAD is not {ref} after checkout")
@@ -164,11 +226,14 @@ def run_consensus(
     ref: str | None,
     pin: dict[str, Attester],
     min_attesters: int = 2,
+    require_consensus: bool = False,
 ) -> ConsensusResult:
     """Fetch the corpus, verify every trusted entry for ``coord``, and adjudicate.
 
     ``pin`` is the consumer's trust root (:func:`corpus_trust.load_consumer_pin`).
-    Raises :class:`CorpusError` (exit 2 at the CLI) for any fail-closed condition.
+    ``require_consensus`` makes NOVEL / INSUFFICIENT blocking (see
+    :func:`corpus_verify.consensus`). Raises :class:`CorpusError` (exit 2 at the
+    CLI) for any fail-closed condition.
     """
     if not signing._SIGSTORE_AVAILABLE:
         raise CorpusError(RULE_UNVERIFIABLE, "sigstore is not installed; run: pip install 'mcp-warden[sigstore]'")
@@ -176,5 +241,7 @@ def run_consensus(
         declared = load_corpus_attesters(root)
         trusted, warnings = resolve_trust(declared, pin)
         attested = verified_digests(root, coord, trusted, declared)
-    result = consensus(observed_digest, coord, attested, min_attesters=min_attesters)
-    return ConsensusResult(result.coordinate, result.findings, result.matched, warnings)
+    result = consensus(
+        observed_digest, coord, attested, min_attesters=min_attesters, require_consensus=require_consensus
+    )
+    return ConsensusResult(result.coordinate, result.findings, result.matched, warnings, strict=result.strict)
