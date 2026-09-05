@@ -67,6 +67,38 @@ jobs:
         run: pytest tests/fuzz -p no:randomly --hypothesis-seed=0
 
   # --------------------------------------------------------------------------
+  # Job 1a: mcp 1.x compatibility leg (#105)
+  #
+  # The digest-parity claim across the mcp SDK major rests on BOTH lines being
+  # exercised: capture must produce byte-identical locks whether the client SDK
+  # is 1.x (camelCase model fields, decorator server API) or 2.x (snake_case
+  # fields, on_* callbacks, nextCursor via params=). This leg re-resolves to the
+  # newest 1.x and runs only the capture/parity tests so CI time stays flat.
+  # --------------------------------------------------------------------------
+  test-mcp-1x:
+    name: Capture parity on mcp 1.x
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install package + dev deps pinned to the mcp 1.x line
+        run: pip install -e ".[dev,sigstore]" "mcp>=1.27.2,<2"
+
+      - name: Show resolved mcp (must be 1.x)
+        run: pip show mcp | grep -i '^version'
+
+      - name: Capture / parity / pagination tests under mcp 1.x
+        run: pytest -q tests/test_capture_model_dump.py tests/test_capture_pagination.py tests/test_e2e_pin_check.py tests/test_capture_http.py
+
+  # --------------------------------------------------------------------------
   # Job 1b: lint gate (ruff)
   #
   # ruff is the fast lint gate: pyflakes (F, dead imports/vars), pycodestyle

@@ -204,6 +204,12 @@ uv pip install --python .venv/bin/python -e ".[dev]"
 Runtime dependencies: `mcp` (official MCP Python SDK), `rfc8785`, `pydantic`,
 `typer`, `rich`, `pyyaml`, `anyio`.
 
+> **TLS trust anchor for `--url` capture.** With the `mcp` 2.x SDK, HTTP goes through
+> `httpx2`, which verifies server certificates against the **OS trust store** (via
+> `truststore`) rather than Python's bundled `certifi` set. Private/corporate CAs installed
+> in the OS now work; a root removed from the OS store is now rejected. Inherited from the
+> SDK; not configurable from the CLI. See CHANGELOG.
+
 ### TypeScript verifier — `@mcp-warden/lock` (zero dependencies)
 
 The lock **format** is vendor-neutral ([`docs/SPEC.md`](docs/SPEC.md)), and the ecosystem's

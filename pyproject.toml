@@ -17,12 +17,12 @@ authors = [{ name = "Ernest Provo", email = "ernest@thedataexperts.us" }]
 keywords = ["mcp", "supply-chain", "security", "ci", "integrity"]
 
 dependencies = [
-    # Capped below 2.0.0: the 2.x SDK removed the `@server.list_tools()` decorator
-    # that tests/fixtures/*_server.py use (DSE-1261). Production capture.py is
-    # already 2.x-compatible — it calls ClientSession.list_tools(), which 2.0.0
-    # keeps — so lifting this cap only needs the three fixture servers ported to
-    # the 2.x add_request_handler API.
-    "mcp>=1.27.2,<2",
+    # 1.x and 2.x are both supported. The 2.x SDK removed the ``@server.list_tools()``
+    # decorators the fixture servers used (DSE-1261, #92) — tests/fixtures/_sdk_compat.py
+    # now wires fixtures against either API — and renamed model fields to snake_case,
+    # which capture.py absorbs by dumping models by wire alias. Bump the upper bound
+    # only after re-running the digest-parity check in tests/test_e2e_pin_check.py.
+    "mcp>=1.27.2,<3",
     "rfc8785>=0.1.4",
     "pydantic>=2.0.0",
     "typer>=0.26.7",
