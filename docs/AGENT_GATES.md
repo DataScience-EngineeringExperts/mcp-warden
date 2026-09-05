@@ -111,6 +111,7 @@ and tracked separately (DSE-725).
 | `WRD-AUTH-NOAUTH` | medium | A remote endpoint declares no auth material |
 | `WRD-AUTH-PLAINTEXT-HTTP` | high | A remote endpoint uses `http://` |
 | `WRD-AUTH-TOKEN-IN-CONFIG` | high | An auth-bearing key holds a literal credential |
+| `WRD-AUTH-PLACEHOLDER-SECRET` | low | An auth-bearing key holds an obvious template fill-me-in (`<your-api-key>`, `YOUR KEY GOES HERE`, `changeme`, `xxx`) — a config that cannot work, not a committed credential |
 | `WRD-AUTH-URL-CREDENTIAL` | high | The endpoint URL embeds a `user:pass@` userinfo credential |
 | `WRD-SEC-*` | varies | Vendor secret patterns found in any config value (shared with `check`) |
 
@@ -121,7 +122,11 @@ Precision matters more than recall for a gate that blocks CI:
 - **Loopback servers** (`localhost`, `127.0.0.1`, `::1`) — not remotely
   reachable, so missing auth is not an exposure.
 - **Secret references, including embedded ones** — `${TOKEN}`, `$TOKEN`,
-  `{{ secret }}` are the correct pattern and are never flagged as literals, and
+  `${TOKEN:-default}` / `${TOKEN:?msg}` (shell expansion forms), `%TOKEN%`
+  (Windows), `{{ secret }}`, secret-manager URIs (`op://`, `vault://`,
+  `awssm://`, `gcpsm://`, `azkv://`, `secretref://`, `keyring://`, `pass://`) and
+  paths to a credential file (`~/.config/app/keys.json`, `/etc/app/secrets/token`)
+  are the correct pattern and are never flagged as literals, and
   that holds when the reference sits *inside* a larger value. **`Bearer ${TOKEN}`
   is correct configuration and is not a finding** — it is the most common shape
   an Authorization header takes, and flagging it was a real false positive found
@@ -133,6 +138,57 @@ Precision matters more than recall for a gate that blocks CI:
   literal sitting beside a reference — is still flagged.
 - **Local stdio servers** — a `command`/`args` entry with no URL and no remote
   transport has no auth posture to audit.
+
+### Placeholders are a separate, low-severity rule
+
+Running the audit over a 463-config public corpus showed that **74 % of
+`WRD-AUTH-TOKEN-IN-CONFIG` hits were template fill-me-ins** — `<your-api-key>`,
+`YOUR KEY GOES HERE`, `changeme`, `xxx`. Calling those committed credentials is
+false, and false highs are what get a gate switched off. They are now
+`WRD-AUTH-PLACEHOLDER-SECRET` (low): a shipped config that cannot work is still a
+finding, just not a leak.
+
+**The bound, stated honestly.** The downgrade is guaranteed not to hide a value
+the `WRD-SEC-*` vendor patterns match, or one the entropy heuristic catches
+(**24+ characters at >= 4.0 bits/char, >= 80 % alphanumeric**) — those are
+reported as credentials before the placeholder logic runs. A *shorter* or
+*low-entropy* secret (a lowercase hex key, a passphrase) is outside that guard,
+and for those the placeholder heuristic is the only line. It is bounded as
+follows, each bound pinned by a test with a sub-threshold bypass string:
+
+- **Whole-token matching, every token accounted for.** A value is a placeholder
+  only if at least one *strong* placeholder token (`your`, `example`, `changeme`,
+  `xxx`, …) is present as a whole token **and every other token is filler**
+  (`key`, `token`, `goes`, a vendor name). One placeholder word does not launder
+  the rest: `example-9f8e7d6c5b4a` is a credential. Hard floor: unless every
+  token is placeholder/filler, a value of 16+ characters containing a digit is
+  never downgraded (`YOUR_API_KEY_1234567890` is all filler and stays low).
+- **Closed scheme set.** Only `Bearer`, `Token`, `Basic`, `ApiKey`, `Negotiate`,
+  `Digest` may sit beside a reference or a `<slot>` — `correcthorse ${TOKEN}` is
+  a literal.
+- **`${VAR:-default}` / `${VAR:=default}` is a reference only when the default is
+  empty, itself a reference (recursively), or itself a placeholder.**
+  `${TOKEN:-9f8e7d6c5b4a}` and `${T:-${U:-hunter2!}}` are committed credentials
+  wearing a reference; `${VAR:?msg}` stays a reference.
+- **Locators need >= 2 segments and no token-shaped segment.** Token-shaped is
+  an alphanumeric-only segment that is 20+ characters, or 16+ at >= 3.5 bits/char,
+  or 16+ mixed-case (`Passw0rdPassw0rd`). Segments with dots, underscores or
+  hyphens are file names. A URI fragment or a `${VAR:?msg}` message is checked
+  the same way: `#key` and `:?required` are fine, `#9f8e…` and `:?9f8e…` are
+  literals. `op://Private/GitHub/token`, `~/.config/app/keys.json` and
+  `~/.config/gcloud/application_default_credentials.json` are references;
+  `op://9f8e…`, `~/9f8e…`, `~/.config/9f8e7d6c5b4a3e2d1c0b9a8f`,
+  `~/.config/GHSAT0AAAAAABCDEFGHIJ`, `/etc/Passw0rdPassw0rd` and `/9j/4AAQ…` are
+  literals. **Known residual:** a token that itself contains a separator
+  (`9f8e-7d6c-5b4a-…`) reads as a file name and is not caught by this rule —
+  tracked as a follow-up.
+- **Short bare words are an allowlist, not a heuristic.** Only `basic`, `bearer`,
+  `token`, `apikey`/`api-key`, `digest`, `negotiate`, `oauth`, `none` are treated
+  as scheme/type slots. Everything else — `admin`, `password`, `letmein`,
+  `qwerty`, `welcome`, `hunter2!` — is a working secret and stays high.
+- **`...` is anchored** — the whole value, or the tail of a short stub (`sk-...`)
+  or an all-filler value (`your-key...`); never a substring, never behind a real
+  token.
 
 ### Usage
 
