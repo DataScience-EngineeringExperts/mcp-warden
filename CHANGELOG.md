@@ -32,6 +32,27 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ### Changed
 
+- **`auth audit` / `doctor`: template placeholders are `WRD-AUTH-PLACEHOLDER-SECRET`
+  (low), not committed credentials.** Running the audit over a 463-config public
+  corpus showed 74 % of `WRD-AUTH-TOKEN-IN-CONFIG` hits were fill-me-ins
+  (`<your-api-key>`, `YOUR KEY GOES HERE`, `changeme`, `xxx`) — the false highs that
+  get a gate switched off. The downgrade is bounded, and the bound is stated in
+  [`docs/AGENT_GATES.md`](docs/AGENT_GATES.md): vendor-pattern and entropy hits
+  (24+ chars at >= 4.0 bits/char) are classified as credentials before it runs;
+  below that, a value is a placeholder only when every token is a placeholder or
+  filler word, a 16+-char value with a digit and any real token is never
+  downgraded, only a closed scheme set may sit beside a reference,
+  `${VAR:-default}` / `${VAR:=default}` counts only for an empty, reference
+  (recursively) or placeholder default, locators need two segments with none
+  token-shaped (case-blind: 20+ alphanumerics or 16+ at >= 3.5 bits/char), and
+  short bare words are downgraded only from a closed allowlist of scheme/type
+  slots — `admin`, `qwerty`, `letmein` stay high.
+- **Reference forms found in the same corpus are no longer flagged as literals:**
+  `${VAR:-default}` / `${VAR:?msg}` shell expansions, `%VAR%` (Windows),
+  secret-manager URIs (`op://`, `vault://`, `awssm://`, `gcpsm://`, `azkv://`,
+  `secretref://`, `keyring://`, `pass://`), and credential-file paths. A bare
+  absolute path must have at least two directory segments so a base64 blob that
+  starts with `/` is still a literal.
 - **`check --against-community` follow-ups from security re-verification (DSE-1528).**
   New **`--require-consensus`**: `WRD-CONSENSUS-NOVEL` and `-INSUFFICIENT` become `high`
   and **exit 1**, so a CI job that expects a package to be attested cannot pass because
