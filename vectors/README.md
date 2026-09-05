@@ -80,9 +80,12 @@ fails **both** implementations.
   cannot even represent them exactly (`2**63` parses to `9223372036854776000`). Vectors
   never contain such integers; a surface that does is not portable and the reference
   will not digest it. Integer-valued *floats* such as `1e21` are fine and are pinned.
-- **Nesting is bounded.** The reference raises past its recursion limit; the TypeScript
-  verifier refuses anything deeper than 512 levels. `malformed/deep-nesting-2000` pins
-  that both reject, not the exact bound.
+- **Nesting is bounded at 512 — normative (SPEC.md §4).** Depth counts enclosing
+  arrays/objects with the root at 0. `canonical/depth-512-accepted` MUST canonicalize and
+  `malformed/depth-513-rejected` MUST be refused; both the Python reference (`canon()`,
+  `read_lock()`) and the TypeScript verifier enforce the same explicit bound.
+  `malformed/deep-nesting-2000` remains as the coarse guard. An implementation that only
+  relies on its runtime's recursion limit is not conformant.
 
 - Enum ordering inside `schema_skeleton` keys on Python's `json.dumps` text of each value.
   JavaScript cannot distinguish `1.0` from `1`, so vectors never put integer-valued

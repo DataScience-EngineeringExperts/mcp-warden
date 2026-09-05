@@ -66,7 +66,34 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
   distrusted public root now fails where 1.x succeeded. This is a change in *what
   warden trusts*, not in what it captures; it is inherited from the SDK and cannot be
   toggled from the CLI.
+- **`check --against-community` follow-ups from security re-verification (DSE-1528).**
+  New **`--require-consensus`**: `WRD-CONSENSUS-NOVEL` and `-INSUFFICIENT` become `high`
+  and **exit 1**, so a CI job that expects a package to be attested cannot pass because
+  the corpus — or a fork of it — simply withholds the entry (evidence suppression is
+  now documented as the residual limit of a git corpus, with `--corpus-ref` pinning as
+  the other half of the control). `git` is resolved to an absolute path once per
+  process and must be **≥ 2.14.1** (older/missing is `UNREACHABLE`; the ssh option-
+  injection defenses assume that release). `GIT_SSH_COMMAND` is forwarded only to the
+  clone of an `ssh://`/`git@` corpus, never for https and never to checkout/rev-parse.
+  The non-injective coordinate→directory mapping (`@org/name` vs `@org__name`) is
+  documented as fail-closed; a redundant pre-read of each corpus lock was removed (the
+  size cap is enforced by `stat()`); the verifier docstring now states precisely which
+  coordinate the statement is built from.
+
 ### Fixed
+
+- **Normative nesting bound: 512 (DSE-1527).** The TypeScript verifier refused JSON nested
+  past 512 levels while the Python reference accepted anything up to the interpreter's
+  ~1000-frame recursion limit, so two conforming implementations disagreed on the same
+  document. `docs/SPEC.md` §4 now names 512 as the maximum depth (root = 0, each
+  enclosing array/object adds one); `canon()` and `read_lock()` enforce it with an
+  explicit, iterative check that raises a typed `DepthError` (a `ValueError`) before any
+  serialization; `vectors/` gains `canonical/depth-512-accepted` and
+  `malformed/depth-513-rejected` so both harnesses pin the exact bound. `@mcp-warden/lock`'s
+  `verify()` now throws only `LockFormatError` — a canonicalizer or depth failure on the
+  observed surface no longer leaks as `JcsError`/`DepthError` — and the Python vector
+  harness routes every `malformed` lock through `read_lock()`, the public reader, as
+  `vectors/README.md` asks of every implementation.
 
 - **`doctor` follow-ups from the security review of #98 (DSE-1529).** `#servers` is no
   longer a reserved namespace: config entries are keyed on `(map, name)` and the display

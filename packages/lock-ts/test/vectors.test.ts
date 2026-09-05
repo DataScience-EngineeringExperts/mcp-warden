@@ -221,3 +221,40 @@ test("depth: canonicalize, deepEqual and parseLock are bounded", () => {
   ((lock["tools"] as Doc[])[0] as Doc)["schema_skeleton"] = { props: { p: { constraints: { deep: deep(MAX_JSON_DEPTH + 2) } } } };
   assert.throws(() => verify(lock, {}), LockFormatError);
 });
+
+// --- DSE-1527: normative nesting bound + verify() error contract -----------------
+
+const nestedArrays = (n: number): unknown => {
+  // n enclosing arrays around an empty array: the innermost `[]` sits at depth n.
+  let v: unknown = [];
+  for (let i = 0; i < n; i++) v = [v];
+  return v;
+};
+
+test("DSE-1527: the canonicalizer bound is exactly 512 (root = 0)", () => {
+  assert.equal(MAX_JSON_DEPTH, 512);
+  assert.doesNotThrow(() => canonicalize(nestedArrays(MAX_JSON_DEPTH)));
+  assert.throws(() => canonicalize(nestedArrays(MAX_JSON_DEPTH + 1)), JcsError);
+  // A leaf counts, and objects count like arrays.
+  let obj: unknown = { k: "leaf" };
+  for (let i = 0; i < MAX_JSON_DEPTH; i++) obj = { k: obj };
+  assert.throws(() => canonicalize(obj), JcsError);
+});
+
+test("DSE-1527: verify() throws only LockFormatError, even when the observed surface is unverifiable", () => {
+  const lock = validLock();
+  const surface = { tools: [{ name: "t", inputSchema: { deep: nestedArrays(MAX_JSON_DEPTH + 5) } }] } as unknown as Surface;
+  let caught: unknown;
+  try {
+    verify(lock, surface);
+  } catch (e) {
+    caught = e;
+  }
+  assert.ok(caught instanceof LockFormatError, `expected LockFormatError, got ${String(caught)}`);
+  assert.ok(!(caught instanceof JcsError) && !(caught instanceof DepthError), "underlying error type must not leak");
+  assert.match((caught as Error).message, /observed surface is not verifiable/);
+  assert.ok((caught as Error).cause instanceof JcsError, "the original refusal travels as `cause`");
+  // Unpaired surrogate on the observed side takes the same path.
+  const bad = { tools: [{ name: "t", inputSchema: { d: "\ud800" } }] } as unknown as Surface;
+  assert.throws(() => verify(lock, bad), LockFormatError);
+});
