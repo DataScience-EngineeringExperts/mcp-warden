@@ -10,7 +10,6 @@ from pathlib import Path
 import mcp.types as types
 from _sdk_compat import build_server, serve_stdio
 
-
 def list_tools() -> list[types.Tool]:
     return [types.Tool.model_validate(json.loads(Path(sys.argv[1]).read_text()))]
 

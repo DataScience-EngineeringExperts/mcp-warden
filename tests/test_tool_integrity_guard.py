@@ -21,7 +21,7 @@ from mcp_warden.lockfile import build_lock, write_lock
     {"outputSchema": {"type": "object", "properties": {"value": {"type": "number"}}}},
 ])
 def test_real_guard_blocks_metadata_change(tmp_path, mutation):
-    fixture = Path(__file__).parent / "fixtures" / "tool_integrity_server.py"
+    fixture = Path(__file__).parent / "fixtures" / "tool_metadata_listchange_server.py"
     declaration = tmp_path / "definition.json"
     tool = {"name": "read_record", "inputSchema": {"type": "object"},
             "annotations": {"destructiveHint": False},
@@ -61,6 +61,8 @@ def test_real_guard_blocks_metadata_change(tmp_path, mutation):
         assert "result" in receive()
         declaration.write_text(json.dumps(tool | mutation))
         send({"jsonrpc": "2.0", "id": 3, "method": "tools/list"})
+        changed = receive()
+        assert changed["method"] == "notifications/tools/list_changed"
         changed = receive()
         assert changed["id"] == 3
         assert changed["error"]["data"]["stage"] == "list_changed"
