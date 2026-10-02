@@ -84,6 +84,15 @@ logic) plus a separate informational provenance section. It never prints raw
 > the same way ("heal thyself"). Signing is the optional `mcp-warden-cli[sigstore]` extra — the
 > core gate has no crypto dependency.
 
+> **Release authentication:** `release.yml` keeps production uploads behind the existing
+> OIDC publisher and repo gate. Manual `verify-pypi` checks only the credential exchange;
+> build, upload and signing jobs are skipped. The script logs neither identity nor upload
+> tokens, requires reviewed `main` and an owner publisher-inspection acknowledgment.
+> Minting can change PyPI pending-publisher records; it is not universally read-only.
+> Successful exchange is not proof of project upload permission. CLI 2.0.0's
+> failed OIDC exchange was recovered with an authorized manual upload of the signed bytes;
+> publisher alignment must be verified independently. See [`RELEASING.md`](RELEASING.md).
+
 ---
 
 ## C1 — System context

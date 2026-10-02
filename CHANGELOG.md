@@ -30,6 +30,14 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+### Release engineering
+
+- Add a manual `verify-pypi` production OIDC exchange check in the existing release
+  workflow, without building, signing, uploading or storing credentials. Identity
+  mismatches, redirects, failed exchanges and malformed responses fail closed.
+- Correct release documentation: existing-project publisher setup, non-reserving
+  pending publishers, 2.0.0's manual recovery, and unchanged-artifact failed-job reruns.
+
 ## [2.0.0] — 2026-10-02
 
 ### Breaking compatibility
