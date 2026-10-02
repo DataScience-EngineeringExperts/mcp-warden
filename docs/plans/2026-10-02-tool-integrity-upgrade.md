@@ -36,7 +36,7 @@ Ernest approved DSE-1539's integrity upgrade in the current session. The broader
 
 **Files:** Modify `src/mcp_warden/{models.py,capture.py,lockfile.py,__init__.py}`.
 
-1. Add `CapturedTool.annotations` and `CapturedTool.output_schema` as nullable object fields; copy wire `annotations`/`outputSchema` from the SDK model.
+1. Add `CapturedTool.annotations` and `CapturedTool.output_schema` as nullable object fields; preserve wire `annotations`/`outputSchema` with a raw-dictionary tools/list result before SDK model projection (including extensions and explicit nested nulls).
 2. Set schema level to 4. Extend hashed entries with `annotations_hash = hash_value(tool.annotations)`, `output_schema_hash = hash_value(tool.output_schema)`, and `output_schema_skeleton = extract_skeleton(tool.output_schema)` when present, otherwise null.
 3. Add optional entry fields for legacy parsing and require v4 hash fields during top-level validation. Preserve legacy serialization without injecting new null fields into old entries.
 4. Recompute consistency and surface digests using the document's recorded schema version when inspecting existing locks; fresh builds use version 4.

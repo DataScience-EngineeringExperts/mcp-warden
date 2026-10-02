@@ -2,7 +2,7 @@
   "format": "mcp-lock-v1",
   "schema_version": 4,
   "generator": "vectors/tools/generate.py",
-  "count": 107,
+  "count": 111,
   "vectors": [
     {
       "id": "canonical/sorted-keys-utf16",
@@ -418,6 +418,26 @@
       "id": "drift/tool-annotations-removed",
       "kind": "drift",
       "file": "cases/drift-tool-annotations-removed.json"
+    },
+    {
+      "id": "drift/tool-annotations-extension",
+      "kind": "drift",
+      "file": "cases/drift-tool-annotations-extension.json"
+    },
+    {
+      "id": "drift/tool-annotations-explicit-null",
+      "kind": "drift",
+      "file": "cases/drift-tool-annotations-explicit-null.json"
+    },
+    {
+      "id": "drift/tool-annotations-nested-null",
+      "kind": "drift",
+      "file": "cases/drift-tool-annotations-nested-null.json"
+    },
+    {
+      "id": "drift/schema-out-extension-null",
+      "kind": "drift",
+      "file": "cases/drift-schema-out-extension-null.json"
     },
     {
       "id": "drift/schema-out-added",

@@ -20,7 +20,7 @@ from mcp import StdioServerParameters
 from mcp import types as mcp_types
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamable_http_client
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .models import (
     CapturedPrompt,
@@ -48,6 +48,15 @@ class _WireToolsResult(BaseModel):
 
     tools: list[dict[str, Any]]
     next_cursor: str | None = Field(default=None, alias="nextCursor")
+
+    @field_validator("tools")
+    @classmethod
+    def validate_tools(cls, tools):
+        # Retain SDK validation without retaining its lossy projection. In
+        # particular a malformed later page must never produce a partial pin.
+        for tool in tools:
+            mcp_types.Tool.model_validate(tool)
+        return tools
 
 
 class ClientSession(SDKClientSession):

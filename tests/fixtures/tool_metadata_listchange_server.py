@@ -27,7 +27,12 @@ def main():
             if last is not None and definition != last:
                 send({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
             last = definition
-            result = {"tools": [json.loads(definition)]}
+            document = json.loads(definition)
+            if "pages" in document:
+                cursor = (msg.get("params") or {}).get("cursor")
+                result = document["pages"][int(cursor) if cursor else 0]
+            else:
+                result = {"tools": [document]}
         elif method == "resources/list":
             result = {"resources": []}
         elif method == "prompts/list":

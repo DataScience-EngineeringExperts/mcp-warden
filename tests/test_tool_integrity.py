@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from mcp_warden.capture import capture_surface_sync
+from mcp_warden.capture import CaptureError, capture_surface_sync
 from mcp_warden.cli import app
 from mcp_warden.drift import compute_drift
 from mcp_warden.emitters import build_sarif
@@ -205,3 +205,15 @@ def test_wire_metadata_survives_sdk_projection(tmp_path, field, before, after):
     assert current.overall_digest != baseline.overall_digest
     assert "unapproved-change" in classes(baseline, current)
     assert diverges_from_lock({"tools": [changed]}, baseline)[0]
+
+
+@pytest.mark.parametrize("tool", [{}, {"name": "missing_schema"}, {"inputSchema": {}}])
+def test_wire_malformed_later_page_is_rejected(tmp_path, tool):
+    fixture = Path(__file__).parent / "fixtures" / "tool_metadata_listchange_server.py"
+    declaration = tmp_path / "definition.json"
+    declaration.write_text(json.dumps({"pages": [
+        {"tools": [{"name": "valid", "inputSchema": {"type": "object"}}], "nextCursor": "1"},
+        {"tools": [tool]},
+    ]}))
+    with pytest.raises(CaptureError):
+        capture_surface_sync(sys.executable, [str(fixture), str(declaration)])

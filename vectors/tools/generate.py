@@ -434,6 +434,13 @@ for hint in ("readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint
     DRIFT.append((f"tool-annotations-{hint}", "Hint changes cannot silently reuse an approved surface.", surface([tool("t") | {"annotations": {hint: False}}]), surface([tool("t") | {"annotations": {hint: True}}])))
 DRIFT.append(("tool-annotations-removed", "Removing declarations is drift too.", surface([tool("t") | {"annotations": {"destructiveHint": False}}]), surface([tool("t")])))
 for ident, before, after in [
+    ("extension", {"x": "before"}, {"x": "after"}),
+    ("explicit-null", {}, {"title": None}),
+    ("nested-null", {"x": {"nested": None}}, {"x": {"nested": "after"}}),
+]:
+    DRIFT.append((f"tool-annotations-{ident}", "Complete wire annotations retain extensions and explicit nulls.", surface([tool("t") | {"annotations": before}]), surface([tool("t") | {"annotations": after}])))
+DRIFT.append(("schema-out-extension-null", "Output schemas retain explicit null extension values.", surface([tool("t") | {"outputSchema": {"type": "object", "x": None}}]), surface([tool("t") | {"outputSchema": {"type": "object", "x": "after"}}])))
+for ident, before, after in [
     ("added", None, {}), ("removed", {}, None),
     ("type-broadened", obj({"x": {"type": "string"}}), obj({"x": {"type": ["string", "number"]}})),
     ("constraint-relaxed", obj({"x": {"type": "string", "maxLength": 8}}), obj({"x": {"type": "string", "maxLength": 64}})),

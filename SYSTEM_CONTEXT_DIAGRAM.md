@@ -1,5 +1,7 @@
 # mcp-warden — System Context Diagram
 
+Last Updated: 2026-10-02
+
 **Schema level 4** extends capture/lock/check to complete tool annotations and output
 schemas, with structural output drift and Python/TypeScript parity. The existing
 tools/list gate compares those commitments for v4 locks; legacy locks retain narrower
@@ -185,8 +187,8 @@ sequenceDiagram
     end
 ```
 
-> `compute_drift` structurally classifies tool `inputSchema` changes via the normalized
-> `schema_skeleton` stored in the lock (`schema_version` 3 — skeleton added at v2, in-document
+> `compute_drift` structurally classifies tool `inputSchema` and v4 `outputSchema` changes via the normalized
+> `schema_skeleton` stored in the lock (`schema_version` 4 — annotations/output added at v4, skeleton added at v2, in-document
 > `$ref` resolution at v3, #29): each security-relevant mutation is a per-fact
 > `WRD-DRIFT-SCHEMA-*` item (`docs/WARDEN_LOCK_SCHEMA.md` §6.2). v1 locks fall
 > back to a single high-severity `schema-modified` until re-pinned.
