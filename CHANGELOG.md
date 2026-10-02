@@ -30,6 +30,14 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+### Fixed — release validation
+
+- Refresh the dev/CI and Action dependency locks from PyJWT 2.13.0 to 2.15.1
+  with artifact hashes; the audited closure passes without advisory suppression.
+- Re-capture the three committed public examples at schema level 4 using the same
+  pinned server versions. Their prior fields are unchanged; new commitments are
+  reviewed example baselines, not transferred historical signatures.
+
 ### Added — tool metadata integrity (DSE-1539)
 
 - Schema level **4** commits complete tool annotations and output schemas, including

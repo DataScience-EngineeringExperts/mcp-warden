@@ -1,12 +1,13 @@
 {
-  "schema_version": 3,
-  "warden_version": "0.3.0",
+  "schema_version": 4,
+  "warden_version": "1.2.0",
   "server": {
     "command": "npx",
     "args": [
       "-y",
       "@modelcontextprotocol/server-sequential-thinking@2025.12.18"
     ],
+    "url": null,
     "command_digest": "sha256:96a06b285fe3292c53860204b94bcadfe7ce68fbd79bd77baee6eaaf41111d6d"
   },
   "tools": [
@@ -127,7 +128,83 @@
           }
         }
       },
-      "entry_digest": "sha256:2a4b66d61c405ac5be578cae31b0b41246afa751b4746fbfdce1f538c93a065a"
+      "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_hash": "sha256:b157dfbca04cf3213646a212215d93d3e049b333e61643eb5c7a9c628979ac30",
+      "output_schema_skeleton": {
+        "props": {
+          "$root": {
+            "type": [
+              "object"
+            ],
+            "required": false,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": false
+            }
+          },
+          "branches": {
+            "type": [
+              "array"
+            ],
+            "required": true,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          },
+          "branches[]": {
+            "type": [
+              "string"
+            ],
+            "required": false,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          },
+          "nextThoughtNeeded": {
+            "type": [
+              "boolean"
+            ],
+            "required": true,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          },
+          "thoughtHistoryLength": {
+            "type": [
+              "number"
+            ],
+            "required": true,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          },
+          "thoughtNumber": {
+            "type": [
+              "number"
+            ],
+            "required": true,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          },
+          "totalThoughts": {
+            "type": [
+              "number"
+            ],
+            "required": true,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "entry_digest": "sha256:04d37aae84ad9914578d20f64782469b62cd0967175c7040746a57f2374a0447"
     }
   ],
   "resources": [],
@@ -141,19 +218,19 @@
       "snippet": "mode…(len=47)"
     }
   ],
-  "overall_digest": "sha256:714be5f26176d84f3804d5f91643b5d782f2a3b82d7e5e1e41f986b833395d1d",
+  "overall_digest": "sha256:c635c79cc9382a28736668b7b7d4a2f75a752e951d95f1affa434ed1b24b6b80",
   "pin": {
-    "created_at": "2026-06-10T23:49:05Z",
-    "warden_version": "0.3.0",
+    "created_at": "2026-10-02T02:57:57Z",
+    "warden_version": "1.2.0",
     "mcp_protocol_version": "2025-11-25",
     "approved": true,
     "approver": "examples@mcp-warden.invalid",
-    "approved_at": "2026-06-10T23:49:05Z",
-    "approved_digest": "sha256:714be5f26176d84f3804d5f91643b5d782f2a3b82d7e5e1e41f986b833395d1d",
+    "approved_at": "2026-10-02T02:57:57Z",
+    "approved_digest": "sha256:c635c79cc9382a28736668b7b7d4a2f75a752e951d95f1affa434ed1b24b6b80",
     "provenance_version": 1,
     "pinner": {
       "tool": "mcp-warden",
-      "tool_version": "0.3.0",
+      "tool_version": "1.2.0",
       "actor": null,
       "environment": null
     },
@@ -162,9 +239,10 @@
         "actor": "examples@mcp-warden.invalid",
         "role": "approver",
         "method": "manual",
-        "created_at": "2026-06-10T23:49:05Z",
-        "bound_digest": "sha256:714be5f26176d84f3804d5f91643b5d782f2a3b82d7e5e1e41f986b833395d1d",
-        "note": null
+        "created_at": "2026-10-02T02:57:57Z",
+        "bound_digest": "sha256:c635c79cc9382a28736668b7b7d4a2f75a752e951d95f1affa434ed1b24b6b80",
+        "note": null,
+        "signature_bundle": null
       }
     ],
     "rotated_at": null,
