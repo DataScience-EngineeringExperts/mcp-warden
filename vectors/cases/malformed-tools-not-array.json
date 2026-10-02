@@ -6,7 +6,7 @@
     "error": true
   },
   "lock": {
-    "schema_version": 3,
+    "schema_version": 4,
     "warden_version": "0.0.0",
     "server": {
       "command": "python",
@@ -46,13 +46,16 @@
             }
           }
         },
-        "entry_digest": "sha256:2bbf6c724227113547e88079aee35fe478aa32f6d35ba6eb70ea8683b7d0b251"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:7f1d4f53ec8dadad5a57319a7b8426479fbb6383e97cf9b9af004383a97c2cca"
       }
     },
     "resources": [],
     "prompts": [],
     "findings": [],
-    "overall_digest": "sha256:cc72b68fab56bdd19bf063cb0801c5dd53622169f8bf8d0d7439977641f1ae46",
+    "overall_digest": "sha256:cd39071fa9a1f53a88ab1cacec7912ee9430ff5f37ecedeb49f558c8fbfacee6",
     "pin": {
       "created_at": "2026-01-01T00:00:00Z",
       "warden_version": "0.0.0",

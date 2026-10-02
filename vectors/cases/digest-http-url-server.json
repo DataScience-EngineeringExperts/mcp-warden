@@ -40,11 +40,14 @@
             }
           }
         },
-        "entry_digest": "sha256:6dbb5f5d14ac69981446cc85148ea4992450871a8466534d0338354ba66b4294"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:d6618ea2ccdf7cfacf5f35419dd399b2b32c3172690175e5a0b056450537e18d"
       }
     ],
     "resources": [],
     "prompts": [],
-    "overall_digest": "sha256:fc2e3393237a2fc90b42494848c4497f8a6a77fdd02224a44aba2d623d8d5c24"
+    "overall_digest": "sha256:a5dd175f90ed35ade0e0407df3bcc7c414c51c3d148cb62625072b432577585a"
   }
 }

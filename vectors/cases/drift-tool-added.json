@@ -3,7 +3,7 @@
   "kind": "drift",
   "description": "A new tool name -> tool-added (high).",
   "lock": {
-    "schema_version": 3,
+    "schema_version": 4,
     "warden_version": "0.0.0",
     "server": {
       "command": "python",
@@ -33,13 +33,16 @@
             }
           }
         },
-        "entry_digest": "sha256:cb207139f51a67842803bf299520d3084f2bb81f7da9167038a0dd320fa80fd0"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:f4e65ef148c0ee9d48615bccb119f10dff98891df7aab40893772792f9b76019"
       }
     ],
     "resources": [],
     "prompts": [],
     "findings": [],
-    "overall_digest": "sha256:f229e33df177a19793ec1991b6a7a740a30d963c7e094d122d86fdb6372222e3",
+    "overall_digest": "sha256:6532a3fbb7a49c68e9bb4e7dd0545b4fc792fce354ed2ceac0de8a4d0b0784c6",
     "pin": {
       "created_at": "2026-01-01T00:00:00Z",
       "warden_version": "0.0.0",

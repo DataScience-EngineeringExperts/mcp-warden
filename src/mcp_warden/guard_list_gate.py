@@ -9,7 +9,8 @@ condition: in v0.3 the divergent ``tools/list`` response is blocked by default
 
 This reuses ``pin``'s hashing (``hashing.py``) over the live ``tools/list`` result
 rather than re-spawning the server: the inline result already carries the live
-``(name, description, inputSchema)`` triples for every tool.
+definitions for every tool. V4 locks additionally commit the complete annotations
+and outputSchema; legacy locks retain their narrower coverage until re-pinned.
 """
 
 from __future__ import annotations
@@ -27,7 +28,8 @@ def diverges_from_lock(result: dict[str, Any], lock: WardenLock, *, strict: bool
     """Compare an inline ``tools/list`` result's tool surface to the lock.
 
     Compares the set of tool names plus each tool's ``(description, inputSchema)``
-    hashes (reusing :mod:`hashing`) against the pinned ``ToolEntry`` digests. Any
+    hashes (and annotations/outputSchema for v4, reusing :mod:`hashing`) against
+    the pinned ``ToolEntry`` digests. Any
     added/removed tool, or any changed description/schema hash, is divergence.
 
     Args:
@@ -51,7 +53,7 @@ def diverges_from_lock(result: dict[str, Any], lock: WardenLock, *, strict: bool
         return False, ""
 
     try:
-        live = _hash_live_tools(tools)
+        live = _hash_live_tools(tools, metadata=lock.schema_version >= 4)
     except Exception as exc:  # malformed entry
         if strict:
             # Strict: a hash failure means we could not gate this surface. Re-raise
@@ -61,6 +63,11 @@ def diverges_from_lock(result: dict[str, Any], lock: WardenLock, *, strict: bool
         return False, ""
 
     baseline = {t.name: (t.description_hash, t.input_schema_hash) for t in lock.tools}
+    if lock.schema_version >= 4:
+        baseline = {
+            t.name: (t.description_hash, t.input_schema_hash, t.annotations_hash, t.output_schema_hash)
+            for t in lock.tools
+        }
 
     added = sorted(set(live) - set(baseline))
     removed = sorted(set(baseline) - set(live))
@@ -80,9 +87,9 @@ def diverges_from_lock(result: dict[str, Any], lock: WardenLock, *, strict: bool
     return True, reason
 
 
-def _hash_live_tools(tools: list[Any]) -> dict[str, tuple[str, str]]:
-    """Hash each live tool entry to ``name -> (description_hash, input_schema_hash)``."""
-    out: dict[str, tuple[str, str]] = {}
+def _hash_live_tools(tools: list[Any], *, metadata: bool = False) -> dict[str, tuple]:
+    """Hash live declarations; append v4 metadata commitments when requested."""
+    out: dict[str, tuple] = {}
     for tool in tools:
         if not isinstance(tool, dict):
             continue
@@ -92,4 +99,9 @@ def _hash_live_tools(tools: list[Any]) -> dict[str, tuple[str, str]]:
         desc_hash = hashing.hash_description(tool.get("description"))
         schema_hash = hashing.hash_input_schema(tool.get("inputSchema"))
         out[name] = (desc_hash, schema_hash)
+        if metadata:
+            for key in ("annotations", "outputSchema"):
+                if tool.get(key) is not None and not isinstance(tool[key], dict):
+                    raise ValueError(f"tools/list {key} must be an object or null")
+            out[name] += (hashing.hash_value(tool.get("annotations")), hashing.hash_value(tool.get("outputSchema")))
     return out

@@ -36,7 +36,10 @@
         "schema_skeleton": {
           "props": {}
         },
-        "entry_digest": "sha256:6a765bbdeba20bac21a719f1b0f9693311cedce52642d2ba78a45986532c993b"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:8f8105d41e13fe3fbcd87ee431e04a82e331bf1be321170f8124e816f9ef4886"
       },
       {
         "name": "weirder",
@@ -46,11 +49,14 @@
         "schema_skeleton": {
           "props": {}
         },
-        "entry_digest": "sha256:afbe420baedfb3a914bf738a0a12d888b7e3d5a282a512f9a164f0ed300a58eb"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:5edc64c013bd3e29b994d901b0a241b5b82b6241f06e547d28a144b7d558219e"
       }
     ],
     "resources": [],
     "prompts": [],
-    "overall_digest": "sha256:dbb3df574496d257c0951c722f2f2edfde333f37fb3d406fa53daf517e22c6de"
+    "overall_digest": "sha256:baa2ff8f77e627affdf2d88b00f2b45593d84921eebffbea70b7430e4346ccdc"
   }
 }

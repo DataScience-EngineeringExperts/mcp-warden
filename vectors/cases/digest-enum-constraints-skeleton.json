@@ -190,11 +190,14 @@
             }
           }
         },
-        "entry_digest": "sha256:0c3a0e1b0f5e9748b614818d5db658ae56af7db418b1472335d55d723ed9cb32"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:f5a94ff8b92fbd0383be5f7d512a89c0a8e5d743219d38d2adc6c2bbe95c89cc"
       }
     ],
     "resources": [],
     "prompts": [],
-    "overall_digest": "sha256:945a89abf3aacd908242925ba13f8c4049383d9cfc1c912d85df7ef37644bff1"
+    "overall_digest": "sha256:8f8887e13ad9762151cc9019a87baf6ab75682e3e38958bd777785b38379de67"
   }
 }

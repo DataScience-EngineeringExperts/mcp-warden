@@ -1,8 +1,8 @@
 {
   "format": "mcp-lock-v1",
-  "schema_version": 3,
+  "schema_version": 4,
   "generator": "vectors/tools/generate.py",
-  "count": 87,
+  "count": 111,
   "vectors": [
     {
       "id": "canonical/sorted-keys-utf16",
@@ -118,6 +118,21 @@
       "id": "digest/entry-sorting",
       "kind": "digest",
       "file": "cases/digest-entry-sorting.json"
+    },
+    {
+      "id": "digest/tool-metadata-null",
+      "kind": "digest",
+      "file": "cases/digest-tool-metadata-null.json"
+    },
+    {
+      "id": "digest/tool-metadata-empty",
+      "kind": "digest",
+      "file": "cases/digest-tool-metadata-empty.json"
+    },
+    {
+      "id": "digest/tool-metadata-full",
+      "kind": "digest",
+      "file": "cases/digest-tool-metadata-full.json"
     },
     {
       "id": "drift/no-drift",
@@ -370,6 +385,96 @@
       "file": "cases/drift-mixed-multi-entry.json"
     },
     {
+      "id": "drift/v3-to-v4-migration",
+      "kind": "drift",
+      "file": "cases/drift-v3-to-v4-migration.json"
+    },
+    {
+      "id": "drift/v3-unapproved-migration",
+      "kind": "drift",
+      "file": "cases/drift-v3-unapproved-migration.json"
+    },
+    {
+      "id": "drift/tool-annotations-readOnlyHint",
+      "kind": "drift",
+      "file": "cases/drift-tool-annotations-readOnlyHint.json"
+    },
+    {
+      "id": "drift/tool-annotations-destructiveHint",
+      "kind": "drift",
+      "file": "cases/drift-tool-annotations-destructiveHint.json"
+    },
+    {
+      "id": "drift/tool-annotations-idempotentHint",
+      "kind": "drift",
+      "file": "cases/drift-tool-annotations-idempotentHint.json"
+    },
+    {
+      "id": "drift/tool-annotations-openWorldHint",
+      "kind": "drift",
+      "file": "cases/drift-tool-annotations-openWorldHint.json"
+    },
+    {
+      "id": "drift/tool-annotations-removed",
+      "kind": "drift",
+      "file": "cases/drift-tool-annotations-removed.json"
+    },
+    {
+      "id": "drift/tool-annotations-extension",
+      "kind": "drift",
+      "file": "cases/drift-tool-annotations-extension.json"
+    },
+    {
+      "id": "drift/tool-annotations-explicit-null",
+      "kind": "drift",
+      "file": "cases/drift-tool-annotations-explicit-null.json"
+    },
+    {
+      "id": "drift/tool-annotations-nested-null",
+      "kind": "drift",
+      "file": "cases/drift-tool-annotations-nested-null.json"
+    },
+    {
+      "id": "drift/schema-out-extension-null",
+      "kind": "drift",
+      "file": "cases/drift-schema-out-extension-null.json"
+    },
+    {
+      "id": "drift/schema-out-added",
+      "kind": "drift",
+      "file": "cases/drift-schema-out-added.json"
+    },
+    {
+      "id": "drift/schema-out-removed",
+      "kind": "drift",
+      "file": "cases/drift-schema-out-removed.json"
+    },
+    {
+      "id": "drift/schema-out-type-broadened",
+      "kind": "drift",
+      "file": "cases/drift-schema-out-type-broadened.json"
+    },
+    {
+      "id": "drift/schema-out-constraint-relaxed",
+      "kind": "drift",
+      "file": "cases/drift-schema-out-constraint-relaxed.json"
+    },
+    {
+      "id": "drift/schema-out-cosmetic-modified",
+      "kind": "drift",
+      "file": "cases/drift-schema-out-cosmetic-modified.json"
+    },
+    {
+      "id": "drift/schema-out-local-ref",
+      "kind": "drift",
+      "file": "cases/drift-schema-out-local-ref.json"
+    },
+    {
+      "id": "drift/schema-out-ref-redacted",
+      "kind": "drift",
+      "file": "cases/drift-schema-out-ref-redacted.json"
+    },
+    {
       "id": "malformed/invalid-json",
       "kind": "malformed",
       "file": "cases/malformed-invalid-json.json"
@@ -438,6 +543,21 @@
       "id": "malformed/depth-513-rejected",
       "kind": "malformed",
       "file": "cases/malformed-depth-513-rejected.json"
+    },
+    {
+      "id": "malformed/v4-missing-annotations_hash",
+      "kind": "malformed",
+      "file": "cases/malformed-v4-missing-annotations_hash.json"
+    },
+    {
+      "id": "malformed/v4-missing-output_schema_hash",
+      "kind": "malformed",
+      "file": "cases/malformed-v4-missing-output_schema_hash.json"
+    },
+    {
+      "id": "malformed/v4-missing-output_schema_skeleton",
+      "kind": "malformed",
+      "file": "cases/malformed-v4-missing-output_schema_skeleton.json"
     }
   ]
 }

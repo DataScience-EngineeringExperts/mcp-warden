@@ -30,6 +30,30 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+### Fixed — release validation
+
+- Refresh the dev/CI and Action dependency locks from PyJWT 2.13.0 to 2.15.1
+  with artifact hashes; the audited closure passes without advisory suppression.
+- Re-capture the three committed public examples at schema level 4 using the same
+  pinned server versions. Their prior fields are unchanged; new commitments are
+  reviewed example baselines, not transferred historical signatures.
+
+### Added — tool metadata integrity (DSE-1539)
+
+- Schema level **4** commits complete tool annotations and output schemas, including
+  output structural skeletons. Hint flips/removal and output changes cause drift;
+  schema-out-* classes distinguish structural/cosmetic changes. Python/TypeScript
+  share the vectors. The runtime tools/list gate compares new commitments for v4.
+- Missing/null hashes JSON null; {} is distinct. Invalid object fields and v4 locks
+  omitting commitments are refused. Raw annotations are not rendered, and hints
+  grant no capability or proof of behavioral safety.
+- V1–v3 locks remain readable. Approved legacy locks retain unapproved-change plus
+  migration; unapproved old locks also fail migration rather than claiming coverage.
+  Review/re-pin/re-approve for v4; historical signatures do not carry across.
+  Lock rotation preserves recorded schema.
+- The human checkpoint and protocol-neutral Warden direction over prompts, retrieval,
+  code, and serverless adapters are documented proposals, not shipped guarantees.
+
 ### Changed
 
 - **`mcp` SDK 2.x is now supported — the `<2` cap from #92 is lifted to `<3` (supersedes

@@ -1,5 +1,15 @@
 # mcp-warden — System Context Diagram
 
+Last Updated: 2026-10-02
+
+**Schema level 4** extends capture/lock/check to complete tool annotations and output
+schemas, with structural output drift and Python/TypeScript parity. The existing
+tools/list gate compares those commitments for v4 locks; legacy locks retain narrower
+runtime coverage and require re-pin for the new fields. Annotations grant no authority.
+The [Warden checkpoint proposal](docs/plans/2026-10-02-tool-integrity-upgrade.md)
+shows a future kernel beneath prompt/retrieval/code/serverless adapters with signing
+authority outside agent-editable state. It does not expand current runtime claims.
+
 Where mcp-warden sits, what it talks to, and where its outputs go. The **definition-only
 path introduced in v0.1** (`pin`/`check`/`policy`) is read-only: it captures the
 *declared* surface and writes a baseline + machine reports — no proxy, no runtime
@@ -177,8 +187,8 @@ sequenceDiagram
     end
 ```
 
-> `compute_drift` structurally classifies tool `inputSchema` changes via the normalized
-> `schema_skeleton` stored in the lock (`schema_version` 3 — skeleton added at v2, in-document
+> `compute_drift` structurally classifies tool `inputSchema` and v4 `outputSchema` changes via the normalized
+> `schema_skeleton` stored in the lock (`schema_version` 4 — annotations/output added at v4, skeleton added at v2, in-document
 > `$ref` resolution at v3, #29): each security-relevant mutation is a per-fact
 > `WRD-DRIFT-SCHEMA-*` item (`docs/WARDEN_LOCK_SCHEMA.md` §6.2). v1 locks fall
 > back to a single high-severity `schema-modified` until re-pinned.

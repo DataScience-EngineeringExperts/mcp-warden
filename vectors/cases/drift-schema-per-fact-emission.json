@@ -3,7 +3,7 @@
   "kind": "drift",
   "description": "required->optional AND string->string|null on one property emit two facts.",
   "lock": {
-    "schema_version": 3,
+    "schema_version": 4,
     "warden_version": "0.0.0",
     "server": {
       "command": "python",
@@ -43,13 +43,16 @@
             }
           }
         },
-        "entry_digest": "sha256:2efcca49a622e8a657515555e3881434d6877658e9c6ce6ae4d455d46bf507bb"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:8d6c9a7bf087ac45dcf7542435554c7cf0acc11bb701585b820ba4234353d560"
       }
     ],
     "resources": [],
     "prompts": [],
     "findings": [],
-    "overall_digest": "sha256:10ba24d90fc467b06649e08638cecb98f100768c055565805af3971dfa4b0f59",
+    "overall_digest": "sha256:a1ba2cf6539ea4235fe00e4f8ed33e2e70a96f673bcdc87af18e2ebd368c6686",
     "pin": {
       "created_at": "2026-01-01T00:00:00Z",
       "warden_version": "0.0.0",

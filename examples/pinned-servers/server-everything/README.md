@@ -41,3 +41,8 @@ Exit 0 = surface matches the lock. Exit 1 = drift. Exit 2 = capture error.
   capability annotation, not drift — `check` reproduces it identically.
 - `command_digest` hashes the literal launch argv (`npx … @2026.1.26`), not the
   resolved binary, so this lock verifies identically on any machine.
+
+The committed example was re-captured at **schema level 4** on 2026-10-02,
+including complete tool annotations and output schemas. The approver is an
+obviously synthetic example identity; this lock is a reproducible demonstration,
+not an authenticated human authorization receipt.

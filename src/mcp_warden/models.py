@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from . import SCHEMA_VERSION
 
@@ -26,6 +26,8 @@ class CapturedTool(BaseModel):
     name: str
     description: str | None = None
     input_schema: Any | None = None
+    annotations: dict[str, Any] | None = None
+    output_schema: dict[str, Any] | None = None
 
 
 class CapturedResource(BaseModel):
@@ -125,6 +127,9 @@ class ServerIdentity(BaseModel):
 class ToolEntry(BaseModel):
     """Hashed tool entry, sorted by name (WARDEN_LOCK_SCHEMA.md §5.1, §11).
 
+    V4 adds annotations/output-schema hashes and an output skeleton. None hash
+    defaults belong only to old locks; v4 absent metadata commits hash(JSON null).
+
     The optional ``inspection`` block (§11) is additive: when ``None`` it is
     excluded from both the serialized lock and the canonicalized entry body, so
     a tool with no inspection policy hashes BYTE-IDENTICALLY to a v0.1 entry
@@ -142,6 +147,9 @@ class ToolEntry(BaseModel):
     capabilities: list[str]
     inspection: dict[str, Any] | None = None
     schema_skeleton: SchemaSkeleton | None = None
+    annotations_hash: str | None = None  # None only for pre-v4 locks
+    output_schema_hash: str | None = None  # absent outputSchema hashes JSON null in v4
+    output_schema_skeleton: SchemaSkeleton | None = None
     entry_digest: str
 
 
@@ -302,6 +310,15 @@ class WardenLock(BaseModel):
     findings: list[Finding]
     overall_digest: str
     pin: PinMetadata
+
+    @model_validator(mode="after")
+    def _v4_tool_fields_required(self):
+        if self.schema_version >= 4:
+            required = {"annotations_hash", "output_schema_hash", "output_schema_skeleton"}
+            for tool in self.tools:
+                if not required <= tool.model_fields_set or tool.annotations_hash is None or tool.output_schema_hash is None:
+                    raise ValueError("v4 tool entries require annotations_hash, output_schema_hash, and output_schema_skeleton")
+        return self
 
     @field_validator("schema_version")
     @classmethod

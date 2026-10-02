@@ -1,12 +1,13 @@
 {
-  "schema_version": 3,
-  "warden_version": "0.3.0",
+  "schema_version": 4,
+  "warden_version": "1.2.0",
   "server": {
     "command": "npx",
     "args": [
       "-y",
       "@modelcontextprotocol/server-everything@2026.1.26"
     ],
+    "url": null,
     "command_digest": "sha256:898034042c967913541d5b6e16f114b0ea1c6fabc21f4160b9d3a87cc082d653"
   },
   "tools": [
@@ -39,7 +40,10 @@
           }
         }
       },
-      "entry_digest": "sha256:d22a7a6753697be7ca343b021b35af35757193823a87415a9e82d6673fc7d328"
+      "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_skeleton": null,
+      "entry_digest": "sha256:dce8914f8b582cb75d56da8bd8fc916abe06e5df26d7ad95dbd4346aba64a9bf"
     },
     {
       "name": "get-annotated-message",
@@ -84,7 +88,10 @@
           }
         }
       },
-      "entry_digest": "sha256:7964848eae36b809db099dbb715712a481310fd2d89fa277260b2e08b6d543a2"
+      "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_skeleton": null,
+      "entry_digest": "sha256:2777d1a49e6520b25e78b7d1c79809a72490da9e129310ad1a2ecb33ac66f57c"
     },
     {
       "name": "get-env",
@@ -105,7 +112,10 @@
           }
         }
       },
-      "entry_digest": "sha256:e459a105b99abfe16880dfb8126a94df1ec7b4b2814347f5be6f72cd6e1ed0cc"
+      "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_skeleton": null,
+      "entry_digest": "sha256:61ac09535bba78dbd05532657bbdae15919ff4e24d3e5941d0617ac34dcf231e"
     },
     {
       "name": "get-resource-links",
@@ -138,7 +148,10 @@
           }
         }
       },
-      "entry_digest": "sha256:26d498066afc20e5d7f358ff612b379a14423654a2c30ac440b01cf4b542bd43"
+      "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_skeleton": null,
+      "entry_digest": "sha256:8ec58ba06f82099d72d2e51cd46ba86c2d1a9ed409bed5c5531449c63fd705ca"
     },
     {
       "name": "get-resource-reference",
@@ -182,7 +195,10 @@
           }
         }
       },
-      "entry_digest": "sha256:92c65d2b1a76ea987b0da05f3a837062bc07f6f63f993a646eca5c5b5162241f"
+      "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_skeleton": null,
+      "entry_digest": "sha256:6911300313d4ce64fb6a19d18ce4c23971c0ee2115c59887c3adb42ef9a5022f"
     },
     {
       "name": "get-structured-content",
@@ -217,7 +233,53 @@
           }
         }
       },
-      "entry_digest": "sha256:9144fefef5e8907ac56fc43e8db0963d8a52d63fdf1fa17ac2fccdeec42f511f"
+      "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_hash": "sha256:c2b0083215a57373f29510b3ef2b41bf44c11505693062311190519759aba475",
+      "output_schema_skeleton": {
+        "props": {
+          "$root": {
+            "type": [
+              "object"
+            ],
+            "required": false,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": false
+            }
+          },
+          "conditions": {
+            "type": [
+              "string"
+            ],
+            "required": true,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          },
+          "humidity": {
+            "type": [
+              "number"
+            ],
+            "required": true,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          },
+          "temperature": {
+            "type": [
+              "number"
+            ],
+            "required": true,
+            "enum": null,
+            "constraints": {
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "entry_digest": "sha256:24c63ca2bd835f24a70ee485b646cee937dac2ec1a41e4a72b3706f713fa89a3"
     },
     {
       "name": "get-sum",
@@ -258,7 +320,10 @@
           }
         }
       },
-      "entry_digest": "sha256:aba41d49788f6a26131200bb4b2b85f8d0b223a7da811d462230643dc9abc3e6"
+      "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_skeleton": null,
+      "entry_digest": "sha256:cdd26b883fefcf70cdd7f5c11c05dfec8552928158a84d5ab5484543e75b6aaa"
     },
     {
       "name": "get-tiny-image",
@@ -279,7 +344,10 @@
           }
         }
       },
-      "entry_digest": "sha256:0e36b63338a6be99547aba091ff43817b4fcbd0d563f5824d6315c3b969c34b9"
+      "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_skeleton": null,
+      "entry_digest": "sha256:bfe06016d952b0e86bdeb7df4a55e35737365515e6bbed8e16070baaa0d9bd39"
     },
     {
       "name": "gzip-file-as-resource",
@@ -334,7 +402,10 @@
           }
         }
       },
-      "entry_digest": "sha256:6035f8ec75eb9957c78dffb5a8eac15fb62644d62aac09aea0f0f029c6b3f3c1"
+      "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_skeleton": null,
+      "entry_digest": "sha256:916ffa6bd1c0877833a7f4bd810b082518a9a08ae8f7fa3ae9a218fbb6beb07d"
     },
     {
       "name": "simulate-research-query",
@@ -377,7 +448,10 @@
           }
         }
       },
-      "entry_digest": "sha256:63edd49a9dad361fbfcec4b2b041ea5b4eafa4cbbc10e0325ddcf81e084cdddd"
+      "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_skeleton": null,
+      "entry_digest": "sha256:e8acf38d9849a2dbc27848994424f959814f8cdeea47534e9ed53f334fe80d45"
     },
     {
       "name": "toggle-simulated-logging",
@@ -398,7 +472,10 @@
           }
         }
       },
-      "entry_digest": "sha256:a3c18cf55f3830356e5b41427564573c986d6b6ce1db448d687f02ca4337945d"
+      "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_skeleton": null,
+      "entry_digest": "sha256:2b772d676235f6436af536c0e421b31b7b3ff93c0ac3a1db0e55134dfe9553db"
     },
     {
       "name": "toggle-subscriber-updates",
@@ -419,7 +496,10 @@
           }
         }
       },
-      "entry_digest": "sha256:2c2788b6edf991c3feb6b1a7e86563684f0b350deb5d07269c729b03c0aa6bed"
+      "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_skeleton": null,
+      "entry_digest": "sha256:666dccc13c710289519d6540cc60d4e7d6f36473c76c252612a54a204c90fe93"
     },
     {
       "name": "trigger-long-running-operation",
@@ -460,7 +540,10 @@
           }
         }
       },
-      "entry_digest": "sha256:7221da574c6c603d5b2ab0da019b316bb1296994558d841fc876dbd04d0d5987"
+      "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_skeleton": null,
+      "entry_digest": "sha256:61c1529d6d5817a86fe2291ca55f5addd73c4b513e36b6965f3a954248c834e9"
     }
   ],
   "resources": [
@@ -549,19 +632,19 @@
       "snippet": "name token 'query'"
     }
   ],
-  "overall_digest": "sha256:c0d636a27f360f148534042e7fd39ccc22f93ac545a9f996c2e1f3b08d680d76",
+  "overall_digest": "sha256:59be2ada2e6ff15c6a749ba29a8a265015b73acc2ce4b9967d795549ef7b6c49",
   "pin": {
-    "created_at": "2026-06-10T23:46:45Z",
-    "warden_version": "0.3.0",
+    "created_at": "2026-10-02T02:57:26Z",
+    "warden_version": "1.2.0",
     "mcp_protocol_version": "2025-11-25",
     "approved": true,
     "approver": "examples@mcp-warden.invalid",
-    "approved_at": "2026-06-10T23:46:45Z",
-    "approved_digest": "sha256:c0d636a27f360f148534042e7fd39ccc22f93ac545a9f996c2e1f3b08d680d76",
+    "approved_at": "2026-10-02T02:57:26Z",
+    "approved_digest": "sha256:59be2ada2e6ff15c6a749ba29a8a265015b73acc2ce4b9967d795549ef7b6c49",
     "provenance_version": 1,
     "pinner": {
       "tool": "mcp-warden",
-      "tool_version": "0.3.0",
+      "tool_version": "1.2.0",
       "actor": null,
       "environment": null
     },
@@ -570,9 +653,10 @@
         "actor": "examples@mcp-warden.invalid",
         "role": "approver",
         "method": "manual",
-        "created_at": "2026-06-10T23:46:45Z",
-        "bound_digest": "sha256:c0d636a27f360f148534042e7fd39ccc22f93ac545a9f996c2e1f3b08d680d76",
-        "note": null
+        "created_at": "2026-10-02T02:57:26Z",
+        "bound_digest": "sha256:59be2ada2e6ff15c6a749ba29a8a265015b73acc2ce4b9967d795549ef7b6c49",
+        "note": null,
+        "signature_bundle": null
       }
     ],
     "rotated_at": null,

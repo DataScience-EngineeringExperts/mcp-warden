@@ -157,6 +157,22 @@ hashes. This keeps the file small, reviewable, and free of any secret material.
 
 ### 7.1 Tool entry (array sorted by `name`)
 
+Schema level 4 commits `name`, `description`, `inputSchema`, the complete `annotations`
+object, and `outputSchema`, together with derived capability/skeleton/inspection
+fields. Top-level `title`, `icons`, and `_meta` remain excluded. Levels 1–3 committed
+only name/description/inputSchema from the raw Tool; missing old commitments MUST
+NOT be treated as historical null metadata.
+
+`annotations_hash = hash(annotations)`; `output_schema_hash = hash(outputSchema)`.
+Absent/null values MUST hash JSON **null**, not `{}`; empty objects are distinct.
+Non-null values MUST be objects, otherwise capture/verification refuses them.
+`output_schema_skeleton` is the §7.5 extraction of a present schema, or null when
+absent. It participates in entry_digest. V4 readers MUST require both hash strings
+and the skeleton field (which may be null). Raw metadata is not added to reports.
+Annotations are untrusted server declarations, never authority or proof of safety;
+output schemas do not certify returned content.
+
+
 ```jsonc
 {
   "name": "read_file",
@@ -164,6 +180,9 @@ hashes. This keeps the file small, reviewable, and free of any secret material.
   "input_schema_hash": "sha256:...",  // §5.1
   "capabilities": ["fs-read"],        // §7.4 derived flags, sorted, deduped
   "schema_skeleton": { ... },         // §7.5 structural facts, or null
+  "annotations_hash": "sha256:...",   // v4; absent/null -> hash(null)
+  "output_schema_hash": "sha256:...", // v4; absent/null -> hash(null)
+  "output_schema_skeleton": { ... },  // v4; absent/null -> null
   "inspection": { ... },              // §11 OPTIONAL per-tool inspection block
   "entry_digest": "sha256:..."        // §7.3
 }
@@ -225,6 +244,14 @@ blob-level schema-modified classification until re-pinned.
 ---
 
 ## 8. Overall digest and drift
+
+V4 annotation changes emit high `tool-annotations-modified`. Output addition/removal
+emits high `schema-out-added`/`schema-out-removed`; other changes reuse §8.3
+structural classes with `schema-out-` replacing `schema-`. Cosmetic-only changes
+emit low `schema-out-cosmetic-modified`; missing skeletons fall back to high
+`schema-out-modified`. SARIF prefixes these with `WRD-DRIFT-`, including
+`WRD-DRIFT-SCHEMA-OUT-TYPE-BROADENED`.
+
 
 ### 8.1 Overall digest
 
@@ -522,6 +549,11 @@ skeleton of affected tools → `entry_digest` → `overall_digest`, so each was 
 silent surface change. A producer MUST NOT change any hashed field's derivation without
 bumping `schema_version`.
 
+**3→4** adds annotations_hash, output_schema_hash, and output_schema_skeleton to
+every tool entry, including canonical null commitments. Fresh entry digests change
+and require review/re-attestation. Python and TypeScript implement the same level;
+conformance includes genuine v3 bytes and malformed v4 omissions.
+
 **14.3 How consumers are notified / how old locks are handled.** Because `schema_version`
 lives **inside** `overall_digest`, a format bump deterministically changes the digest, and
 on an approved baseline a verifier surfaces it as the **same** high `unapproved-change`
@@ -533,6 +565,11 @@ operator reviews and re-pins to re-attest under the new level. Pre-skeleton (v1)
 degrade gracefully: a baseline lacking a `schema_skeleton` falls back to the coarse
 `schema-modified` (high) until re-pinned (§7.5, §8.3). Additive migration advisories never
 DOWNGRADE a finding.
+
+For v4, an **unapproved** older baseline also receives a migration finding and fails:
+missing old commitments cannot be reported as v4 coverage. Approved locks retain
+high unapproved-change plus the advisory. Reading or rotating old documents preserves
+their recorded schema rather than silently converting them to v4.
 
 **14.4 Newer levels.** A reader MUST reject (fail closed) a lock whose `schema_version` is
 **above** the level it implements. It cannot reproduce a derivation it does not know, and

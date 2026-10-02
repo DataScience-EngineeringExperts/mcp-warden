@@ -1,5 +1,7 @@
 # Documentation Index — mcp-warden
 
+Last Updated: 2026-10-02
+
 Master index of every document in this repository. The `docs/` files are the
 **security contract and source of truth** for all algorithms; the three core docs
 describe and visualize the implementation that satisfies that contract.
@@ -16,13 +18,17 @@ describe and visualize the implementation that satisfies that contract.
 
 ## Lock Format v1 conformance (`vectors/` + `@mcp-warden/lock` — DSE-1513)
 
+Schema level 4 adds annotation/output commitments (DSE-1539). The
+[upgrade plan and Warden checkpoint proposal](docs/plans/2026-10-02-tool-integrity-upgrade.md)
+separates implemented surface integrity from proposed protocol-neutral enforcement.
+
 The format is a standard, not a tool: a language-neutral corpus defines conformance and two
 implementations (Python reference, zero-dependency TypeScript) prove it in CI.
 
 | Artifact | Purpose |
 |----------|---------|
 | [`vectors/README.md`](vectors/README.md) | Consumer contract: manifest schema, the four vector kinds, the surface document shape, how a third implementation runs the corpus |
-| [`vectors/manifest.json`](vectors/manifest.json) + [`vectors/cases/`](vectors/cases/) | 77 generated vectors — canonical (RFC 8785), digest, drift (every `WRD-DRIFT-*` class), malformed |
+| [`vectors/manifest.json`](vectors/manifest.json) + [`vectors/cases/`](vectors/cases/) | 111 generated vectors — canonical (RFC 8785), digest, drift (every `WRD-DRIFT-*` class), malformed |
 | [`vectors/tools/generate.py`](vectors/tools/generate.py) | Regenerates the corpus from the Python reference; a corpus diff = a hashed-derivation change = a `schema_version` bump (SPEC §14.2) |
 | [`tests/test_spec_vectors.py`](tests/test_spec_vectors.py) | Python harness over the manifest (honours `MCP_LOCK_VECTORS_DIR`) |
 | [`packages/lock-ts/`](packages/lock-ts/README.md) | `@mcp-warden/lock` — verify-only TypeScript: hand-written JCS, SHA-256, capability + skeleton derivation, drift classifier; `npm test` runs the same corpus |
@@ -156,7 +162,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 | [`docs/AGENT_TRUST_KERNEL.md`](docs/AGENT_TRUST_KERNEL.md) | **(DSE-714, design contract)** Normative invariants for the future deterministic Agent Trust Kernel: trust boundaries, complete mediation, default deny, non-overridable critical classes, evidence-before-effect, offline operation, residual risks, and bindings for DSE-715 through DSE-717. MCP-Warden v1.1 is explicitly not yet ATK-conformant |
 | [`docs/CONTENT_ENVELOPE.md`](docs/CONTENT_ENVELOPE.md) | **(DSE-715, implemented foundation)** Strict immutable V1 content envelope, domain-separated exact-byte digests, canonical metadata boundary, bounded one-hop lineage, monotonic taint, stable code-only errors, and secret-safe public projection. Evidence only; no authority or whole-ATK conformance claim |
 | [`docs/POLICY_ENFORCEMENT.md`](docs/POLICY_ENFORCEMENT.md) | **(DSE-716, implemented foundation)** Versioned signed policy/runtime/adapter/executable-bundle activation, exact adapter/bundle-bound leases, mechanically derived frozen handler identity, deterministic default-deny PDP, evidence-gated structural PEP, stable reason/recovery matrix, caps, and non-optional fixed-corpus adapter harness. DSE-717 durable evidence is in progress but remains required for any whole-ATK claim |
-| [`docs/WARDEN_LOCK_SCHEMA.md`](docs/WARDEN_LOCK_SCHEMA.md) | **mcp-warden implementation of [`docs/SPEC.md`](docs/SPEC.md) (MCP Lock Format v1).** `warden.lock` format, RFC 8785 canonicalization + SHA-256 hashing, field/entry/overall digests, the normative drift definition + severities; **§5.1/§6.2 structural schema diff** (normalized per-tool `schema_skeleton`, `schema_version` 3 — skeleton added at v2, in-document `$ref` resolution at v3 (#29), granular `WRD-DRIFT-SCHEMA-*` taxonomy + severities, v1 fallback); **§8.1/§8.2 (v0.3, #19)** structured out-of-digest provenance (`pinner` / `attestations` / `rotation_count`, `PROVENANCE_VERSION`, B4 `bound_digest` format) + `lock rotate` digest-invariant semantics + the #16 signing implication; **§11 (v0.2)** optional per-tool inspection policy (`expected_output_charset` / `may_return_urls` / `secret_echo_applies`, fail-safe defaults, digest impact) |
+| [`docs/WARDEN_LOCK_SCHEMA.md`](docs/WARDEN_LOCK_SCHEMA.md) | **mcp-warden implementation of [`docs/SPEC.md`](docs/SPEC.md) (MCP Lock Format v1).** `warden.lock` format, RFC 8785 canonicalization + SHA-256 hashing, field/entry/overall digests, the normative drift definition + severities; **§5.1/§6.2 structural schema diff** (normalized per-tool `schema_skeleton`, `schema_version` 4 — annotations/output added at v4, skeleton added at v2, in-document `$ref` resolution at v3 (#29), granular `WRD-DRIFT-SCHEMA-*` taxonomy + severities, v1 fallback); **§8.1/§8.2 (v0.3, #19)** structured out-of-digest provenance (`pinner` / `attestations` / `rotation_count`, `PROVENANCE_VERSION`, B4 `bound_digest` format) + `lock rotate` digest-invariant semantics + the #16 signing implication; **§11 (v0.2)** optional per-tool inspection policy (`expected_output_charset` / `may_return_urls` / `secret_echo_applies`, fail-safe defaults, digest impact) |
 | [`docs/WARDEN_LOCK_EXAMPLE.md`](docs/WARDEN_LOCK_EXAMPLE.md) | Illustrative full `warden.lock` + a post-`lock rotate` `pin` block (archived from WARDEN_LOCK_SCHEMA §9 to keep that core doc under the line cap) |
 | [`docs/CHECKS.md`](docs/CHECKS.md) | The deterministic `WRD-*` static-check catalog (capability/secret/supply/robustness), the shared tokenizer, severity→SARIF mapping, redaction rule, CUT list. **Reused by v0.2** `WRD-RES-SECRET-ECHO` (the `WRD-SEC-*` patterns + redaction) |
 | [`docs/POLICY_MODEL.md`](docs/POLICY_MODEL.md) | Policy schema, the four high-risk shapes, constraint vocabulary, fail-closed defaults, SSRF deny ranges, lint + single-sample eval semantics. **Enforced at runtime by v0.2 `guard`** on live `tools/call` requests |
@@ -166,6 +172,8 @@ scope-honesty box and makes no compliance/regulatory claim.
 | [`docs/SIGNING.md`](docs/SIGNING.md) | **(v0.3, #16)** Sigstore keyless signing + verification of `warden.lock`: the optional `[sigstore]` extra, the deterministic `mcp-warden-lock-digest/v1` statement that binds ONLY `overall_digest` (survives `lock rotate`), `pin --sign` / `check --verify` usage, the **fixed-sidecar** verify contract (pointer field never trusted), the full fail-closed matrix, the TUF-cache/offline caveat, and the two accepted trade-offs (rotate-replay + committed-fixture coverage gap + refresh steps) |
 
 ## Non-normative design and implementation plans
+
+[Runtime CLI examples](docs/archive/2026-10-02-runtime-cli-examples.md) retain the detailed guard commands moved from README.
 
 | Plan | Purpose |
 |---|---|
@@ -217,6 +225,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 | `src/mcp_warden/signing.py` | **(#16)** Sigstore keyless sign/verify primitives (guarded import; `build_statement` / `sign_statement` / `verify_statement` — verify raises on failure, returns None on success) | SIGNING.md |
 | `src/mcp_warden/cli_sign.py` | **(#16)** `pin --sign` / `check --verify` CLI control flow: fixed-sidecar verify, atomic bundle write, fail-closed exits | SIGNING.md |
 | `src/mcp_warden/drift.py` | Per-class drift/diff engine + severities | WARDEN_LOCK_SCHEMA §6.2 |
+| `src/mcp_warden/drift_tool_metadata.py` | v4 annotation drift and structural output-schema classification without raw annotation disclosure | SPEC v4 extension |
 | `src/mcp_warden/schema_diff.py` | Deterministic structural `inputSchema` skeleton extractor + per-fact diff classifier (`WRD-DRIFT-SCHEMA-*`; `$ref`/cyclic/malformed-safe) | WARDEN_LOCK_SCHEMA §5.1, §6.2 |
 | `src/mcp_warden/checks.py` | Static-check orchestrator (deterministic sort) | CHECKS §4–§5 |
 | `src/mcp_warden/checks_secret.py` | `WRD-SEC-*` vendor + entropy + redaction | CHECKS §4.2 |
@@ -260,7 +269,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 | `tests/test_capture_http.py` | **(#74, DSE-57)** Async/sync Streamable HTTP capture, protocol/list normalization, timeout handling, and connection errors |
 | `tests/test_diff.py` | **(v0.3)** `warden diff` renderer: identical→"no differences", tool add/remove + schema change rows, **redaction-leak guard** (secret in `server.args` absent from human/`--json`/`--sarif` incl. parsed-JSONL `detail`), provenance-only section vs empty integrity drift, `--exit-code` (1 on integrity drift / 0 on provenance-only), `--no-provenance` M6 message, fail-closed on missing/invalid lock |
 | `tests/test_result_inspection.py` | **(v0.2)** `WRD-RES-*`: ANSI codepoint match (incl. extended/binary-ok), secret-echo reuse + redaction, exfil host/subdomain boundary + path-qualified, injection exact-phrase (no broad-regex FP), URL/uninspectable notes |
-| `tests/test_inspection_policy.py` | **(v0.2)** §11 per-tool policy fail-safe defaults, byte-identical-to-v0.1 digest when absent, inspection-policy drift, pin-time validation, reader fallback + LOCK-INVALID |
+| `tests/test_inspection_policy.py` | **(v0.2)** §11 per-tool policy fail-safe defaults, inspection omission/None digest parity in the current format, inspection-policy drift, pin-time validation, reader fallback + LOCK-INVALID |
 | `tests/test_wire_block.py` | **(v0.2)** `-32001` error-response shape, block-mode mapping, ANSI strip-in-place `_meta.warden.modified`, secret redact-in-place |
 | `tests/test_framing.py` | **(v0.2)** newline + Content-Length framing, chunk-split reads, original-bytes pass-through, malformed-frame parse capture |
 | `tests/test_guard_posture.py` | **(v0.2/v0.3)** fail-open (inspector exception/malformed → pass-through) vs fail-closed (policy deny → block under `armed_policy`), audit-only precedence over default-on |

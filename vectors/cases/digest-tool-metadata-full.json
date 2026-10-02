@@ -1,0 +1,82 @@
+{
+  "id": "digest/tool-metadata-full",
+  "kind": "digest",
+  "description": "Complete hint objects and output schema use RFC 8785 commitments.",
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [
+      {
+        "name": "t",
+        "annotations": {
+          "destructiveHint": false,
+          "readOnlyHint": true,
+          "title": "Record"
+        },
+        "outputSchema": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "value"
+          ]
+        }
+      }
+    ],
+    "resources": [],
+    "prompts": []
+  },
+  "expect": {
+    "server": {
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [
+      {
+        "name": "t",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {}
+        },
+        "annotations_hash": "sha256:9db7194b9c289b89474dc30d2bca33dd28a06af0038321d0e42d8bd5637a31a7",
+        "output_schema_hash": "sha256:552023159e68e4247320e0219538533048b4fdb5a2d71e968699e9ed6796b697",
+        "output_schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            },
+            "value": {
+              "type": [
+                "string"
+              ],
+              "required": true,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true,
+                "maxLength": 64
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:27412db910bdc3a447af86096dd223de2b56fd36bcfb58660a543f7517b20c13"
+      }
+    ],
+    "resources": [],
+    "prompts": [],
+    "overall_digest": "sha256:ca9be7b350cf92b812ff2d80196f1e3bd30e8f7d509ac3018a152fe286265379"
+  }
+}

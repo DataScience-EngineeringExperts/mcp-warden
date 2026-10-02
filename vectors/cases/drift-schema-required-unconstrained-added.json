@@ -3,7 +3,7 @@
   "kind": "drift",
   "description": "Drift class schema-required-unconstrained-added (see docs/SPEC.md §8).",
   "lock": {
-    "schema_version": 3,
+    "schema_version": 4,
     "warden_version": "0.0.0",
     "server": {
       "command": "python",
@@ -33,13 +33,16 @@
             }
           }
         },
-        "entry_digest": "sha256:fc9373d75e8760f06d8500e39c99c4b4ffd2ef8a8ded6a68e0c487596ef0d35a"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:332f5e0442396b518012a0706327224715e0b977bacde45b4cc7eb29eed4882e"
       }
     ],
     "resources": [],
     "prompts": [],
     "findings": [],
-    "overall_digest": "sha256:8d995d941c197d3d0a2783e9eea4ffb6f8fc1961db440037d114354902abbdf5",
+    "overall_digest": "sha256:2a4419bd93b6a2ccb0d81f121d39a2f00904ce29b13ec9273c43eaff3a250e8c",
     "pin": {
       "created_at": "2026-01-01T00:00:00Z",
       "warden_version": "0.0.0",

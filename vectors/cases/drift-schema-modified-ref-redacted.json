@@ -3,7 +3,7 @@
   "kind": "drift",
   "description": "An opaque $ref whose target looks secret is redacted in detail.",
   "lock": {
-    "schema_version": 3,
+    "schema_version": 4,
     "warden_version": "0.0.0",
     "server": {
       "command": "python",
@@ -41,13 +41,16 @@
             }
           }
         },
-        "entry_digest": "sha256:129daeeab62bd91cb958d605fcb346f5f46b02c0080e2ec0428407e70eb0fb41"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:22654fd167491ef2fb1d620a38c7641f9add415e435152a5640b0db0fefde010"
       }
     ],
     "resources": [],
     "prompts": [],
     "findings": [],
-    "overall_digest": "sha256:5d4b058d9b9a0e7047c5fd5663ec54d8b09624e12b714b19c8d7992b6cc5ca94",
+    "overall_digest": "sha256:742600e51a3eb4fb1b03354a202297e81bfe80f2cffefb0ea2cbdf505d349485",
     "pin": {
       "created_at": "2026-01-01T00:00:00Z",
       "warden_version": "0.0.0",

@@ -3,7 +3,7 @@
   "kind": "drift",
   "description": "Same uri, changed description -> resource-modified (low).",
   "lock": {
-    "schema_version": 3,
+    "schema_version": 4,
     "warden_version": "0.0.0",
     "server": {
       "command": "python",
@@ -25,7 +25,7 @@
     ],
     "prompts": [],
     "findings": [],
-    "overall_digest": "sha256:8ca58792c6481eb495224f281a3b0757c249efeb6586ecd938db0697e2440ea1",
+    "overall_digest": "sha256:1914b0f61ac11241cfe6544df774e6bff54cdaff272c65d5326b9f56c9c367ae",
     "pin": {
       "created_at": "2026-01-01T00:00:00Z",
       "warden_version": "0.0.0",

@@ -1,5 +1,10 @@
 # @mcp-warden/lock
 
+Implements schema level **4**, including complete tool annotations and output schemas.
+Missing/null metadata hashes JSON null; empty objects differ. Hint changes and output
+schema drift fail verification. Older locks remain readable but require review/re-pin
+to acquire the new coverage; annotations are declarations and grant no authority.
+
 Zero-dependency **verifier** for [MCP Lock Format v1](../../docs/SPEC.md) — the
 `warden.lock` baseline that [mcp-warden](https://github.com/DataScience-EngineeringExperts/mcp-warden)
 pins an MCP server's declared tool/resource/prompt surface into.

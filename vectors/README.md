@@ -48,7 +48,7 @@ internal model leaks into the corpus:
 ```jsonc
 {
   "command": "node", "args": ["./server.js"],   // OR  "url": "https://host/mcp"
-  "tools":     [ { "name", "description"?, "inputSchema"? } ],
+  "tools":     [ { "name", "description"?, "inputSchema"?, "annotations"?, "outputSchema"? } ],
   "resources": [ { "uri", "name"?, "description"?, "mimeType"? } ],
   "prompts":   [ { "name", "description"?, "arguments"? } ]
 }
