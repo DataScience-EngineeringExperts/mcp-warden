@@ -96,7 +96,7 @@ jobs:
         run: pip show mcp | grep -i '^version'
 
       - name: Capture / parity / pagination tests under mcp 1.x
-        run: pytest -q tests/test_capture_model_dump.py tests/test_capture_pagination.py tests/test_e2e_pin_check.py tests/test_capture_http.py
+        run: pytest -q tests/test_capture_model_dump.py tests/test_capture_pagination.py tests/test_e2e_pin_check.py tests/test_capture_http.py tests/test_tool_integrity.py tests/test_tool_integrity_guard.py
 
   # --------------------------------------------------------------------------
   # Job 1b: lint gate (ruff)
