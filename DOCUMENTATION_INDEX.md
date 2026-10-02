@@ -201,9 +201,11 @@ scope-honesty box and makes no compliance/regulatory claim.
 
 | Doc | Purpose |
 |-----|---------|
-| [`RELEASING.md`](RELEASING.md) | Operator runbook: one-time PyPI Trusted-Publisher (OIDC) setup, cut-a-release checklist, post-release verification, rollback/yank. PyPI dist name is `mcp-warden-cli`; CLI/repo stay `mcp-warden`. |
+| [`RELEASING.md`](RELEASING.md) | Operator runbook: existing-project PyPI publisher settings, authentication-only verification, release delivery, post-release checks, failed-job recovery and rollback/yank. PyPI dist name is `mcp-warden-cli`; CLI/repo stay `mcp-warden`. |
 | [`CHANGELOG.md`](CHANGELOG.md) | Keep-a-Changelog history through CLI 2.0.0 / schema level 4 with explicit in/out-of-scope. |
-| [`.github/workflows/release.yml`](.github/workflows/release.yml) | Publish-on-Release workflow: build Python distributions + tested TypeScript 0.2.0 tarball → publish Python to PyPI via OIDC Trusted Publishing (no stored token, **gated on repo var `PYPI_TRUSTED_PUBLISHER=true`** + `skip-existing`, #64) → Sigstore-keyless sign Python, TypeScript, and checksums and attach bundles to the Release. Live: `mcp-warden-cli` Trusted Publisher configured + the gate variable set. |
+| [`.github/workflows/release.yml`](.github/workflows/release.yml) | Publish-on-Release: build Python + tested TypeScript tarball; upload only Python through OIDC (repo gate + `skip-existing`); Sigstore-sign artifacts/checksums. Manual `verify-pypi` exchanges credentials without build/upload/signing. The gate variable alone does not prove publisher alignment. |
+| [`scripts/verify_pypi_oidc.py`](scripts/verify_pypi_oidc.py) | Standard-library production OIDC probe: fixed repository/workflow identity, bounded HTTPS, no redirects, no token logs/storage, no uploads; reports exchange separately from project upload permission. |
+| [`docs/plans/2026-10-02-pypi-automation-repair.md`](docs/plans/2026-10-02-pypi-automation-repair.md) | Bounded automation repair and session wrap plan, including the authenticated PyPI browser boundary. |
 | [`requirements-dev.lock`](requirements-dev.lock) · [`.github/workflows/deps-locked.yml`](.github/workflows/deps-locked.yml) | **(#59)** Hash-pinned dev/CI dependency lock + the "Hash-locked dev/CI install" check (verifies `--require-hashes` install + that the lock stays in sync with `pyproject.toml` without floating to latest, #65). Dependency-update policy lives in [`SECURITY.md`](SECURITY.md). |
 
 ---

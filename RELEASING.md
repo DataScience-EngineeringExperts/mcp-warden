@@ -19,19 +19,38 @@ does not collide.
 
 The publish + signing automation lives in
 [`.github/workflows/release.yml`](.github/workflows/release.yml). That workflow is
-**inert until configured**: it only fires when a GitHub *Release* is published, and
-publishing only succeeds once the one-time PyPI Trusted Publisher below exists.
+publishes production packages only on a published GitHub Release. Manual modes
+are TestPyPI upload, build-only, and production authentication verification without
+uploading. Production authentication needs a matching PyPI Trusted Publisher.
 
 ---
 
-## 0. One-time PyPI setup (do this ONCE, before the first release)
+## 0. Configure the production publisher
 
-The workflow publishes via **OIDC Trusted Publishing** — there is no API token and
-no secret stored in GitHub. Instead, PyPI is told to trust releases that come from
-this exact repo + workflow. Configure the publisher *before* the first release so
-the very first upload is already OIDC-published.
+The production project already exists. Its publisher is managed at
+[PyPI → mcp-warden-cli → Publishing](https://pypi.org/manage/project/mcp-warden-cli/settings/publishing/)
+by a logged-in project owner. An upload API token is not a publisher-admin browser session.
 
-### Recommended path — "pending publisher" (zero prior upload required)
+For the existing workflow, the GitHub publisher fields are:
+
+| Field | Expected value |
+|-------|----------------|
+| Owner | `DataScience-EngineeringExperts` |
+| Repository name | `mcp-warden` |
+| Workflow name | `release.yml` |
+| Environment name | blank: the current publishing job has no deployment environment |
+
+Inspect the current publisher before changing it. An existing environment restriction
+must be deliberately aligned on both sides, preserving any required reviewer gate.
+A repository transfer can also change the immutable owner ID PyPI records; a matching
+display name alone does not prove identity alignment. See
+[PyPI troubleshooting](https://docs.pypi.org/trusted-publishers/troubleshooting/).
+
+The workflow uses **OIDC Trusted Publishing**, without a stored GitHub upload token.
+The repo variable `PYPI_TRUSTED_PUBLISHER=true` permits an attempt; it does not prove
+that a matching PyPI publisher exists. Verify the exchange before cutting a new release.
+
+### New projects only — pending publisher
 
 1. Log in to <https://pypi.org> as the account that will own `mcp-warden-cli`.
 2. Go to **Account → Publishing** (<https://pypi.org/manage/account/publishing/>).
@@ -43,13 +62,14 @@ the very first upload is already OIDC-published.
    - **Environment name**: *(leave blank — the workflow does not use a GitHub
      deployment environment; if you later add one, set it here and add
      `environment:` to the `pypi-publish` job)*
-4. Save. PyPI now holds the project name `mcp-warden-cli` and will create it on the
-   first successful OIDC upload from `release.yml`.
+4. Save the pending configuration. A successful authorized OIDC flow can create
+   the new project if the name remains available; saving does not reserve it.
 
-A "pending publisher" reserves the name and lets the FIRST release be OIDC-published
-— no manual upload, no token ever.
+A pending publisher does **not** reserve a name or create a project. It is not the
+setup path for the already-existing `mcp-warden-cli` project. See
+[PyPI pending publishers](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/).
 
-### Alternative path — manual first upload, then configure
+### New projects only — manual first upload, then configure
 
 If you would rather seed the project manually first:
 
@@ -73,7 +93,7 @@ without the publish job failing red before the Trusted Publisher exists.
   GitHub Release builds the sdist + wheel, Sigstore-signs them, and attaches the
   bundles to the Release — but the `pypi-publish` job is **SKIPPED** (gray, not red)
   and nothing is uploaded to PyPI. Use this to cut signed GitHub Releases for
-  versions already published by token (e.g. `1.0.0`, `1.0.1`).
+  historical versions already published by token (e.g. `1.0.0`, `1.0.1`).
 - **After you have configured the Trusted Publisher above** (project
   `mcp-warden-cli`, owner `DataScience-EngineeringExperts`, repo `mcp-warden`, workflow
   `release.yml`), enable OIDC publishing for future releases by setting the
@@ -84,8 +104,58 @@ without the publish job failing red before the Trusted Publisher exists.
   or in the GitHub UI: **Settings → Secrets and variables → Actions → Variables →
   New repository variable**, name `PYPI_TRUSTED_PUBLISHER`, value `true`.
 
-Re-running a Release for an already-published version is also safe: the publish step
-uses `skip-existing: true`, so a duplicate version no-ops instead of failing.
+The publish action must authenticate **before** `skip-existing: true` can handle
+duplicate files. A previously uploaded version does not bypass a broken publisher.
+
+### Verify production authentication without uploading
+
+From the repository, dispatch the existing release workflow on reviewed `main`:
+
+```bash
+gh workflow run release.yml --ref main --field publish-target=verify-pypi
+gh run list --workflow release.yml --event workflow_dispatch --limit 1
+gh run view <run-id> --log
+```
+
+Only **Verify PyPI OIDC (no upload)** runs. Build, signing and upload jobs are
+skipped; the script uses Python's standard library and preserves the release
+workflow's repository/owner/workflow identity and current environment contract.
+It validates the GitHub request host, refuses redirects, limits response sizes
+and suppresses credentials and arbitrary server error text. The minted short-lived
+credential remains only in memory and is discarded without being used.
+
+**Pass:** the exchange job succeeds and reports that PyPI accepted the workflow
+identity. This confirms authentication, not project-specific upload permission or
+package safety. Confirm the normal publisher is attached to `mcp-warden-cli` in
+the project settings; a pending publisher is not the intended verification target.
+**Fail:** any failed/malformed exchange, identity mismatch or missing permission
+exits nonzero. A skipped publication job is not proof of working authentication.
+
+For `invalid-publisher`, compare the existing project's four fields above and the
+immutable owner identity with the current workflow. Do not copy tokens into logs,
+add a workflow token fallback, disable the gate to hide the failure, or remove a
+reviewer/environment restriction to make the check pass.
+
+### 2.0.0 recovery and retry boundary
+
+[Release run 36960647544](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/runs/36960647544)
+built and signed the release but failed PyPI's exchange with `invalid-publisher`.
+The same exchange error occurred on the prior 1.2.0 release. The authorized manual
+2.0.0 upload used the exact signed GitHub wheel/sdist; their SHA-256 hashes match
+[PyPI 2.0.0](https://pypi.org/project/mcp-warden-cli/2.0.0/). That recovery proves
+publication, not that OIDC automation was repaired.
+
+After the publisher is aligned and authentication succeeds, rerun only the failed
+job from the original release run, using its retained build artifacts:
+
+```bash
+gh run rerun 36960647544 --failed
+```
+
+Do not rebuild/re-sign/replace the released assets as a repair attempt. If the
+original artifacts expired, stop and plan a fix-forward release. Success means
+OIDC authentication passes and the existing immutable files are handled by
+`skip-existing`; verify the public wheel/sdist hashes remain unchanged.
 
 ### (Optional) TestPyPI dry-run publisher
 
@@ -98,46 +168,49 @@ needed if you want to rehearse the publish without touching production PyPI.
 
 ## 1. Cut a release
 
-Do this on a clean checkout of `main` with all v1 PRs merged.
+Do this on a clean checkout of `main` with the intended changes merged through a reviewed PR.
+The commands below use `2.0.1` as an example next version, not a published release.
 
 1. **Update the changelog.** In [`CHANGELOG.md`](CHANGELOG.md), move the
-   `## [Unreleased]` entries under a new `## [1.0.0] - <YYYY-MM-DD>` heading with
+   `## [Unreleased]` entries under a new `## [2.0.1] - <YYYY-MM-DD>` heading with
    today's date. Leave a fresh empty `## [Unreleased]` section above it.
 
-2. **Bump the version.** In [`pyproject.toml`](pyproject.toml), set
-   `[project] version = "1.0.0"`.
+2. **Bump both Python versions.** In [`pyproject.toml`](pyproject.toml), set
+   `[project] version = "2.0.1"`; update `__version__` in
+   [`src/mcp_warden/__init__.py`](src/mcp_warden/__init__.py) to match.
 
 3. **Commit.**
    ```bash
-   git add CHANGELOG.md pyproject.toml
-   git commit -m "release: v1.0.0"
-   git push origin main
+   git add CHANGELOG.md pyproject.toml src/mcp_warden/__init__.py
+   git commit -m "release: v2.0.1"
+   # Push a release branch and merge its reviewed PR; do not push directly to main.
    ```
 
-4. **Tag and push the tag.** (A tag alone does NOT publish anything — it only marks
-   the commit. The Release in the next step is what triggers the workflow.)
+4. **Refresh the merged `main`, then tag and push the tag.** Required CI must be
+   green at the reviewed release commit. A tag alone does not publish packages;
+   the Release in the next step triggers the workflow.
    ```bash
-   git tag v1.0.0
-   git push origin v1.0.0
+   git tag v2.0.1
+   git push origin v2.0.1
    ```
 
 5. **Create the GitHub Release.** This is the trigger.
    ```bash
-   gh release create v1.0.0 \
-     --title "v1.0.0" \
-     --notes-file <(awk '/## \[1.0.0\]/{f=1} /## \[0\./{if(f)exit} f' CHANGELOG.md)
+   gh release create v2.0.1 --verify-tag \
+     --title "v2.0.1" \
+     --notes-file /tmp/release-notes.md
    ```
-   or use the GitHub UI: **Releases → Draft a new release → choose tag `v1.0.0` →
+   or use the GitHub UI: **Releases → Draft a new release → choose tag `v2.0.1` →
    Publish release**.
 
    Publishing the Release fires `release.yml`, which:
    - **build** — builds the sdist + wheel and uploads them as workflow artifacts;
    - **pypi-publish** — publishes those artifacts to PyPI via OIDC (no token).
      **Skipped unless** the repo variable `PYPI_TRUSTED_PUBLISHER` is `true`
-     (see "Enable OIDC publishing" in section 0). For versions already published
-     by token (`1.0.0`, `1.0.1`) leave it unset so this job skips cleanly;
+     (see "Enable OIDC publishing" in section 0). Previously published files still
+     require valid authentication; do not hide an exchange failure;
    - **sign** — signs the sdist + wheel with Sigstore keyless and attaches the
-     `.sigstore` bundle(s) to the Release assets (runs regardless of the gate).
+     `.sigstore.json` bundle(s) to the Release assets (runs regardless of the gate).
 
 ---
 
@@ -156,30 +229,31 @@ the exact GitHub asset into a fresh consumer and import `@mcp-warden/lock`.
 
 1. **Install from PyPI** (give the CDN a minute):
    ```bash
-   pip install mcp-warden-cli
+   pip install mcp-warden-cli==2.0.1
    mcp-warden --version
    ```
-   The version must print `1.0.0`. Note the install name is `mcp-warden-cli`, the
+   The version must print `2.0.1`. Note the install name is `mcp-warden-cli`, the
    command is `mcp-warden`.
 
 2. **Verify the Sigstore bundle.** On the GitHub Release page, confirm there is a
-   `.sigstore` (bundle) asset next to each `.tar.gz`/`.whl`. The `sign` job already
+   `.sigstore.json` (bundle) asset next to each `.tar.gz`/`.whl`. The `sign` job already
    self-verified against this workflow's own identity before attaching, but you can
    re-verify any artifact locally:
    ```bash
    pip install sigstore
-   sigstore verify identity dist/mcp_warden_cli-1.0.0-py3-none-any.whl \
-     --bundle mcp_warden_cli-1.0.0-py3-none-any.whl.sigstore \
+   sigstore verify identity dist/mcp_warden_cli-2.0.1-py3-none-any.whl \
+     --bundle mcp_warden_cli-2.0.1-py3-none-any.whl.sigstore.json \
      --cert-identity \
-       "https://github.com/DataScience-EngineeringExperts/mcp-warden/.github/workflows/release.yml@refs/tags/v1.0.0" \
+       "https://github.com/DataScience-EngineeringExperts/mcp-warden/.github/workflows/release.yml@refs/tags/v2.0.1" \
      --cert-oidc-issuer "https://token.actions.githubusercontent.com"
    ```
-   (Download the `.whl` and its `.sigstore` bundle from the Release assets first.)
+   (Download the `.whl` into `dist/` and its `.sigstore.json` bundle first.)
 
 3. **Confirm the PyPI page.** Visit <https://pypi.org/project/mcp-warden-cli/> and check:
-   - version `1.0.0` is listed;
+   - version `2.0.1` is listed;
    - the project URLs (homepage / repository) point at `DataScience-EngineeringExperts/mcp-warden`;
-   - "Publisher" shows the Trusted Publisher (OIDC), not a token upload.
+   - an automated upload records Trusted Publisher provenance; the manual 2.0.0
+     recovery must not be described as an OIDC upload.
 
 4. **Smoke-test the gate** in a throwaway dir to confirm the published wheel works:
    ```bash
@@ -196,12 +270,12 @@ release is broken:
 - **Yank** the bad version (keeps existing pins working, hides it from new
   installs): on <https://pypi.org/project/mcp-warden-cli/> → **Manage → Releases →
   Options → Yank**. Yanking is reversible.
-- **Ship a fix-forward release** (`1.0.1`) following section 1 again. This is the
-  preferred remedy — never try to re-upload `1.0.0`.
+- **Ship a fix-forward release** (`2.0.2`) following section 1 again. This is the
+  preferred remedy — never try to re-upload `2.0.1`.
 - **GitHub Release**: you may delete or edit the GitHub Release and its assets
-  freely; that does not affect what is already on PyPI. Re-running the workflow
-  against the same version will fail the PyPI publish (duplicate filename), which is
-  the correct fail-closed behavior — bump the version instead.
+  only with a deliberate repair plan; that does not change PyPI bytes. For publisher
+  repair, rerun only the failed upload job with the original artifacts. Normal
+  duplicate handling uses `skip-existing` after successful authentication.
 
 ---
 
@@ -210,7 +284,7 @@ release is broken:
 - **No stored secret.** OIDC Trusted Publishing means GitHub never holds a PyPI
   token; PyPI trusts the workflow identity directly. Same trust model as the repo's
   existing keyless Sigstore signing.
-- **Heal thyself.** mcp-warden signs everyone else's locks; from v1.0.0 it signs its
+- **Heal thyself.** mcp-warden signs everyone else's locks; from v2.0.1 it signs its
   own release artifacts too (the `sign` job), so consumers can verify the wheel they
   install came from this repo's release workflow.
 - **Explicit gesture.** A pushed tag does nothing; only *publishing a Release* ships.

@@ -16,10 +16,10 @@ drifts.** `pin` and `check` support stdio and Streamable HTTP; `guard` is stdio-
 destructiveHint, removing a result schema, or widening its types now triggers drift;
 the existing runtime tools/list gate checks these fields against v4 locks too.
 Older locks stay readable, but require review and re-pinning for this coverage.
-Hints are server claims, not proof of safety, and schemas do not certify content.
+Hints are server claims, not proof of safety, and schemas do not certify content. Release
+operators can check production OIDC without uploading via [`RELEASING.md`](RELEASING.md).
 
-The proposed next direction is a protocol-neutral **Warden**: human-approved tool
-versions and bounded actions, with untrusted inputs kept separate from authority.
+The proposed next direction is a protocol-neutral **Warden**: human-approved tool versions and bounded actions, with untrusted inputs kept separate from authority.
 The [upgrade plan and checkpoint proposal](docs/plans/2026-10-02-tool-integrity-upgrade.md)
 maps prompts, retrieval, code execution, and serverless adapters to existing Agent
 Trust Kernel work. Those broader checkpoints are proposals, not shipped guarantees.

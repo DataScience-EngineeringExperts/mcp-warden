@@ -1,17 +1,10 @@
 # =============================================================================
 # Release & publish workflow (v1.0 — W1.1 / W1.2 / W2.3)
 #
-# !!! INERT UNTIL CONFIGURED — SAFE TO MERGE !!!
-#
-# This workflow does NOTHING until BOTH of the following are true:
-#   (a) a GitHub *Release* is published (a pushed git tag ALONE does not trigger
-#       it — the trigger is `release: published`, the explicit human gesture), AND
-#   (b) the `mcp-warden-cli` PyPI project + its Trusted Publisher (OIDC) are configured
-#       by the owner (see RELEASING.md "One-time PyPI setup").
-#
-# Until (a) AND (b) hold, merging this file changes nothing at runtime: no tag is
-# cut here, no version is bumped here, nothing is published here. Cutting v1.0.0 is
-# then a single tag + GitHub Release away (the full runbook is in RELEASING.md).
+# A published GitHub Release builds and signs artifacts. Production uploads
+# additionally require the existing PyPI Trusted Publisher and enabled repo gate.
+# A pushed tag alone does not trigger publication. Manual choices are TestPyPI,
+# build-only, or a production authentication-only check that uploads nothing.
 #
 # What it does WHEN a Release is published:
 #   build         — builds sdist + wheel, uploads them as workflow artifacts.
@@ -41,18 +34,18 @@ on:
   release:
     types: [published]
 
-  # Manual escape hatch for a dry run to TestPyPI (no Release required, no signing,
-  # no production PyPI). Nice-to-have; kept deliberately simple.
+  # Manual TestPyPI/build-only paths and an authentication-only production check.
   workflow_dispatch:
     inputs:
       publish-target:
-        description: "Where to publish on a manual run"
+        description: "TestPyPI upload, build-only, or production OIDC verification (no upload)"
         required: true
         default: "testpypi"
         type: choice
         options:
           - testpypi
           - none
+          - verify-pypi
 
 # Least-privilege at the top level; each job widens scope locally only as needed.
 permissions:
@@ -65,6 +58,7 @@ jobs:
   # --------------------------------------------------------------------------
   build:
     name: Build sdist + wheel
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish-target != 'verify-pypi'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -138,7 +132,7 @@ jobs:
   #
   # On a `release: published` run -> production PyPI.
   # On a manual `workflow_dispatch` with publish-target=testpypi -> TestPyPI only.
-  # publish-target=none short-circuits (build + artifacts only).
+  # publish-target=none builds only; verify-pypi skips the build and upload jobs.
   # --------------------------------------------------------------------------
   pypi-publish:
     name: Publish to PyPI (OIDC Trusted Publishing)
@@ -159,7 +153,7 @@ jobs:
     if: >-
       vars.PYPI_TRUSTED_PUBLISHER == 'true' &&
       (github.event_name == 'release' ||
-       (github.event_name == 'workflow_dispatch' && github.event.inputs.publish-target != 'none'))
+       (github.event_name == 'workflow_dispatch' && github.event.inputs.publish-target == 'testpypi'))
 
     steps:
       - name: Download dist artifacts
@@ -189,6 +183,25 @@ jobs:
           repository-url: https://test.pypi.org/legacy/
           # Re-running a dry run no-ops on an already-uploaded TestPyPI version.
           skip-existing: true
+
+  # Authentication-only production check: no build, upload, signing or stored token.
+  # Uses this SAME workflow identity and no deployment environment, like publication.
+  pypi-verify:
+    name: Verify PyPI OIDC (no upload)
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish-target == 'verify-pypi'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python 3.11
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+      - name: Verify production OIDC exchange without uploading
+        run: python scripts/verify_pypi_oidc.py
 
   # --------------------------------------------------------------------------
   # Job 3: sign the release artifacts with Sigstore keyless ("heal thyself", W2.3).
