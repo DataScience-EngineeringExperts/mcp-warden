@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from mcp_warden.capture import capture_surface_sync
 from mcp_warden.cli import app
 from mcp_warden.drift import compute_drift
 from mcp_warden.emitters import build_sarif
@@ -179,3 +180,28 @@ def test_real_cli_roundtrip_rejects_metadata_only_change(tmp_path, mutation, rul
     rules = {r["ruleId"] for r in json.loads(sarif_path.read_text())["runs"][0]["results"]}
     assert rule in rules
     assert "WRD-DRIFT-UNAPPROVED-CHANGE" in rules
+
+
+@pytest.mark.parametrize("field,before,after", [
+    ("annotations", {"x": "before"}, {"x": "after"}),
+    ("annotations", {}, {"title": None}),
+    ("annotations", {"x": {"nested": None}}, {"x": {"nested": "after"}}),
+    ("outputSchema", {"type": "object", "x": None}, {"type": "object", "x": "after"}),
+])
+def test_wire_metadata_survives_sdk_projection(tmp_path, field, before, after):
+    fixture = Path(__file__).parent / "fixtures" / "tool_metadata_listchange_server.py"
+    declaration = tmp_path / "definition.json"
+    tool = {"name": "read_record", "inputSchema": {"type": "object"}, field: before}
+    declaration.write_text(json.dumps(tool))
+    argv = [str(fixture), str(declaration)]
+    surface = capture_surface_sync(sys.executable, argv)
+    captured = surface.tools[0]
+    assert getattr(captured, "annotations" if field == "annotations" else "output_schema") == before
+    baseline = build_lock(surface, [], approve=True, approver="reviewer@example.invalid")
+    assert diverges_from_lock({"tools": [tool]}, baseline) == (False, "")
+    changed = tool | {field: after}
+    declaration.write_text(json.dumps(changed))
+    current = build_lock(capture_surface_sync(sys.executable, argv), [])
+    assert current.overall_digest != baseline.overall_digest
+    assert "unapproved-change" in classes(baseline, current)
+    assert diverges_from_lock({"tools": [changed]}, baseline)[0]

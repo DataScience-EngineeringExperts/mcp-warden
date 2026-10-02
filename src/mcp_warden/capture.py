@@ -15,10 +15,12 @@ import logging
 from typing import Any
 
 import anyio
-from mcp import ClientSession, StdioServerParameters
+from mcp import ClientSession as SDKClientSession
+from mcp import StdioServerParameters
 from mcp import types as mcp_types
 from mcp.client.stdio import stdio_client
 from mcp.client.streamable_http import streamable_http_client
+from pydantic import BaseModel, Field
 
 from .models import (
     CapturedPrompt,
@@ -41,6 +43,29 @@ class CaptureError(Exception):
     """
 
 
+class _WireToolsResult(BaseModel):
+    """Preserve complete tool objects before SDK ToolAnnotations projection."""
+
+    tools: list[dict[str, Any]]
+    next_cursor: str | None = Field(default=None, alias="nextCursor")
+
+
+class ClientSession(SDKClientSession):
+    """Capture declarations, including fields unknown to the installed SDK.
+
+    SDK 2.x's ToolAnnotations discards extension keys. A raw result model also
+    preserves explicit nulls inside annotations and schemas. This session never
+    calls tools, so SDK output-validation caches and tool filtering are not used.
+    """
+
+    async def list_tools(self, *, params=None):
+        request = mcp_types.ListToolsRequest(params=params)
+        # SDK 1.x wraps requests in a RootModel; SDK 2.x uses a union alias.
+        if isinstance(mcp_types.ClientRequest, type):
+            request = mcp_types.ClientRequest(request)
+        return await self.send_request(request, _WireToolsResult)
+
+
 def _model_dump(obj: Any) -> dict[str, Any]:
     """Wire-format dict view of an MCP SDK model: camelCase keys, no SDK-default nulls.
 
@@ -53,6 +78,8 @@ def _model_dump(obj: Any) -> dict[str, Any]:
     ``by_alias=True, exclude_none=True`` reproduces what was on the wire and is
     identical on 1.x and 2.x (tests/test_capture_model_dump.py).
     """
+    if isinstance(obj, dict):
+        return obj
     if hasattr(obj, "model_dump"):
         return obj.model_dump(by_alias=True, exclude_none=True)  # pydantic v2
     if hasattr(obj, "dict"):
