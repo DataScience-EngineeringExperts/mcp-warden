@@ -49,4 +49,3 @@ error codes: **`-32001`** (policy/result block), **`-32002`** (transport/lifecyc
 [`docs/GUARD_PROXY_V3.md`](../GUARD_PROXY_V3.md).
 
 ---
-
