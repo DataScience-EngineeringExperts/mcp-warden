@@ -8,7 +8,7 @@ become a shared standard rather than one project's internal contract.
 ## What the format is
 
 The MCP Lock Format v1 records the **declared surface** of an MCP server — the
-names, descriptions, input schemas, and derived capability flags it advertises
+names, descriptions, input schemas, tool annotations, output schemas, and derived capability flags it advertises
 over the `initialize` / `tools/list` / `resources/list` / `prompts/list`
 handshake — and produces a **reproducible digest** over that surface so that any
 later change ("drift") is detectable deterministically.
@@ -25,6 +25,23 @@ It is defined in normative, implementation-independent terms:
 
 Two tools that implement the format correctly will compute the **same digest over
 the same declared surface** — that byte-reproducibility is the conformance bar.
+
+## Schema level 4 — CLI 2.0.0
+
+The current schema hashes complete tool annotations and output schemas. Missing/null
+metadata differs from an empty object. Hint changes and output-schema drift invalidate
+an approved baseline; annotations never grant authority. The Python and TypeScript
+implementations share the same conformance corpus.
+
+Existing v1–v3 locks remain readable, but upgrading requires reviewing the expanded
+surface and re-pinning. Historical signatures do not approve newly covered fields.
+Keep the previous lock as review evidence, then run your existing `pin --approve`
+workflow (and sign the new baseline when signatures are required).
+
+The [2.0.0 release](https://github.com/DataScience-EngineeringExperts/mcp-warden/releases/tag/v2.0.0)
+also distributes the npm-installable TypeScript verifier 0.2.0 with checksums and
+Sigstore bundles. The broader Warden checkpoints remain a
+[design proposal](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/docs/plans/2026-10-02-tool-integrity-upgrade.md).
 
 ## Read the full specification
 

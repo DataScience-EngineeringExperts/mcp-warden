@@ -12,7 +12,7 @@ Last Updated: 2026-10-02
 tool/resource/prompt surface into a signed `warden.lock`, then fails CI when that surface
 drifts.** `pin` and `check` support stdio and Streamable HTTP; `guard` is stdio-only.
 
-**Schema level 4** also locks complete tool annotations and output schemas. Changing
+**CLI 2.0.0 / schema level 4** locks complete tool annotations and output schemas. Changing
 destructiveHint, removing a result schema, or widening its types now triggers drift;
 the existing runtime tools/list gate checks these fields against v4 locks too.
 Older locks stay readable, but require review and re-pinning for this coverage.

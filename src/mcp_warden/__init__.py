@@ -7,7 +7,7 @@ surface drifts from an approved baseline. It operates on **definitions**, never
 on runtime tool behavior or tool results. See ``docs/THREAT_MODEL.md``.
 """
 
-__version__ = "1.2.0"
+__version__ = "2.0.0"
 #: Lock schema version. Bumped 3 → 4 for annotation/outputSchema commitments
 #: (DSE-1539). Missing/null metadata hashes JSON null, not an empty object.
 #: Earlier 2 → 3 migration was #29 (in-document ``$ref`` resolution in

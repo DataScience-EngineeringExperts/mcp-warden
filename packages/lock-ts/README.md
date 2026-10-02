@@ -38,6 +38,18 @@ if (!result.ok) {
 console.log("surface matches baseline", digest(surface));
 ```
 
+## Install the released artifact
+
+Version 0.2.0 is distributed with the CLI 2.0.0 GitHub Release:
+
+```bash
+npm install https://github.com/DataScience-EngineeringExperts/mcp-warden/releases/download/v2.0.0/mcp-warden-lock-0.2.0.tgz
+```
+
+The release includes SHA-256 checksums and a Sigstore bundle for this tarball.
+It is an npm-installable artifact, not an npm registry publication. Review the
+[release migration notes](https://github.com/DataScience-EngineeringExperts/mcp-warden/releases/tag/v2.0.0) before re-pinning old locks.
+
 ## API
 
 | export | purpose |

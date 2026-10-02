@@ -47,7 +47,7 @@ A matching digest means only that the declared surface is byte-identical to the 
 
 ```jsonc
 {
-  "schema_version": 3,             // integer; see §14 — the current format level
+  "schema_version": 4,             // integer; see §14 — the current format level
   "warden_version": "x.y.z",       // semver of the tool that wrote the file
   "server": { ... },               // §6 server identity
   "tools":     [ { ... } ],        // §7 per-entry, sorted by name
@@ -428,7 +428,7 @@ relaxations of optional result-inspection checks for that one tool:
 An implementation is **conformant** with MCP Lock Format v1 if and only if:
 
 1. It writes and reads a `warden.lock` matching the top-level schema (§3), with
-   `schema_version` naming the format level it implements (currently `3`, §14).
+   `schema_version` naming the format level it implements (currently `4`, §14).
 2. It canonicalizes per RFC 8785 JCS (§4) and hashes per §5, emitting every digest as
    `sha256:` followed by 64 lowercase hex characters.
 3. Given the **same declared surface**, it produces a **byte-identical** `overall_digest`
@@ -468,10 +468,11 @@ in the reference — never a reason to edit the vector.
 
 ---
 
-## 13. Minimal worked example
+## 13. Historical v3 worked example
 
-A minimal lock for a single-tool server (digests abbreviated for readability; a real lock
-carries full 64-hex digests):
+This historical v3 example illustrates the pre-migration formula. Current v4 entries
+also require the §7.1 annotation/output commitments; see the conformance vectors
+for complete current documents. Digests below are abbreviated for readability.
 
 ```json
 {

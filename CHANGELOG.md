@@ -30,6 +30,17 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-10-02
+
+### Breaking compatibility
+
+- CLI 2.0.0 and TypeScript verifier 0.2.0 implement schema level 4. Existing v1–v3
+  locks remain readable, but operators must review and re-pin before v4 approval.
+  Historical signatures must not be treated as approval for the expanded surface.
+- The GitHub Release ships the npm-installable TypeScript tarball, signed by the
+  same release identity as the Python artifacts, with SHA-256 checksums.
+  This is GitHub artifact distribution, not an npm registry publication.
+
 ### Fixed — release validation
 
 - Refresh the dev/CI and Action dependency locks from PyJWT 2.13.0 to 2.15.1

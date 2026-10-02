@@ -141,6 +141,17 @@ Do this on a clean checkout of `main` with all v1 PRs merged.
 
 ---
 
+## TypeScript release artifact
+
+The build job also runs the shared TypeScript conformance suite and `npm pack`.
+The npm-installable `.tgz` and `SHA256SUMS` are downloaded only by the signing job;
+PyPI receives only the Python distribution artifact. The existing release identity
+signs and attaches the TypeScript tarball and checksums alongside Python artifacts.
+No npm registry token or publisher is configured by this workflow.
+
+Verify the tarball bundle against the same release workflow identity, then install
+the exact GitHub asset into a fresh consumer and import `@mcp-warden/lock`.
+
 ## 2. Post-release verification
 
 1. **Install from PyPI** (give the CDN a minute):
