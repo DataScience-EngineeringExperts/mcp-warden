@@ -95,6 +95,37 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+      - name: Set up Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/lock-ts/package-lock.json
+
+      - name: Test and pack TypeScript verifier
+        working-directory: packages/lock-ts
+        run: |
+          npm ci
+          npm test
+          mkdir -p ../../node-dist
+          npm pack --pack-destination ../../node-dist
+
+      - name: Checksum Python and TypeScript release artifacts
+        run: |
+          python - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+          artifacts = sorted([*Path("dist").glob("*.whl"), *Path("dist").glob("*.tar.gz"), *Path("node-dist").glob("*.tgz")])
+          Path("node-dist/SHA256SUMS").write_text("".join(f"{sha256(p.read_bytes()).hexdigest()}  {p.name}\n" for p in artifacts))
+          PY
+
+      - name: Upload TypeScript and checksum artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: lock-ts
+          path: node-dist/
+          if-no-files-found: error
+
   # --------------------------------------------------------------------------
   # Job 2: publish to PyPI via OIDC Trusted Publishing.
   #
@@ -190,10 +221,16 @@ jobs:
           name: dist
           path: dist/
 
-      - name: Sign sdist + wheel and attach bundles to the Release
+      - name: Download TypeScript and checksum artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: lock-ts
+          path: dist/
+
+      - name: Sign release artifacts and attach bundles to the Release
         uses: sigstore/gh-action-sigstore-python@790bc6befb9d733738f18d8f895854b453640ec9 # v3.5.0
         with:
-          inputs: ./dist/*.tar.gz ./dist/*.whl
+          inputs: ./dist/*.tar.gz ./dist/*.whl ./dist/*.tgz ./dist/SHA256SUMS
           # Self-check: verify what we just signed against THIS workflow's own
           # identity so a broken run never publishes a bad bundle.
           verify: true

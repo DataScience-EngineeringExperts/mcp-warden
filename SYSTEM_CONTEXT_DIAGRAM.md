@@ -2,7 +2,7 @@
 
 Last Updated: 2026-10-02
 
-**Schema level 4** extends capture/lock/check to complete tool annotations and output
+**CLI 2.0.0 / schema level 4** extends capture/lock/check to complete tool annotations and output
 schemas, with structural output drift and Python/TypeScript parity. The existing
 tools/list gate compares those commitments for v4 locks; legacy locks retain narrower
 runtime coverage and require re-pin for the new fields. Annotations grant no authority.
