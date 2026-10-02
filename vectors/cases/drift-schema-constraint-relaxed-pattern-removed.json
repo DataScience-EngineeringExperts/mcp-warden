@@ -3,7 +3,7 @@
   "kind": "drift",
   "description": "Drift class schema-constraint-relaxed-pattern-removed (see docs/SPEC.md §8).",
   "lock": {
-    "schema_version": 3,
+    "schema_version": 4,
     "warden_version": "0.0.0",
     "server": {
       "command": "python",
@@ -44,13 +44,16 @@
             }
           }
         },
-        "entry_digest": "sha256:0641a9a845b27d5733e0fe080fac0fc2a408ea0398005f106e24ef4172ecaa75"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:380ba511d0862ac0e0a9808c878acc803bcc1f2235b3e1a468fdc56484354eea"
       }
     ],
     "resources": [],
     "prompts": [],
     "findings": [],
-    "overall_digest": "sha256:d53ca1d578c99de4fe7fca3f94bcba87ded7c0e067ed43715bede3715e9e073b",
+    "overall_digest": "sha256:ac02b8840659bb4d69127ee040355a78e0c320b27a6d2d6decc66a3b4161f02d",
     "pin": {
       "created_at": "2026-01-01T00:00:00Z",
       "warden_version": "0.0.0",

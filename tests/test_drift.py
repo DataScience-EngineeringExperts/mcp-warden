@@ -164,11 +164,12 @@ def test_schema_version_migrated_additive_low(monkeypatch):
     s = _surface([CapturedTool(name="t", input_schema=schema)])
 
     base = _v2_approved_lock(s, "ci-bot@example.invalid", monkeypatch)
-    monkeypatch.undo()  # restore SCHEMA_VERSION=3 for the current build
+    monkeypatch.undo()  # restore the current schema version
     cur = build_lock(s, [])
 
     assert base.schema_version == 2
-    assert cur.schema_version == 3
+    from mcp_warden import SCHEMA_VERSION
+    assert cur.schema_version == SCHEMA_VERSION
     assert base.overall_digest != cur.overall_digest  # ref resolution moved the digest
 
     drift = compute_drift(base, cur)

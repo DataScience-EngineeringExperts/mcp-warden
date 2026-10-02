@@ -1,5 +1,13 @@
 # mcp-warden — System Context Diagram
 
+**Schema level 4** extends capture/lock/check to complete tool annotations and output
+schemas, with structural output drift and Python/TypeScript parity. The existing
+tools/list gate compares those commitments for v4 locks; legacy locks retain narrower
+runtime coverage and require re-pin for the new fields. Annotations grant no authority.
+The [Warden checkpoint proposal](docs/plans/2026-10-02-tool-integrity-upgrade.md)
+shows a future kernel beneath prompt/retrieval/code/serverless adapters with signing
+authority outside agent-editable state. It does not expand current runtime claims.
+
 Where mcp-warden sits, what it talks to, and where its outputs go. The **definition-only
 path introduced in v0.1** (`pin`/`check`/`policy`) is read-only: it captures the
 *declared* surface and writes a baseline + machine reports — no proxy, no runtime

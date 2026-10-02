@@ -3,7 +3,7 @@
   "kind": "drift",
   "description": "Approved baseline + any surface change -> unapproved-change (high) alongside the entry drift.",
   "lock": {
-    "schema_version": 3,
+    "schema_version": 4,
     "warden_version": "0.0.0",
     "server": {
       "command": "python",
@@ -41,13 +41,16 @@
             }
           }
         },
-        "entry_digest": "sha256:fc8a90335b37d118bbc2847f468af07d7806b20462e19a2cb53ef48a22084c28"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:5f75357dc16b9fc380fb02af404b4a8cb92f32fbe6d36a3be2e6483b7053b5de"
       }
     ],
     "resources": [],
     "prompts": [],
     "findings": [],
-    "overall_digest": "sha256:2afb0cabd4196a43f990df2a1514dcbde697cc22dc6b0fcaf609fb95a22a60b1",
+    "overall_digest": "sha256:d8a0c738761dd191bb9db36fdaf3878bad8b7fb7e2365e13f431179585515ef8",
     "pin": {
       "created_at": "2026-01-01T00:00:00Z",
       "warden_version": "0.0.0",
@@ -55,7 +58,7 @@
       "approved": true,
       "approver": "vectors@example.invalid",
       "approved_at": "2026-01-01T00:00:00Z",
-      "approved_digest": "sha256:2afb0cabd4196a43f990df2a1514dcbde697cc22dc6b0fcaf609fb95a22a60b1",
+      "approved_digest": "sha256:d8a0c738761dd191bb9db36fdaf3878bad8b7fb7e2365e13f431179585515ef8",
       "provenance_version": 1,
       "pinner": null,
       "attestations": [],

@@ -178,6 +178,8 @@ async def _list_tools(session: ClientSession) -> list[CapturedTool]:
                 name=str(data.get("name", "")),
                 description=data.get("description"),
                 input_schema=data.get("inputSchema"),
+                annotations=data.get("annotations"),
+                output_schema=data.get("outputSchema"),
             )
         )
     return out

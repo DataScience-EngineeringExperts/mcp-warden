@@ -3,7 +3,7 @@
   "kind": "drift",
   "description": "Drift class schema-enum-added (see docs/SPEC.md §8).",
   "lock": {
-    "schema_version": 3,
+    "schema_version": 4,
     "warden_version": "0.0.0",
     "server": {
       "command": "python",
@@ -41,13 +41,16 @@
             }
           }
         },
-        "entry_digest": "sha256:506f31170b8d8548ab7a8b6ee0d2bcccc9be92838b0ea241960d2a2b3660cdd8"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:e9d77c0011310dadd71b847cbb0525d58aa5f2ee4dc0f0d2a50e486936d82208"
       }
     ],
     "resources": [],
     "prompts": [],
     "findings": [],
-    "overall_digest": "sha256:11706002c93593ab288945f05f4af753b02291df13110f9425e8061792a8799d",
+    "overall_digest": "sha256:7bf759293168ac48ee4abff882e159480b8081adf693037ebe776ce42f9d17ad",
     "pin": {
       "created_at": "2026-01-01T00:00:00Z",
       "warden_version": "0.0.0",

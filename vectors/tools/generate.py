@@ -64,7 +64,8 @@ APPROVER = "vectors@example.invalid"
 def surface_from_json(doc: dict[str, Any]) -> CapturedSurface:
     """Turn a vendor-neutral surface document (MCP wire naming) into a CapturedSurface."""
     tools = [
-        CapturedTool(name=t["name"], description=t.get("description"), input_schema=t.get("inputSchema"))
+        CapturedTool(name=t["name"], description=t.get("description"), input_schema=t.get("inputSchema"),
+                     annotations=t.get("annotations"), output_schema=t.get("outputSchema"))
         for t in doc.get("tools", [])
     ]
     resources = [
@@ -123,6 +124,11 @@ def lock_with_inspection(surface_doc: dict[str, Any], tool_name: str, inspection
 def lock_at_schema_version(surface_doc: dict[str, Any], schema_version: int) -> dict[str, Any]:
     """An APPROVED baseline written at an older format level (drives schema-version-migrated)."""
     doc = make_lock(surface_doc, approved=True)
+    if schema_version < 4:
+        for entry in doc["tools"]:
+            for key in ("annotations_hash", "output_schema_hash", "output_schema_skeleton"):
+                entry.pop(key, None)
+            entry["entry_digest"] = hash_value({k: v for k, v in entry.items() if k != "entry_digest"})
     payload = {
         "schema_version": schema_version,
         "server": {"command_digest": doc["server"]["command_digest"]},
@@ -414,6 +420,29 @@ DRIFT: list[tuple[str, str, dict[str, Any], dict[str, Any]]] = [
     ),
 ]
 
+# v4 commitments. The v3 migration fixture preserves actual historical digests.
+DIGEST.extend([
+    ("tool-metadata-null", "Explicit null metadata equals omitted metadata.", surface([tool("t") | {"annotations": None, "outputSchema": None}])),
+    ("tool-metadata-empty", "Empty objects differ from null; the complete annotation object is committed.", surface([tool("t") | {"annotations": {}, "outputSchema": {}}])),
+    ("tool-metadata-full", "Complete hint objects and output schema use RFC 8785 commitments.", surface([tool("t") | {"annotations": {"destructiveHint": False, "readOnlyHint": True, "title": "Record"}, "outputSchema": obj({"value": {"type": "string", "maxLength": 64}}, ["value"])}])),
+])
+DRIFT.append(("v3-to-v4-migration", "Genuine approved v3 baseline requires re-attestation; no invented annotation drift.", {"__lock__": json.loads((ROOT / "tests/fixtures/legacy-v3.warden.lock").read_text())}, _SIMPLE))
+_unapproved_v3 = json.loads((ROOT / "tests/fixtures/legacy-v3.warden.lock").read_text())
+_unapproved_v3["pin"]["approved"] = False
+DRIFT.append(("v3-unapproved-migration", "Even unapproved v3 locks cannot claim v4 metadata coverage.", {"__lock__": _unapproved_v3}, _SIMPLE))
+for hint in ("readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"):
+    DRIFT.append((f"tool-annotations-{hint}", "Hint changes cannot silently reuse an approved surface.", surface([tool("t") | {"annotations": {hint: False}}]), surface([tool("t") | {"annotations": {hint: True}}])))
+DRIFT.append(("tool-annotations-removed", "Removing declarations is drift too.", surface([tool("t") | {"annotations": {"destructiveHint": False}}]), surface([tool("t")])))
+for ident, before, after in [
+    ("added", None, {}), ("removed", {}, None),
+    ("type-broadened", obj({"x": {"type": "string"}}), obj({"x": {"type": ["string", "number"]}})),
+    ("constraint-relaxed", obj({"x": {"type": "string", "maxLength": 8}}), obj({"x": {"type": "string", "maxLength": 64}})),
+    ("cosmetic-modified", obj({}, title="before"), obj({}, title="after")),
+    ("local-ref", {"$defs": {"x": {"type": "string"}}, "properties": {"x": {"$ref": "#/$defs/x"}}}, {"$defs": {"x": {"type": ["string", "number"]}}, "properties": {"x": {"$ref": "#/$defs/x"}}}),
+    ("ref-redacted", obj({"x": {"$ref": "https://example.com/apiKey"}}), obj({"x": {"$ref": "https://example.com/token"}})),
+]:
+    DRIFT.append((f"schema-out-{ident}", "Output-schema commitment with structural classification.", surface([tool("t") | {"outputSchema": before}]), surface([tool("t") | {"outputSchema": after}])))
+
 MALFORMED: list[tuple[str, str, Any]] = [
     ("invalid-json", "Not JSON at all.", "{not json"),
     ("missing-overall-digest", "Top-level overall_digest is required.", None),
@@ -430,6 +459,9 @@ MALFORMED: list[tuple[str, str, Any]] = [
     ("lock-depth-1200-rejected", "A lock document nested 1200 levels deep, presented as raw text. A conforming reader MUST refuse it (SPEC.md §4) — whether its JSON parser gives up first or its explicit depth check does — and MUST never surface it as anything but the reader's documented rejection.", "[" * 1200 + "]" * 1200),
     ("depth-513-rejected", "The deepest element sits at depth 513, one past the normative bound (SPEC.md §4). A conforming canonicalizer MUST refuse it — fail closed — rather than produce a digest; one that accepts it because its host recursion limit is larger is not conformant.", {"input_json": "[" * 514 + "]" * 514}),
 ]
+
+for key in ("annotations_hash", "output_schema_hash", "output_schema_skeleton"):
+    MALFORMED.append((f"v4-missing-{key}", "A v4 entry cannot omit its metadata commitments.", None))
 
 
 def _malformed_doc(ident: str) -> Any:
@@ -448,7 +480,9 @@ def _malformed_doc(ident: str) -> Any:
     elif ident == "tool-missing-entry-digest":
         del bad["tools"][0]["entry_digest"]
     elif ident == "schema-version-above-implemented":
-        bad["schema_version"] = 4
+        bad["schema_version"] = 5
+    elif ident.startswith("v4-missing-"):
+        del bad["tools"][0][ident.removeprefix("v4-missing-")]
     else:
         raise AssertionError(ident)
     # Sanity: the reference reader MUST reject it (fail closed).
@@ -528,7 +562,7 @@ def main() -> None:
 
     manifest = {
         "format": "mcp-lock-v1",
-        "schema_version": 3,
+        "schema_version": 4,
         "generator": "vectors/tools/generate.py",
         "count": len(entries),
         "vectors": entries,

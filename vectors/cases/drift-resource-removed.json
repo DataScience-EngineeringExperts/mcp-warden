@@ -3,7 +3,7 @@
   "kind": "drift",
   "description": "resource-removed (low).",
   "lock": {
-    "schema_version": 3,
+    "schema_version": 4,
     "warden_version": "0.0.0",
     "server": {
       "command": "python",
@@ -25,7 +25,7 @@
     ],
     "prompts": [],
     "findings": [],
-    "overall_digest": "sha256:cb998c8b01d11dcaf97299174547fbb8719ecf5af7e06c024788e981c279e3ea",
+    "overall_digest": "sha256:41abb311430f544d726b9fbdcd1ae7856ca03cebcc12022cda41b6f3a46b2bbb",
     "pin": {
       "created_at": "2026-01-01T00:00:00Z",
       "warden_version": "0.0.0",

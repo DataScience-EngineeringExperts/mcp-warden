@@ -1,5 +1,10 @@
 # mcp-warden — Guard Proxy Contract (v0.3)
 
+**V4 lock addendum (DSE-1539):** The existing inline tools/list drift gate also
+compares complete annotation/output-schema hashes for schema-level-4 baselines.
+Legacy locks retain description/input-schema coverage until reviewed and re-pinned.
+The same strict/audit-only/opt-out semantics apply; annotations grant no permissions.
+
 **Status:** v0.3 security contract. Implementation-ready. **Extends — does not replace —** the
 v0.2 contract below; v0.2 statements hold except where a `v0.3` note overrides them (default
 posture in §5; proxy hardening in [`GUARD_PROXY_V3.md`](GUARD_PROXY_V3.md)).

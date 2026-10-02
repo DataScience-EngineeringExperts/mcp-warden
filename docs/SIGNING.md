@@ -1,5 +1,11 @@
 # Sigstore signing + verification of `warden.lock` (#16)
 
+Schema level 4 includes tool annotation/output commitments in the signed surface
+digest. Older signatures authenticate their old digest only; v4 requires review,
+re-pin, and re-sign. Signature verification against a pinned signer identity/issuer
+does not certify code, policy, findings, or returned content as safe, or grant runtime
+permission. See the [human checkpoint proposal](plans/2026-10-02-tool-integrity-upgrade.md).
+
 mcp-warden can **Sigstore-sign** the identity of a pinned surface and later
 **cryptographically verify** that signature in CI — keyless (Fulcio short-lived
 certs + Rekor transparency log), no long-lived private keys to manage.

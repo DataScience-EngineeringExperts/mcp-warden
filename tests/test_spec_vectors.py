@@ -48,7 +48,8 @@ def _surface(doc: dict[str, Any]) -> CapturedSurface:
         url=doc.get("url"),
         protocol_version="2025-06-18",
         tools=[
-            CapturedTool(name=t["name"], description=t.get("description"), input_schema=t.get("inputSchema"))
+            CapturedTool(name=t["name"], description=t.get("description"), input_schema=t.get("inputSchema"),
+                         annotations=t.get("annotations"), output_schema=t.get("outputSchema"))
             for t in doc.get("tools", [])
         ],
         resources=[

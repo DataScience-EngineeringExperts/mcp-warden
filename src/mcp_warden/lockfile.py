@@ -99,7 +99,7 @@ def _tool_entry(tool: Any, inspection: dict[str, Any] | None = None) -> ToolEntr
     """Build a hashed tool entry (§5.1/§5.3, §11) from a captured tool.
 
     Args:
-        tool: A captured tool (``name``/``description``/``input_schema``).
+        tool: A captured tool including annotations and output_schema.
         inspection: Optional §11 inspection block. When ``None`` it is excluded
             from the hashed body, so the digest is byte-identical to v0.1.
 
@@ -116,6 +116,12 @@ def _tool_entry(tool: Any, inspection: dict[str, Any] | None = None) -> ToolEntr
         "description_hash": hash_description(tool.description),
         "input_schema_hash": hash_input_schema(schema),
         "capabilities": derive_capabilities(tool.name, schema),
+        "annotations_hash": hash_value(tool.annotations),
+        "output_schema_hash": hash_value(tool.output_schema),
+        "output_schema_skeleton": (
+            extract_skeleton(tool.output_schema).model_dump(mode="json")
+            if tool.output_schema is not None else None
+        ),
     }
     if inspection is not None:
         _validate_inspection(tool.name, inspection)
@@ -158,6 +164,8 @@ def compute_overall_digest(
     tools: list[ToolEntry],
     resources: list[ResourceEntry],
     prompts: list[PromptEntry],
+    *,
+    schema_version: int | None = None,
 ) -> str:
     """Compute ``overall_digest`` per §6.1.
 
@@ -174,7 +182,7 @@ def compute_overall_digest(
         The ``sha256:`` overall digest.
     """
     payload = {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": SCHEMA_VERSION if schema_version is None else schema_version,
         "server": {"command_digest": server.command_digest},
         "tools": [t.entry_digest for t in tools],
         "resources": [r.entry_digest for r in resources],
@@ -193,7 +201,7 @@ def surface_digest(lock: WardenLock) -> str:
     It is derived, never stored, and can be recomputed from any lock.
     """
     payload = {
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": lock.schema_version,
         "tools": [t.entry_digest for t in lock.tools],
         "resources": [r.entry_digest for r in lock.resources],
         "prompts": [p.entry_digest for p in lock.prompts],
@@ -203,7 +211,9 @@ def surface_digest(lock: WardenLock) -> str:
 
 def lock_is_self_consistent(lock: WardenLock) -> bool:
     """True when the lock's entries reproduce its stored ``overall_digest``."""
-    return compute_overall_digest(lock.server, lock.tools, lock.resources, lock.prompts) == lock.overall_digest
+    return compute_overall_digest(
+        lock.server, lock.tools, lock.resources, lock.prompts, schema_version=lock.schema_version
+    ) == lock.overall_digest
 
 
 def build_lock(
@@ -279,10 +289,15 @@ def lock_to_pretty_json(lock: WardenLock) -> str:
     data = lock.model_dump(mode="json")
     # §11.4: a tool with no inspection policy must serialize EXACTLY as in v0.1
     # (the key is simply absent). Only drop the key when it is None — present
-    # inspection blocks are kept and are part of the digest.
+    # inspection blocks are kept and are part of the digest. Legacy locks omit
+    # the v4 defaults so rotating historical evidence never rewrites its shape.
     for tool in data.get("tools", []):
         if tool.get("inspection") is None:
             tool.pop("inspection", None)
+        if lock.schema_version < 4:
+            for key in ("annotations_hash", "output_schema_hash", "output_schema_skeleton"):
+                if tool.get(key) is None:
+                    tool.pop(key, None)
     text = json.dumps(data, indent=2, ensure_ascii=False, sort_keys=False)
     return text + "\n"
 

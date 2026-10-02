@@ -8,6 +8,7 @@
 import type { Lock, LockPromptEntry, LockResourceEntry, LockToolEntry, BuiltLock, BuiltTool } from "./lock.js";
 import { cmpCodepoint, deepEqual, pyJsonDumps, pyRepr, pyStr } from "./py.js";
 import type { PropFacts, Skeleton } from "./skeleton.js";
+import { hashValue } from "./digest.js";
 
 export interface SchemaChange {
   path: string;
@@ -226,6 +227,7 @@ function diffTools(baseline: LockToolEntry[], current: BuiltTool[]): DriftItem[]
 
     const schemaChanged = b.input_schema_hash !== c.input_schema_hash;
     if (schemaChanged) items.push(...diffToolSchema(name, target, b, c));
+    items.push(...diffToolMetadata(name, target, b, c));
 
     const bCaps = new Set(b.capabilities);
     const cCaps = new Set(c.capabilities);
@@ -241,6 +243,29 @@ function diffTools(baseline: LockToolEntry[], current: BuiltTool[]): DriftItem[]
 
     if (b.description_hash !== c.description_hash && !schemaChanged && !addedCaps.length && !removedCaps.length) {
       items.push(item("description-modified", "low", target, `Tool '${name}' description changed`));
+    }
+  }
+  return items;
+}
+
+function diffToolMetadata(name: string, target: string, b: LockToolEntry, c: BuiltTool): DriftItem[] {
+  const items: DriftItem[] = [];
+  const add = (cls: string, severity: string, message: string, detail: string | null = null) =>
+    items.push(item(cls, severity, target, `Tool '${name}' ${message}`, detail));
+  if (b.annotations_hash !== null && b.annotations_hash !== c.annotations_hash) {
+    add("tool-annotations-modified", "high", "annotations changed (server declarations, not authority)");
+  }
+  if (b.output_schema_hash === null || b.output_schema_hash === c.output_schema_hash) return items;
+  const nullHash = hashValue(null);
+  if (b.output_schema_hash === nullHash) add("schema-out-added", "high", "outputSchema added");
+  else if (c.output_schema_hash === nullHash) add("schema-out-removed", "high", "outputSchema removed");
+  else if (b.output_schema_skeleton === null || c.output_schema_skeleton === null) add("schema-out-modified", "high", "outputSchema changed");
+  else {
+    const changes = diffSkeletons(b.output_schema_skeleton, c.output_schema_skeleton);
+    if (!changes.length) add("schema-out-cosmetic-modified", "low", "outputSchema changed cosmetically (no structural change)");
+    for (const ch of changes) {
+      const cls = ch.change_class.replace(/^schema-/, "schema-out-");
+      add(cls, ch.severity, `outputSchema ${cls} at '${ch.path}'`, ch.detail);
     }
   }
   return items;
@@ -287,6 +312,9 @@ export function computeDrift(baseline: Lock, current: BuiltLock): DriftItem[] {
   items.push(...diffTools(baseline.tools, current.tools));
   items.push(...diffResources(baseline.resources, current.resources));
   items.push(...diffPrompts(baseline.prompts, current.prompts));
+  if (baseline.schema_version < 4 && current.schema_version >= 4 && !baseline.pin.approved) {
+    items.push(item("schema-version-migrated", "low", "pin/approved_digest", "Legacy lock does not commit tool annotations/outputSchema; review and re-pin under schema v4"));
+  }
 
   const approvedDigest = baseline.pin.approved_digest;
   if (baseline.pin.approved && approvedDigest !== null && approvedDigest !== current.overall_digest) {

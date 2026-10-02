@@ -148,7 +148,10 @@
             }
           }
         },
-        "entry_digest": "sha256:458d491dcd951c14b378f89c3a2a281b9d78172459660eff7296d7f15d837fc6"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:88564b4184dd46b5e24c0aea7f807cf4e38d7c38ac2082f59365ac7c52a4bca3"
       },
       {
         "name": "read_file",
@@ -181,7 +184,10 @@
             }
           }
         },
-        "entry_digest": "sha256:6f11256b978f1aac99fab34e4af12c354c2eda0e993913889adcc34940049bc0"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:1b044dd5f7d4145f0b8d3a4aed57eeaadfb6d6f958adb667f573a64e34546136"
       },
       {
         "name": "refs",
@@ -248,7 +254,10 @@
             }
           }
         },
-        "entry_digest": "sha256:e9f2249d92aad65b0183931ad0622c874af71453f4734e31a2d2a676022d6ed2"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:cd4da72ed4c32d96fa0e48570014814631088d0084252a7c8705fcf2c0323e16"
       },
       {
         "name": "run_shell_command",
@@ -281,7 +290,10 @@
             }
           }
         },
-        "entry_digest": "sha256:64b37b52f763980702dadd1a5ef061d7fc21cc1acc560699c44b9cf2752fa2ec"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:2c3145f167e8b5ad750d78ca43c30df9912ced9546bcff92e8371360a848c4d3"
       },
       {
         "name": "sqlQuery",
@@ -314,7 +326,10 @@
             }
           }
         },
-        "entry_digest": "sha256:d3e40dab0cc6d677d69c5e6dd1dfa543e3afc301655f2347370f1c1a78219462"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:322429ef00cd3d096b83df011870d197e09a8b32bb75a54b0772bdc2cc7601fd"
       },
       {
         "name": "writeFile",
@@ -357,11 +372,14 @@
             }
           }
         },
-        "entry_digest": "sha256:ce5a6ad17a64ac7b67af67b64f1e7c2cd5a6394c9e49db17309a480131c0cd08"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:646785d1700211069c62b6a70c6fa7f6279d6bc67199c71716a6279610fc0449"
       }
     ],
     "resources": [],
     "prompts": [],
-    "overall_digest": "sha256:24de0128af7fbee8c0c6052b802b241ca7774fa8e2454246059acc618db7dad0"
+    "overall_digest": "sha256:2833de0f649330ec0a62383d3d7e76865c14689cf16273555199a1e110401d04"
   }
 }

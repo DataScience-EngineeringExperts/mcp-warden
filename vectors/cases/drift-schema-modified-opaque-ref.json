@@ -3,7 +3,7 @@
   "kind": "drift",
   "description": "A remote $ref target changed -> opaque-leaf schema-modified (high) carrying both literals.",
   "lock": {
-    "schema_version": 3,
+    "schema_version": 4,
     "warden_version": "0.0.0",
     "server": {
       "command": "python",
@@ -41,13 +41,16 @@
             }
           }
         },
-        "entry_digest": "sha256:0bf1e1755902e74905d651fc9fc8af39966371065b2d5e8bff34092de00d184d"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:9faa7fbbd54e88c24d753e325789b57c5dd9d70d2bd192e3d40e04567021fa82"
       }
     ],
     "resources": [],
     "prompts": [],
     "findings": [],
-    "overall_digest": "sha256:a0d36e125a6ce600c0a513f76f6ec692cc9763fc13221e6c8a8b7810042a77ce",
+    "overall_digest": "sha256:2bf1c50e3f9e9d5148298353215de110ba15c7eb25d245abe04a54cfeae082f3",
     "pin": {
       "created_at": "2026-01-01T00:00:00Z",
       "warden_version": "0.0.0",

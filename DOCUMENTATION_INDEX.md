@@ -16,13 +16,17 @@ describe and visualize the implementation that satisfies that contract.
 
 ## Lock Format v1 conformance (`vectors/` + `@mcp-warden/lock` — DSE-1513)
 
+Schema level 4 adds annotation/output commitments (DSE-1539). The
+[upgrade plan and Warden checkpoint proposal](docs/plans/2026-10-02-tool-integrity-upgrade.md)
+separates implemented surface integrity from proposed protocol-neutral enforcement.
+
 The format is a standard, not a tool: a language-neutral corpus defines conformance and two
 implementations (Python reference, zero-dependency TypeScript) prove it in CI.
 
 | Artifact | Purpose |
 |----------|---------|
 | [`vectors/README.md`](vectors/README.md) | Consumer contract: manifest schema, the four vector kinds, the surface document shape, how a third implementation runs the corpus |
-| [`vectors/manifest.json`](vectors/manifest.json) + [`vectors/cases/`](vectors/cases/) | 77 generated vectors — canonical (RFC 8785), digest, drift (every `WRD-DRIFT-*` class), malformed |
+| [`vectors/manifest.json`](vectors/manifest.json) + [`vectors/cases/`](vectors/cases/) | 107 generated vectors — canonical (RFC 8785), digest, drift (every `WRD-DRIFT-*` class), malformed |
 | [`vectors/tools/generate.py`](vectors/tools/generate.py) | Regenerates the corpus from the Python reference; a corpus diff = a hashed-derivation change = a `schema_version` bump (SPEC §14.2) |
 | [`tests/test_spec_vectors.py`](tests/test_spec_vectors.py) | Python harness over the manifest (honours `MCP_LOCK_VECTORS_DIR`) |
 | [`packages/lock-ts/`](packages/lock-ts/README.md) | `@mcp-warden/lock` — verify-only TypeScript: hand-written JCS, SHA-256, capability + skeleton derivation, drift classifier; `npm test` runs the same corpus |

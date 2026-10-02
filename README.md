@@ -10,6 +10,18 @@
 tool/resource/prompt surface into a signed `warden.lock`, then fails CI when that surface
 drifts.** `pin` and `check` support stdio and Streamable HTTP; `guard` is stdio-only.
 
+**Schema level 4** also locks complete tool annotations and output schemas. Changing
+destructiveHint, removing a result schema, or widening its types now triggers drift;
+the existing runtime tools/list gate checks these fields against v4 locks too.
+Older locks stay readable, but require review and re-pinning for this coverage.
+Hints are server claims, not proof of safety, and schemas do not certify content.
+
+The proposed next direction is a protocol-neutral **Warden**: human-approved tool
+versions and bounded actions, with untrusted inputs kept separate from authority.
+The [upgrade plan and checkpoint proposal](docs/plans/2026-10-02-tool-integrity-upgrade.md)
+maps prompts, retrieval, code execution, and serverless adapters to existing Agent
+Trust Kernel work. Those broader checkpoints are proposals, not shipped guarantees.
+
 > ⚠️ **Install `mcp-warden-cli`, not `mcp-warden`.** The PyPI name `mcp-warden` is
 > an **unrelated package by a different author** — it is not this project. The
 > correct install is `pip install mcp-warden-cli` (the CLI command is still

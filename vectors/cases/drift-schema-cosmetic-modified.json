@@ -3,7 +3,7 @@
   "kind": "drift",
   "description": "Only a cosmetic key changed: hash differs, skeleton identical -> schema-cosmetic-modified (low).",
   "lock": {
-    "schema_version": 3,
+    "schema_version": 4,
     "warden_version": "0.0.0",
     "server": {
       "command": "python",
@@ -43,13 +43,16 @@
             }
           }
         },
-        "entry_digest": "sha256:c9d9119cbfba8355b8e64790f6977cc8cf84e7a43425c9b432348da5a8e28763"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:0d83270005c61a563c34a9b64deef228afd13802bae0490ceeed80513d1f8af8"
       }
     ],
     "resources": [],
     "prompts": [],
     "findings": [],
-    "overall_digest": "sha256:4f3a703659d5b191e5282020e3ba8ea7b207a31eba1bc05778c3586c4cb6a902",
+    "overall_digest": "sha256:546905a04f1906035b869fbb27f20d070837ae488139d2905d5b326bd9b554d5",
     "pin": {
       "created_at": "2026-01-01T00:00:00Z",
       "warden_version": "0.0.0",

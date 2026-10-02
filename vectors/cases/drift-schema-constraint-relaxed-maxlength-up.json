@@ -3,7 +3,7 @@
   "kind": "drift",
   "description": "detail is 'maxLength 64→4096'.",
   "lock": {
-    "schema_version": 3,
+    "schema_version": 4,
     "warden_version": "0.0.0",
     "server": {
       "command": "python",
@@ -44,13 +44,16 @@
             }
           }
         },
-        "entry_digest": "sha256:ccec6779bc8ea57f8e327dd9b774f9c5e491ce071b0e4a88d2b31b51aaa90f3c"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:d46144a16c7a368641a7ed6c7d8bd52252e2bb9e42a839f81c8698dd6c051f24"
       }
     ],
     "resources": [],
     "prompts": [],
     "findings": [],
-    "overall_digest": "sha256:78ea78856226cea5e37ca95e23f121c8344ba75014bd3995ef552c98a1bd56af",
+    "overall_digest": "sha256:4dc32cf9dc8ee45c2ac91658fb0bc1b0a3073195d0076084d11b50afc20381b5",
     "pin": {
       "created_at": "2026-01-01T00:00:00Z",
       "warden_version": "0.0.0",
