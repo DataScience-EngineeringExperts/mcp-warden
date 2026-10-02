@@ -13,6 +13,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 REPOSITORY = "DataScience-EngineeringExperts/mcp-warden"
 OWNER_ID = "115239380"
 WORKFLOW = f"{REPOSITORY}/.github/workflows/release.yml"
+REF = "refs/heads/main"
 MAX_RESPONSE = 65_536
 ERROR_CODES = frozenset({
     "invalid-publisher", "invalid-pending-publisher", "invalid-token", "invalid-payload",
@@ -75,7 +76,7 @@ def github_request_url(raw: str) -> str:
     return urlunsplit(parsed._replace(query=urlencode([*query, ("audience", "pypi")])))
 
 
-def check_claims(token: str, ref: str) -> None:
+def check_claims(token: str) -> None:
     # Decoding is a preflight check, NOT signature verification. PyPI verifies the JWT.
     try:
         parts = token.split(".")
@@ -90,8 +91,8 @@ def check_claims(token: str, ref: str) -> None:
     expected = {
         "iss": "https://token.actions.githubusercontent.com", "aud": "pypi",
         "repository": REPOSITORY, "repository_owner": REPOSITORY.split("/")[0],
-        "repository_owner_id": OWNER_ID, "workflow_ref": f"{WORKFLOW}@{ref}",
-        "sub": f"repo:{REPOSITORY}:ref:{ref}",
+        "repository_owner_id": OWNER_ID, "workflow_ref": f"{WORKFLOW}@{REF}",
+        "sub": f"repo:{REPOSITORY}:ref:{REF}",
     }
     if any(claims.get(key) != value for key, value in expected.items()):
         raise ProbeError("GitHub OIDC claims did not match this repository's release workflow.")
@@ -100,12 +101,13 @@ def check_claims(token: str, ref: str) -> None:
 
 
 def verify() -> None:
+    if os.environ.get("WARDEN_PYPI_PUBLISHER_CONFIRMED") != "true":
+        raise ProbeError("Inspect the existing normal publisher and account pending publishers before confirming this check.")
     required = ("ACTIONS_ID_TOKEN_REQUEST_URL", "ACTIONS_ID_TOKEN_REQUEST_TOKEN", "GITHUB_REF")
     if any(not os.environ.get(key) for key in required):
         raise ProbeError("Run the verify-pypi job in GitHub Actions with id-token: write.")
-    ref = os.environ["GITHUB_REF"]
-    if not ref.startswith(("refs/heads/", "refs/tags/")):
-        raise ProbeError("Verification requires a branch or tag workflow ref.")
+    if os.environ["GITHUB_REF"] != REF:
+        raise ProbeError("Verification requires the reviewed main branch.")
     url = github_request_url(os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"])
     github = fetch_json(Request(url, headers={
         "Authorization": "Bearer " + os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"],
@@ -113,7 +115,7 @@ def verify() -> None:
     token = github.get("value")
     if not isinstance(token, str) or not token:
         raise ProbeError("GitHub did not return an OIDC identity.")
-    check_claims(token, ref)
+    check_claims(token)
     result = fetch_json(Request(
         "https://pypi.org/_/oidc/mint-token",
         data=json.dumps({"token": token}).encode(),

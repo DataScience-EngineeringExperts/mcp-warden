@@ -109,15 +109,30 @@ duplicate files. A previously uploaded version does not bypass a broken publishe
 
 ### Verify production authentication without uploading
 
-From the repository, dispatch the existing release workflow on reviewed `main`:
+Before dispatch, a logged-in project owner must inspect the **normal** publisher
+on the existing project's page above and check
+[Account → Publishing](https://pypi.org/manage/account/publishing/) for matching
+pending publishers visible in that account. Confirm the intended owner/repository/
+workflow/environment and that no matching pending entry is visible. Do not dispatch
+against a pending publisher or acknowledge an inspection that has not occurred.
+
+The exchange is **not universally read-only**: PyPI's mint endpoint checks pending
+publishers first and can activate/create or remove their server-side records. The
+owning-account check cannot exclude other users' pending records. The verification
+path creates only an in-memory upload credential and never uploads a package;
+it is not a server-wide non-mutation guarantee.
+
+After that inspection, dispatch the existing release workflow on reviewed `main`:
 
 ```bash
-gh workflow run release.yml --ref main --field publish-target=verify-pypi
+gh workflow run release.yml --ref main \
+  --field publish-target=verify-pypi --field publisher-checked=true
 gh run list --workflow release.yml --event workflow_dispatch --limit 1
 gh run view <run-id> --log
 ```
 
-Only **Verify PyPI OIDC (no upload)** runs. Build, signing and upload jobs are
+The check refuses other branches/tags and an unconfirmed publisher before requesting
+any tokens. Only **Verify PyPI OIDC (no upload)** runs. Build, signing and upload jobs are
 skipped; the script uses Python's standard library and preserves the release
 workflow's repository/owner/workflow identity and current environment contract.
 It validates the GitHub request host, refuses redirects, limits response sizes

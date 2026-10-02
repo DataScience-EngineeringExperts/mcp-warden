@@ -22,10 +22,11 @@
 **Files:** `.github/workflows/release.yml`, `scripts/verify_pypi_oidc.py`, `tests/test_release_oidc.py`.
 
 - Add `verify-pypi` to the existing manual choices; skip build and publish jobs for it.
-- Run the standard-library script in a job with the existing `id-token: write` and `contents: read` permissions.
+- Run the standard-library script in a job with the existing `id-token: write` and `contents: read` permissions. Both job and script require reviewed `main`; the script requires an explicit owner publisher-inspection acknowledgment before requesting tokens.
 - Validate the GitHub request endpoint, audience and current workflow/repository claims; reject redirects and unexpected claims before PyPI exchange.
 - Send secrets only as HTTPS headers/bodies. Never log tokens, response bodies, or uncontrolled server error descriptions; retain only fixed failure codes and status.
 - Require a valid, short-lived successful PyPI exchange response. Clearly label success as authentication, not proof of package/project upload authorization.
+- Inspect a normal existing-project publisher and absence of matching pending publishers visible in the owning account before dispatch. PyPI minting checks pending publishers first and can mutate their records; the account check cannot establish universal absence. No live probe is authorized by a guessed inspection acknowledgment.
 - Test both routes' separation, safe exchange, identity mismatch, malicious redirects, invalid/malformed responses, bounded network errors and log non-disclosure.
 
 ## Task 3: Correct and sync release documentation

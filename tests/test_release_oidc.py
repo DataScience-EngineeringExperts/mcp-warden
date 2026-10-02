@@ -33,6 +33,7 @@ def jwt(**changes):
 
 @pytest.fixture
 def environment(monkeypatch):
+    monkeypatch.setenv("WARDEN_PYPI_PUBLISHER_CONFIRMED", "true")
     monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://vstoken.actions.githubusercontent.com/token?x=1")
     monkeypatch.setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", SENTINEL)
     monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
@@ -156,9 +157,26 @@ def test_unexpected_network_exception_does_not_log_request(environment, monkeypa
 
 
 def test_missing_actions_permission_is_a_failure(monkeypatch, capsys):
+    monkeypatch.setenv("WARDEN_PYPI_PUBLISHER_CONFIRMED", "true")
     monkeypatch.delenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", raising=False)
     assert probe.main() == 1
     assert "id-token: write" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("confirmation", ["", "false", "yes"])
+def test_unconfirmed_publisher_never_requests_tokens(environment, monkeypatch, confirmation):
+    monkeypatch.setenv("WARDEN_PYPI_PUBLISHER_CONFIRMED", confirmation)
+    requests = responses(monkeypatch)
+    assert probe.main() == 1
+    assert not requests
+
+
+@pytest.mark.parametrize("ref", ["refs/heads/unreviewed", "refs/tags/v2.0.0", "refs/pull/1/merge"])
+def test_unreviewed_ref_never_requests_tokens(environment, monkeypatch, ref):
+    monkeypatch.setenv("GITHUB_REF", ref)
+    requests = responses(monkeypatch)
+    assert probe.main() == 1
+    assert not requests
 
 
 def test_manual_verification_cannot_build_upload_sign_or_use_long_lived_credentials():
@@ -172,6 +190,10 @@ def test_manual_verification_cannot_build_upload_sign_or_use_long_lived_credenti
     assert "publish-target == 'verify-pypi'" in verify["if"]
     assert "needs" not in verify and "environment" not in verify
     assert verify["permissions"] == {"id-token": "write", "contents": "read"}
-    assert [s["run"] for s in verify["steps"] if "run" in s] == ["python scripts/verify_pypi_oidc.py"]
+    assert verify["steps"][0]["run"].endswith("exit 1\n")
+    assert [s["run"] for s in verify["steps"][1:] if "run" in s] == ["python scripts/verify_pypi_oidc.py"]
     assert "secrets." not in json.dumps(verify)
+    assert verify["env"]["WARDEN_PYPI_PUBLISHER_CONFIRMED"] == "${{ github.event.inputs.publisher-checked }}"
+    assert workflow["on"]["workflow_dispatch"]["inputs"]["publisher-checked"]["default"] == "false"
+    assert verify["steps"][0]["if"] == "github.ref != 'refs/heads/main'"
     assert workflow["permissions"] == {"contents": "read"}

@@ -87,7 +87,9 @@ logic) plus a separate informational provenance section. It never prints raw
 > **Release authentication:** `release.yml` keeps production uploads behind the existing
 > OIDC publisher and repo gate. Manual `verify-pypi` checks only the credential exchange;
 > build, upload and signing jobs are skipped. The script logs neither identity nor upload
-> tokens. Successful exchange is not proof of project upload permission. CLI 2.0.0's
+> tokens, requires reviewed `main` and an owner publisher-inspection acknowledgment.
+> Minting can change PyPI pending-publisher records; it is not universally read-only.
+> Successful exchange is not proof of project upload permission. CLI 2.0.0's
 > failed OIDC exchange was recovered with an authorized manual upload of the signed bytes;
 > publisher alignment must be verified independently. See [`RELEASING.md`](RELEASING.md).
 

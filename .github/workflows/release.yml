@@ -46,6 +46,11 @@ on:
           - testpypi
           - none
           - verify-pypi
+      publisher-checked:
+        description: "verify-pypi only: inspected existing project publisher and no matching pending publisher in owner account"
+        type: boolean
+        required: true
+        default: false
 
 # Least-privilege at the top level; each job widens scope locally only as needed.
 permissions:
@@ -193,7 +198,14 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    env:
+      WARDEN_PYPI_PUBLISHER_CONFIRMED: ${{ github.event.inputs.publisher-checked }}
     steps:
+      - name: Require reviewed main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo '::error::Production verification requires reviewed main.'
+          exit 1
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Python 3.11
