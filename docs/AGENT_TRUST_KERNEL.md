@@ -452,8 +452,10 @@ foundation harness with registration evidence, multiple serialized output-channe
 non-optional versioned malformed-input corpus. The default evidence gate denies every otherwise
 allowed effect.
 
-This is still a partial implementation. It is not wired into the historical `guard`, supplies no
-built-in production verifier or live protocol adapter, and does not implement DSE-717's durable
+This is still a partial implementation. It is not wired into the historical `guard`. A separate
+opt-in [artifact trust verifier](ARTIFACT_TRUST.md) implements the signature port using explicit
+public-key/role roots and an independently protected digest pin. It supplies no live protocol
+adapter and does not implement DSE-717's durable
 signed receipts, independent fallback evidence, rollback-resistant state, or persistent recovery
 latch. A custom evidence gate becomes TCB code and does not create an ATK-conformance claim. No
 production effect or whole-kernel claim is valid until DSE-717 closes ATK-10 through ATK-12 and

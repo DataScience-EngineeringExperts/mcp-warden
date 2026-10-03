@@ -1,6 +1,6 @@
 # Documentation Index — mcp-warden
 
-Last Updated: 2026-10-02
+Last Updated: 2026-10-03
 
 Master index of every document in this repository. The `docs/` files are the
 **security contract and source of truth** for all algorithms; the three core docs
@@ -155,6 +155,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 
 | Doc | Defines |
 |-----|---------|
+| [`docs/ARTIFACT_TRUST.md`](docs/ARTIFACT_TRUST.md) | Opt-in Ed25519 implementation of DSE-716's external artifact verifier: explicit key/kind roles, independently pinned canonical roots, exact version/kind/key-bound signing frame, unsigned review preparation and offline signature verification. No private signing capability, durable receipts, live guard wiring or whole-kernel claim |
 | [`docs/PIN_CHECK_DEMO.md`](docs/PIN_CHECK_DEMO.md) | Full end-to-end pin/check walkthrough, archived out of `README.md` on 2026-08-24 to hold the 500-line core-doc limit |
 | [`docs/SPEC.md`](docs/SPEC.md) | **MCP Lock Format v1** — the vendor-neutral, self-contained format specification any tool can implement: on-disk `warden.lock` schema, RFC 8785 (JCS) canonicalization, SHA-256 `sha256:<hex>` hashing, `overall_digest` construction, the normative drift class + severity table, the optional per-tool inspection block, and a Conformance section (§12.1: passing `vectors/` **is** conformance) + worked example. `WARDEN_LOCK_SCHEMA.md` is the mcp-warden implementation of this format |
 | [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | **(v0.1)** Positioning, trust model (TOFU + `--approve`), assets/actors, the four threat classes (MCP-DRIFT / MCP-CAPSURF / MCP-SECRET / MCP-SUPPLY), explicit out-of-scope limits, deliberate cuts |
@@ -177,6 +178,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 
 | Plan | Purpose |
 |---|---|
+| [`docs/plans/2026-10-03-checkpoint-artifact-trust.md`](docs/plans/2026-10-03-checkpoint-artifact-trust.md) | First human-checkpoint development wave: opt-in signature verification and unsigned review tooling, with unpublished DSE-717 work preserved and live DSE-1076 integration still dependent on it |
 | [`docs/plans/2026-07-18-agent-trust-kernel-design.md`](docs/plans/2026-07-18-agent-trust-kernel-design.md) | **Non-normative execution record.** Records the DSE-714 design decision and verification plan; binding requirements live in `docs/AGENT_TRUST_KERNEL.md` |
 | [`docs/plans/2026-07-18-content-envelope-design.md`](docs/plans/2026-07-18-content-envelope-design.md) | **Non-normative DSE-715 execution record.** Records the reviewed strict-TDD plan; verified behavior is documented in `docs/CONTENT_ENVELOPE.md` |
 | [`docs/plans/2026-07-19-pdp-pep-design.md`](docs/plans/2026-07-19-pdp-pep-design.md) | **Non-normative DSE-716 execution record.** Records the activated-snapshot, structural-PEP, TDD, and review plan; verified behavior is documented in `docs/POLICY_ENFORCEMENT.md` |
@@ -211,6 +213,11 @@ scope-honesty box and makes no compliance/regulatory claim.
 ---
 
 ## Source layout
+
+`src/mcp_warden/artifact_payload.py`, `artifact_trust.py`, and `cli_trust.py` implement
+the strict existing-artifact decoder, opt-in public-key verifier, and unsigned
+review/signature CLI. Tests are `tests/test_artifact_trust.py`,
+`test_cli_trust.py`, and `test_artifact_trust_integration.py`.
 
 | Module | Responsibility | Spec anchor |
 |--------|----------------|-------------|

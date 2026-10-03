@@ -235,6 +235,8 @@ module markers are outside the supported API and are TCB compromise, not an auth
   not silently upgraded and is not ATK-conformant.
 - DSE-716 APIs are importable client-agnostic foundations, not a new CLI command or deployed
   runtime adapter.
-- No built-in production verifier, durable evidence gate, recovery store, or live protocol
-  adapter is selected by this ticket.
+- DSE-716 itself selects no built-in verifier. The separate opt-in
+  [artifact trust foundation](ARTIFACT_TRUST.md) now implements its external verifier port
+  with pinned public keys and explicit signer roles; it supplies no durable evidence gate,
+  recovery store, or live protocol adapter.
 - DSE-717 remains required before any whole-kernel or production effect claim.

@@ -63,6 +63,7 @@ nav:
       - Pin MCP servers in CI: pin-in-ci.md
       - MCP security checklist: checklist.md
   - Reference:
+      - External artifact signatures: artifact-trust.md
       - The MCP Lock Format: lock-format.md
       - Comparison vs scanners & gateways: comparison.md
 
