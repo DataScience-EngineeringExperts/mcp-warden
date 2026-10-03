@@ -1,6 +1,6 @@
 # mcp-warden — System Context Diagram
 
-Last Updated: 2026-10-02
+Last Updated: 2026-10-03
 
 **CLI 2.0.0 / schema level 4** extends capture/lock/check to complete tool annotations and output
 schemas, with structural output drift and Python/TypeScript parity. The existing
@@ -37,6 +37,11 @@ logic) plus a separate informational provenance section. It never prints raw
 > effects. DSE-717 is in progress (its protected-state contract is implemented in an isolated
 > branch), but it must still deliver durable signed evidence, fallback, rollback-resistant state,
 > and the recovery latch. The current `guard` path is not represented as ATK-conformant.
+
+> The opt-in [artifact verifier](docs/ARTIFACT_TRUST.md) implements DSE-716's external
+> signature port using pinned Ed25519 public keys and explicit artifact-kind roles.
+> `trust prepare` emits unsigned review/signing bytes; `trust verify` checks signatures
+> only. Human signing remains external and the root pin must be host-protected.
 
 > `conclave` (the 4-model adversarial council referenced in `docs/THREAT_MODEL.md`)
 > is a **dev-time design reviewer** that shaped this contract. It is **NOT** a
@@ -109,9 +114,11 @@ flowchart TB
 
     envelope["Content Envelope V1\nDSE-715 · implemented evidence foundation\nNOT wired to guard · grants no authority"]
     decision["Deterministic PDP/PEP V1\nDSE-716 · signed adapter/bundle gates + fixed corpus\nNOT wired to guard"]
+    artifactTrust["Opt-in Ed25519 artifact verifier\nartifact_trust.py · protected root pin + key roles\ntrust CLI: unsigned preparation / signature verification"]
     evidence["Durable evidence + recovery state\nDSE-717 · IN PROGRESS\ncurrent default gate denies effects"]
     atk -. "governs partial foundation" .-> envelope
     envelope -. "required input" .-> decision
+    artifactTrust -. "external signature verification port" .-> decision
     decision -. "requires production gate" .-> evidence
 
     subgraph ci["CI pipeline (GitHub Actions / local)"]

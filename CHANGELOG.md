@@ -30,6 +30,16 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+### Artifact trust foundation
+
+- Add opt-in Ed25519 verification for existing policy, runtime, adapter and
+  executable-bundle activation APIs, with an independently pinned public-key
+  configuration and explicit artifact-kind signer roles.
+- Add `trust roots-digest`, `trust prepare` and `trust verify` for enrollment
+  inspection, unsigned canonical review/signing artifacts, and offline signature
+  checks. Human signing stays external; signature validity alone does not permit
+  effects. Durable receipts and live guard integration remain separate work.
+
 ### Release engineering
 
 - Add a manual `verify-pypi` production OIDC exchange check in the existing release

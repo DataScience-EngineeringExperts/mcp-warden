@@ -1,6 +1,6 @@
 # mcp-warden
 
-Last Updated: 2026-10-02
+Last Updated: 2026-10-03
 
 [![CI](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml/badge.svg)](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -23,6 +23,13 @@ The proposed next direction is a protocol-neutral **Warden**: human-approved too
 The [upgrade plan and checkpoint proposal](docs/plans/2026-10-02-tool-integrity-upgrade.md)
 maps prompts, retrieval, code execution, and serverless adapters to existing Agent
 Trust Kernel work. Those broader checkpoints are proposals, not shipped guarantees.
+
+The opt-in [artifact trust foundation](docs/ARTIFACT_TRUST.md) adds public-key
+verification for the existing kernel activation APIs and `trust` CLI commands
+to prepare unsigned review artifacts and verify external signatures. Keys and
+signer roles require an independently protected root pin. This development
+feature is not in the published 2.0.0 package; live checkpoint enforcement still
+depends on DSE-717 evidence and DSE-1076 guard integration.
 
 > ⚠️ **Install `mcp-warden-cli`, not `mcp-warden`.** The PyPI name `mcp-warden` is
 > an **unrelated package by a different author** — it is not this project. The
