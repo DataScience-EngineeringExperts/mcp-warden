@@ -176,7 +176,10 @@ def test_prepare_symlink_loop_is_code_only_and_creates_no_outputs(tmp_path):
     assert result.output.strip() == "TRUST-OUTPUT-UNAVAILABLE"
     assert not other.exists()
     process = subprocess.run(
-        [sys.executable, "-m", "mcp_warden", *args], capture_output=True, text=True, timeout=20
+        [sys.executable, "-c", "from mcp_warden.cli import app; app()", *args],
+        capture_output=True,
+        text=True,
+        timeout=20,
     )
     assert process.returncode == 2
     assert process.stdout == ""
