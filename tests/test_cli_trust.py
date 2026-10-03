@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 
 import pytest
 from typer.testing import CliRunner
@@ -150,3 +152,33 @@ def test_missing_file_and_wrong_artifact_type_are_safe(tmp_path):
     assert "TRUST-FILE-UNAVAILABLE" in result.output
     result = runner.invoke(app, ["trust", "roots-digest", str(signature)])
     assert result.exit_code == 2
+
+
+def test_prepare_symlink_loop_is_code_only_and_creates_no_outputs(tmp_path):
+    root, candidate, _, _ = inputs(tmp_path)
+    loop = tmp_path / "PLANTED-SENSITIVE-PATH"
+    loop.symlink_to(loop.name)
+    other = tmp_path / "signing.bin"
+    args = [
+        "trust",
+        "prepare",
+        "policy",
+        str(candidate),
+        "--signer",
+        root.signer_identity,
+        "--canonical-out",
+        str(loop),
+        "--signing-out",
+        str(other),
+    ]
+    result = runner.invoke(app, args)
+    assert result.exit_code == 2
+    assert result.output.strip() == "TRUST-OUTPUT-UNAVAILABLE"
+    assert not other.exists()
+    process = subprocess.run(
+        [sys.executable, "-m", "mcp_warden", *args], capture_output=True, text=True, timeout=20
+    )
+    assert process.returncode == 2
+    assert process.stdout == ""
+    assert process.stderr.strip() == "TRUST-OUTPUT-UNAVAILABLE"
+    assert not other.exists()

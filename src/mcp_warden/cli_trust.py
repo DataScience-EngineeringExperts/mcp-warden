@@ -44,7 +44,7 @@ def _write_pair(source: Path, outputs: tuple[tuple[Path, bytes], ...]) -> None:
             with path.open("xb") as target:
                 created.append(path)
                 target.write(payload)
-    except OSError:
+    except (OSError, RuntimeError):
         invalid = True
     if invalid:
         for path in created:
