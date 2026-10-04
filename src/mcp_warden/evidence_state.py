@@ -69,6 +69,16 @@ class ArtifactFloorV1(BaseModel):
     generation: StrictInt
     digest: str
 
+    @model_validator(mode="before")
+    @classmethod
+    def _exact(cls, value):
+        if type(value) is dict and any(
+            type(value.get(k)) is not t
+            for k, t in (("kind", str), ("generation", int), ("digest", str))
+        ):
+            raise ValueError("inexact floor")
+        return value
+
     @model_validator(mode="after")
     def _valid(self) -> ArtifactFloorV1:
         if not 0 <= self.generation <= MAX_COUNTER or DIGEST_RE.fullmatch(self.digest) is None:
@@ -156,6 +166,8 @@ def validate_snapshot(
     previous: ProtectedStateSnapshotV1,
 ) -> None:
     """Validate a candidate against the last protected snapshot."""
+    _validate_exact_snapshot(candidate)
+    _validate_exact_snapshot(previous)
     if (
         type(candidate) is not ProtectedStateSnapshotV1
         or type(previous) is not ProtectedStateSnapshotV1
@@ -202,9 +214,25 @@ def validate_snapshot(
             _invalid("STATE-RECOVERY-REQUIRED")
 
 
+def _validate_exact_snapshot(value: object) -> None:
+    bad = type(value) is not ProtectedStateSnapshotV1
+    if not bad:
+        try:
+            ProtectedStateSnapshotV1.model_validate(value)
+            for floor in value.floors:
+                if type(floor) is not ArtifactFloorV1:
+                    raise ValueError
+                ArtifactFloorV1.model_validate(floor)
+        except Exception:
+            bad = True
+    if bad:
+        _invalid("RCT-STATE-MALFORMED")
+
+
 def validate_floor(
     snapshot: ProtectedStateSnapshotV1, *, kind: str, generation: int, digest: str
 ) -> None:
+    _validate_exact_snapshot(snapshot)
     if (
         type(snapshot) is not ProtectedStateSnapshotV1
         or kind not in FLOOR_KINDS
