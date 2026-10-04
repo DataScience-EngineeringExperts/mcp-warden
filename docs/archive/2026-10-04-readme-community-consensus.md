@@ -28,4 +28,3 @@ default `check` path is unchanged when the flag is absent.
 
 Contract, trust model, layout, and the pending phase-2 live corpus:
 [Community corpus contract](../COMMUNITY_CORPUS.md).
-
