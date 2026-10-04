@@ -267,5 +267,12 @@ def current_eligibility(
         return "recovery-only"
     if latch is None:
         return "floors-compatible-latch-unverified"
-    exact(latch, RecoveryLatchSnapshotV1)
+    valid_latch = False
+    try:
+        exact(latch, RecoveryLatchSnapshotV1)
+        valid_latch = True
+    except Exception:
+        pass
+    if not valid_latch:
+        return "recovery-only"
     return "compatible-foundation" if operationally_healthy(snapshot, latch) else "recovery-only"

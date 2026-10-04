@@ -9,9 +9,10 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Protocol, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, StrictInt, field_validator, model_validator
 
 from mcp_warden.evidence_floor import DIGEST_RE, FLOOR_KINDS, MAX_COUNTER, ArtifactFloorV1
+from mcp_warden.evidence_latch import RecoveryLatchSnapshotV1, latch_is_valid
 
 
 class StateError(Exception):
@@ -217,46 +218,10 @@ def validate_floor(
         _invalid("STATE-FLOOR-INTEGRITY")
 
 
-class RecoveryLatchSnapshotV1(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True, hide_input_in_errors=True)
-    generation: StrictInt
-    latched: StrictBool
-    event_digest: str | None = None
-    cleared_generation: StrictInt | None = None
-    cleared_event_digest: str | None = None
-    exit_receipt_digest: str | None = None
-
-    @field_validator("event_digest", "cleared_event_digest", "exit_receipt_digest", mode="before")
-    @classmethod
-    def _exact_digest(cls, value):
-        if value is not None and (type(value) is not str or DIGEST_RE.fullmatch(value) is None):
-            raise ValueError("invalid latch digest")
-        return value
-
-    @model_validator(mode="after")
-    def _valid(self) -> RecoveryLatchSnapshotV1:
-        if not 0 <= self.generation <= MAX_COUNTER:
-            raise ValueError("invalid latch generation")
-        for digest in (self.event_digest, self.cleared_event_digest, self.exit_receipt_digest):
-            if digest is not None and DIGEST_RE.fullmatch(digest) is None:
-                raise ValueError("invalid latch digest")
-        if self.latched and self.event_digest is None:
-            raise ValueError("missing event")
-        if self.cleared_generation is not None and (
-            type(self.cleared_generation) is not int
-            or self.cleared_generation != self.generation
-            or self.cleared_event_digest is None
-            or self.exit_receipt_digest is None
-            or self.latched
-        ):
-            raise ValueError("invalid clear tuple")
-        return self
-
-
 def operationally_healthy(state: ProtectedStateSnapshotV1, latch: RecoveryLatchSnapshotV1) -> bool:
     if (
         type(state) is not ProtectedStateSnapshotV1
-        or type(latch) is not RecoveryLatchSnapshotV1
+        or not latch_is_valid(latch)
         or latch.latched
         or state.recovery_generation != latch.generation
     ):

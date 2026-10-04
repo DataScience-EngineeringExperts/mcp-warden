@@ -12,7 +12,7 @@ from mcp_warden.enforcement_result_v2 import (
     serialize_enforcement_result_v2,
 )
 from mcp_warden.evidence_coordinator import DecisionEvidenceCoordinatorV1
-from mcp_warden.evidence_helpers import read_store_tail
+from mcp_warden.evidence_helpers import require_protected_tails
 from mcp_warden.evidence_models import (
     create_evidence_context,
     create_evidence_result,
@@ -216,12 +216,7 @@ class PolicyEnforcementPointV2:
                 or state.recovery_generation != evidence.recovery_generation
             ):
                 raise ReceiptError("RCT-RECOVERY-ONLY")
-            from mcp_warden.receipt_log import LogTailV1
-
-            if read_store_tail(self._coordinator.primary) != LogTailV1(
-                sequence=state.primary_sequence, entry_digest=state.primary_tail_digest
-            ):
-                raise ReceiptError("RCT-TAIL-MISMATCH")
+            require_protected_tails(self._coordinator.primary, self._coordinator.fallback, state)
             handler = self._adapter._handler(request.operation.operation_id)
         except Exception:
             d = convert_failed_allow(d)

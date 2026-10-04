@@ -145,7 +145,6 @@ class FileEvidenceStoreV1:
         try:
             # Lock the actual log inode; its independently protected tail detects replacement.
             dir_fd = os.open(self.path.parent, os.O_RDONLY | os.O_DIRECTORY)
-            existed = self.path.exists()
             fd = os.open(self.path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
             fcntl.flock(fd, fcntl.LOCK_EX)
             tail, payloads = self._scan(fd)
@@ -188,8 +187,9 @@ class FileEvidenceStoreV1:
                         raise ReceiptError("RCT-APPEND-FAILED")
                     offset += written
                 os.fsync(fd)
-                if not existed:
-                    os.fsync(dir_fd)
+                # Every durable append persists its directory entry, including
+                # files first created by read_tail or by another process.
+                os.fsync(dir_fd)
                 result = DurableAppendEvidenceV1(
                     store_identity_digest=self.store_identity_digest,
                     payload_digest=receipt_digest(payload, "log-entry"),
