@@ -7,7 +7,7 @@ from types import MappingProxyType
 from typing import Protocol
 
 from mcp_warden.decision_receipts import signature_frame
-from mcp_warden.evidence_state import ProtectedStateSnapshotV1, validate_floor
+from mcp_warden.evidence_state import MAX_COUNTER, ProtectedStateSnapshotV1, validate_floor
 from mcp_warden.receipt_kernel import ReceiptError, canonical, exact, receipt_digest
 from mcp_warden.receipt_models import SignatureEvidenceV1, SignerAuthorizationBundleV1
 
@@ -111,20 +111,32 @@ class ActivatedSignerAuthorizationV1:
             raise ReceiptError("RCT-AUTHORIZATION-UNAVAILABLE")
 
 
-def check_authorization(authorization, *, snapshot: ProtectedStateSnapshotV1, now: int) -> None:
+def check_authorization_identity(authorization) -> None:
+    """Validate an independently root-activated pin, without live floor admission."""
     if (
         type(authorization) is not ActivatedSignerAuthorizationV1
         or authorization._seal is not _AUTH_SEAL
+        or type(authorization.trust_root_generation) is not int
+        or not 0 <= authorization.trust_root_generation <= MAX_COUNTER
     ):
         raise ReceiptError("RCT-AUTHORIZATION-UNAVAILABLE")
     exact(authorization.bundle, SignerAuthorizationBundleV1)
+    if receipt_digest(canonical(authorization.bundle), "authorization") != authorization.digest:
+        raise ReceiptError("RCT-INTEGRITY")
+
+
+def _check_authorization_time(authorization, now):
+    check_authorization_identity(authorization)
     if (
         type(now) is not int
         or not authorization.bundle.valid_from <= now < authorization.bundle.valid_until
     ):
         raise ReceiptError("RCT-STALE")
-    if receipt_digest(canonical(authorization.bundle), "authorization") != authorization.digest:
-        raise ReceiptError("RCT-INTEGRITY")
+
+
+def check_authorization(authorization, *, snapshot: ProtectedStateSnapshotV1, now: int) -> None:
+    """Admit live authority only against current time and protected floors."""
+    _check_authorization_time(authorization, now)
     validate_floor(
         snapshot,
         kind="signer-authorization",
@@ -178,6 +190,43 @@ def verify_authorized_artifact(
     now: int,
 ) -> None:
     check_authorization(authorization, snapshot=snapshot, now=now)
+    _verify_artifact_signature(
+        payload=payload,
+        evidence=evidence,
+        authorization=authorization,
+        artifact_kind=artifact_kind,
+        role=role,
+        verifier=verifier,
+    )
+
+
+def verify_historical_artifact_signature(
+    *,
+    payload,
+    evidence,
+    authorization,
+    artifact_kind,
+    role,
+    verifier,
+    signed_at,
+):
+    """Verify historical bytes against an independent pin; never admit live authority.
+
+    The host retains previously root-activated authorization and public-key pins.
+    Signed time is evidence content, not a new current trusted-time source.
+    """
+    _check_authorization_time(authorization, signed_at)
+    _verify_artifact_signature(
+        payload=payload,
+        evidence=evidence,
+        authorization=authorization,
+        artifact_kind=artifact_kind,
+        role=role,
+        verifier=verifier,
+    )
+
+
+def _verify_artifact_signature(*, payload, evidence, authorization, artifact_kind, role, verifier):
     exact(evidence, SignatureEvidenceV1)
     if (
         type(payload) is not bytes

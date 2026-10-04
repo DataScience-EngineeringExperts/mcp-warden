@@ -12,7 +12,11 @@ from mcp_warden.receipt_kernel import (
 )
 from mcp_warden.receipt_log import entry_digest
 from mcp_warden.receipt_models import SignatureEvidenceV1, SignedReceiptV1, UnsignedReceiptV1
-from mcp_warden.signer_authorization import verify_authorized_artifact
+from mcp_warden.signer_authorization import (
+    check_authorization_identity,
+    verify_authorized_artifact,
+    verify_historical_artifact_signature,
+)
 
 
 def parse_signed_receipt(payload: bytes) -> SignedReceiptV1:
@@ -44,7 +48,7 @@ def parse_signed_receipt(payload: bytes) -> SignedReceiptV1:
     return record
 
 
-def verify_signed_receipt(record, *, authorization, verifier, snapshot):
+def _bound_receipt_payload(record, authorization):
     exact(record, SignedReceiptV1)
     receipt = record.receipt
     payload = serialize_unsigned_receipt(receipt)
@@ -56,6 +60,13 @@ def verify_signed_receipt(record, *, authorization, verifier, snapshot):
         or receipt.trust_root_digest != authorization.bundle.trust_root_digest
     ):
         raise ReceiptError("RCT-INTEGRITY")
+    return payload
+
+
+def verify_signed_receipt(record, *, authorization, verifier, snapshot):
+    """Verify against live authority floors; historical scans use their own pins."""
+    check_authorization_identity(authorization)
+    payload = _bound_receipt_payload(record, authorization)
     verify_authorized_artifact(
         payload=payload,
         evidence=record.evidence,
@@ -64,22 +75,63 @@ def verify_signed_receipt(record, *, authorization, verifier, snapshot):
         role="receipt-signer",
         verifier=verifier,
         snapshot=snapshot,
-        now=receipt.trusted_time,
+        now=record.receipt.trusted_time,
     )
     return True
 
 
-def verify_receipt_chain(payloads, *, authorization, verifier, snapshot, store_identity_digest):
+def _historical_authority_pins(authorization, verifier, historical_authorities):
+    if type(historical_authorities) is not tuple or len(historical_authorities) > 255:
+        raise ReceiptError("RCT-MALFORMED")
+    pins = {}
+    for pair in ((authorization, verifier), *historical_authorities):
+        if type(pair) is not tuple or len(pair) != 2:
+            raise ReceiptError("RCT-MALFORMED")
+        active, pinned_verifier = pair
+        check_authorization_identity(active)
+        if active.digest in pins:
+            raise ReceiptError("RCT-MALFORMED")
+        pins[active.digest] = (active, pinned_verifier)
+    return pins
+
+
+def _verify_historical_receipt(record, pins):
+    exact(record, SignedReceiptV1)
+    pair = pins.get(record.receipt.signer_authorization_digest)
+    if pair is None:
+        raise ReceiptError("RCT-AUTHORIZATION-UNAVAILABLE")
+    authorization, verifier = pair
+    payload = _bound_receipt_payload(record, authorization)
+    verify_historical_artifact_signature(
+        payload=payload,
+        evidence=record.evidence,
+        authorization=authorization,
+        artifact_kind="receipt",
+        role="receipt-signer",
+        verifier=verifier,
+        signed_at=record.receipt.trusted_time,
+    )
+    return True
+
+
+def verify_receipt_chain(
+    payloads,
+    *,
+    authorization,
+    verifier,
+    snapshot,
+    store_identity_digest,
+    historical_authorities=(),
+):
     if type(payloads) is not tuple or len(payloads) > 100000:
         raise ReceiptError("RCT-MALFORMED")
     validate_protected_state(snapshot)
+    pins = _historical_authority_pins(authorization, verifier, historical_authorities)
     sequence = 0
     tail = ZERO_DIGEST
     for payload in payloads:
         record = parse_signed_receipt(payload)
-        verify_signed_receipt(
-            record, authorization=authorization, verifier=verifier, snapshot=snapshot
-        )
+        _verify_historical_receipt(record, pins)
         receipt = record.receipt
         if (
             receipt.sequence != sequence + 1
@@ -95,19 +147,22 @@ def verify_receipt_chain(payloads, *, authorization, verifier, snapshot, store_i
     return True
 
 
-def primary_payload_validator(*, authorization, verifier, snapshot):
-    """Build a mandatory file-store scan validator from independently pinned authority.
+def primary_payload_validator(*, authorization, verifier, snapshot, historical_authorities=()):
+    """Build a scan validator from bounded independently root-activated historical pins.
 
-    `snapshot` is a TCB-owned callable returning current protected state. Signature
-    validation is separate from log-floor checking, which the coordinator owns.
+    `historical_authorities` is a TCB-supplied tuple of (activated authorization,
+    pinned public verifier) pairs retained across signer/root rotation. No frame
+    supplies authority. Signature validity at signed time survives floor advances;
+    the coordinator/signing/governance paths still enforce current live floors.
+    `snapshot` returns current state for integrity checking; full chain tail/floor
+    reconciliation remains separate. These checks grant no execution permission.
     """
+    pins = _historical_authority_pins(authorization, verifier, historical_authorities)
+    if not callable(snapshot):
+        raise ReceiptError("RCT-MALFORMED")
 
     def validate(payload):
-        return verify_signed_receipt(
-            parse_signed_receipt(payload),
-            authorization=authorization,
-            verifier=verifier,
-            snapshot=snapshot(),
-        )
+        validate_protected_state(snapshot())
+        return _verify_historical_receipt(parse_signed_receipt(payload), pins)
 
     return validate

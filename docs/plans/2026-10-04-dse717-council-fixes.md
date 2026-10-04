@@ -25,7 +25,7 @@
 
 1. Generate deterministic root-authorized generation/key rotation, append under old authority, advance floors, append under new authority, reopen, and verify complete chain. Record genuine pre-fix RED.
 2. Factor sealed authorization integrity/time/grant/signature checks from current floor checks. Keep all live signing/governance callers strict.
-3. Resolve historical receipts by digest only against bounded independently supplied `(activated_authorization, pinned_verifier)` tuples, never receipt-provided authorizations. Check current authorization floors on scans/chain verification.
+3. Resolve historical receipts by digest only against bounded independently supplied `(activated_authorization, pinned_verifier)` tuples, never receipt-provided authorizations. Keep current authorization floors strict on live signing/governance/coordinator admission; historical scans check state integrity and chain verification checks current protected log tails/floors.
 4. Add negative regressions for absent/wrong/unactivated pins, tampering, stale live signing, and current-floor rollback; run focused tests and commit.
 
 ### Task 3: Complete V2 floor presence

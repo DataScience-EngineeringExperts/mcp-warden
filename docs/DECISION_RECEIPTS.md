@@ -44,6 +44,25 @@ agent-editable inputs. Replacing both a root and its protected commitment replac
 the authority boundary. Runtime permission prompts and text in tool results do
 not enroll a signer or grant capabilities.
 
+Signer/root rotation preserves historical signature verification through explicit
+TCB-owned pins. `primary_payload_validator()` and `verify_receipt_chain()` accept
+`historical_authorities=((old_activated_authorization, old_pinned_verifier), ...)`
+alongside the new independently activated authorization/verifier. Retain the old
+public keys and sealed root-activated bundles outside the log; a receipt can select
+a matching digest but cannot supply or enroll authority. A maximum of 256 total
+pins is supported, including the primary pair; duplicate digests fail closed.
+
+Historical scans verify signature, role, artifact kind, exact commitments and
+validity at the receipt's signed time. Later live floor advances do not invalidate
+historical bytes. The signed time is historical content, not fresh trusted time or
+proof of when a retired key was used. The host must govern pin retention/removal;
+these APIs do not create an archival key store or prove platform rollback safety.
+`verify_signed_receipt()` retains its live-floor checks. Live signing, governance
+and coordinator permit/append paths still require the current independently
+protected authorization/root floors; retained historical pins cannot admit a
+retired signer for a new effect. File-store append alone is evidence persistence,
+not a permit; every effect remains behind the coordinator and PEP.
+
 ## Receipt events
 
 | Event | Source and restriction |
@@ -80,6 +99,11 @@ unchanged; matched internal rule IDs stay private. Rule activation cannot replac
 the mandatory critical floor. An independently authorized override may change only
 a registered noncritical deny, with exact request/base-decision/policy/rule/actor/
 scope/reason/expiry bindings. It cannot override quarantine or critical reasons.
+A rejected override is recorded with `RULE-OVERRIDE-INVALID` when the result is a
+deny; quarantine retains its original critical or strengthening-rule reason.
+Authority/input errors use closed receipt codes; only state/recovery failures use
+`PEP-RECOVERY-ONLY`. Neither rejected overrides nor governor failures downgrade a
+base quarantine into deny.
 
 Overrides expire within 3,600 seconds of their explicit issue time. The permitted
 override generation/digest is committed to protected state before effect. This is
@@ -122,7 +146,21 @@ failed allow evidence attempt produces a new deny with
 additional negative evidence attempt. This is not a retry of the original allow.
 
 The primary and fallback logs have independent identities, counters and tails.
-Their digests need not match. Negative primary failure uses the independent
+Their digests need not match. Every V2 coordinator read requires the nine
+mandatory protected floor kinds: adapter, executable-bundle, fallback-log, policy,
+receipt-log, revocation, rule, signer-authorization and trust-root. Presence of the
+executable-bundle floor is required even when no bundle is used; active bundle
+commitment equality is checked when a request references it. Override-floor
+presence and generation/digest checks are conditional on explicit override use.
+Incomplete protected state blocks primary permits and enters closed latch handling.
+Legacy `ProtectedStateSnapshotV1` construction and transitions may still represent
+empty floors, but those snapshots are ineligible at this V2 boundary. The legacy
+scalar receipt/rule/override floor fields are deprecated compatibility fields:
+they are not automatically synchronized with the per-kind `floors` tuple. V2
+artifact admission uses the tuple; do not infer an equivalent scalar view or a
+proven rollback exploit from their divergence.
+
+Negative primary failure uses the independent
 fallback and enters recovery-only mode. Failure of both evidence stores sets the
 independent persistent latch; latch failure remains fail closed. Diagnostics expose
 registered codes rather than provider paths, exception text or planted secrets.
@@ -166,7 +204,12 @@ store, PEP or handler, and it cannot authorize current effects. The separate pur
 an explicitly supplied protected snapshot. It does not refresh trusted time,
 activate new authority, authorize execution or replace the live PEP checks.
 
-Human and agent projections have closed key allowlists. Human evidence exposes
+Human and agent projections have closed key allowlists. `human_projection()` is
+explicitly primary-only: it requires a `SignedReceiptV1` and matching
+`primary-durable` evidence, and its `fallback_sequence` is always null. Use the
+existing closed `serialize_enforcement_result_v2()` for fallback/recovery decision
+and evidence status; there is no fallback human-projection API in this wave.
+Human evidence exposes
 reviewed commitments and coarse decision/evidence/recovery status. Agent output
 contains only a receipt reference, effective verdict, coarse reason and registered
 next action. Neither exposes content, arguments, matched rule IDs, signatures or
@@ -193,6 +236,9 @@ are checked against the PEP's own trace; actual signed/fallback artifact bytes,
 serialized results and safe projections are scanned for planted secrets.
 It invokes positive test handlers, so use isolated test deployments. A passing
 report always says `platform_status=unsupported` and `atk_conformant=false`.
+The historical scenario key `restarted` denotes file reopen/rescan in the reference
+fixture, with the in-process protected state/latch retained. It does not claim a
+process, protected-provider or real-platform restart test.
 
 ## Resource limits
 
@@ -204,6 +250,7 @@ report always says `platform_status=unsupported` and `atk_conformant=false`.
 | Rules in a bundle | 256 |
 | Conditions in one non-nested group | 64 |
 | Membership values in a condition | 128 |
+| Independently pinned historical authorities (including primary pair) | 256 |
 | Override validity interval | 3,600 seconds |
 | Reference vectors / total cases | 64 / 1,024 |
 | Planted markers / bytes per marker | 64 / 4,096 |

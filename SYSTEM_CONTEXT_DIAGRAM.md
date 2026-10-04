@@ -117,7 +117,7 @@ flowchart TB
     envelope["Content Envelope V1\nDSE-715 · implemented evidence foundation\nNOT wired to guard · grants no authority"]
     decision["Deterministic PDP/PEP V1\nDSE-716 · signed adapter/bundle gates + fixed corpus\nNOT wired to guard"]
     artifactTrust["Opt-in Ed25519 artifact verifier\nartifact_trust.py · protected root pin + key roles\ntrust CLI: unsigned preparation / signature verification"]
-    evidence["PEP V2 · signed evidence before effect\nDSE-717 reference SDK · recovery + replay\nindependent platform provider still required"]
+    evidence["PEP V2 · signed evidence before effect\nDSE-717 reference SDK · recovery + replay\nnine live floors · retained historical signer pins\nindependent platform provider still required"]
     atk -. "governs partial foundation" .-> envelope
     envelope -. "required input" .-> decision
     artifactTrust -. "external signature verification port" .-> decision

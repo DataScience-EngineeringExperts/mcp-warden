@@ -118,6 +118,7 @@ class PolicyEnforcementPointV2:
         base = self._pdp.evaluate(request, runtime=runtime)
         d = None
         if code is None and time_valid:
+            authority_ready = False
             try:
                 state, latch = self._coordinator._read()
                 if not operationally_healthy(state, latch):
@@ -140,6 +141,7 @@ class PolicyEnforcementPointV2:
                     ),
                     "time",
                 )
+                authority_ready = True
                 try:
                     d = self._governor.govern(
                         base,
@@ -170,8 +172,10 @@ class PolicyEnforcementPointV2:
             except Exception as error:
                 # Only actual state/recovery failures use the recovery-only reason.
                 # ReceiptError closes its codes; arbitrary provider text is discarded.
-                if type(error) is StateError or (
-                    type(error) is ReceiptError and error.code == "RCT-RECOVERY-ONLY"
+                if (
+                    not authority_ready
+                    or type(error) is StateError
+                    or (type(error) is ReceiptError and error.code == "RCT-RECOVERY-ONLY")
                 ):
                     code = "PEP-RECOVERY-ONLY"
                 elif type(error) is ReceiptError:
