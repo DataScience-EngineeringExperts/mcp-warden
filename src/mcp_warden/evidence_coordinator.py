@@ -6,6 +6,7 @@ from mcp_warden.evidence_helpers import (
     protected_floors,
     read_store_tail,
     receipt_from_context,
+    require_protected_tails,
     validate_append,
 )
 from mcp_warden.evidence_models import FallbackEventV1, create_evidence_result, validate_context
@@ -86,8 +87,7 @@ class DecisionEvidenceCoordinatorV1:
             expected = LogTailV1(
                 sequence=state.primary_sequence, entry_digest=state.primary_tail_digest
             )
-            if read_store_tail(self.primary) != expected:
-                raise ReceiptError("RCT-TAIL-MISMATCH")
+            require_protected_tails(self.primary, self.fallback, state)
             receipt = receipt_from_context(
                 context,
                 state=state,
@@ -113,6 +113,8 @@ class DecisionEvidenceCoordinatorV1:
                 expected=expected,
                 store_identity=self.primary.store_identity_digest,
             )
+            if read_store_tail(self.primary) != proof.tail:
+                raise ReceiptError("RCT-TAIL-MISMATCH")
             candidate = advance_state(
                 state,
                 primary_sequence=proof.tail.sequence,
@@ -128,6 +130,7 @@ class DecisionEvidenceCoordinatorV1:
             latest, latch = self._read()
             if latest != candidate or not operationally_healthy(latest, latch):
                 raise ReceiptError("RCT-STATE-COMMIT")
+            require_protected_tails(self.primary, self.fallback, latest)
             return create_evidence_result(
                 context,
                 mode="primary-durable",
@@ -171,15 +174,15 @@ class DecisionEvidenceCoordinatorV1:
         try:
             if state is None:
                 raise ReceiptError("RCT-RECOVERY-ONLY")
-            current = self.protected_state.read()
-            validate_protected_state(current)
-            state = current
+            state, latch = self._read()
             generation = state.recovery_generation
             if state.mode is ProtectedStateModeV1.HEALTHY:
                 degraded = advance_state(state, mode=ProtectedStateModeV1.EVIDENCE_DEGRADED)
                 if commit_state(self.protected_state, state, degraded) != degraded:
                     raise ReceiptError("RCT-STATE-COMMIT")
-                state = degraded
+                state, latest_latch = self._read()
+                if state != degraded or latest_latch != latch:
+                    raise ReceiptError("RCT-STATE-COMMIT")
             expected = LogTailV1(
                 sequence=state.fallback_sequence, entry_digest=state.fallback_tail_digest
             )
@@ -202,6 +205,8 @@ class DecisionEvidenceCoordinatorV1:
                 expected=expected,
                 store_identity=self.fallback.store_identity_digest,
             )
+            if read_store_tail(self.fallback) != proof.tail:
+                raise ReceiptError("RCT-TAIL-MISMATCH")
             floors = tuple(
                 ArtifactFloorV1(
                     kind=f.kind, generation=proof.tail.sequence, digest=proof.tail.entry_digest
@@ -224,6 +229,11 @@ class DecisionEvidenceCoordinatorV1:
             )
             if commit_state(self.protected_state, state, candidate) != candidate:
                 raise ReceiptError("RCT-STATE-COMMIT")
+            latest, latest_latch = self._read()
+            if latest != candidate or latest_latch != latch:
+                raise ReceiptError("RCT-STATE-COMMIT")
+            if read_store_tail(self.fallback) != proof.tail:
+                raise ReceiptError("RCT-TAIL-MISMATCH")
             return create_evidence_result(
                 context,
                 mode="fallback-durable",

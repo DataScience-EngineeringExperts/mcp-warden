@@ -7,6 +7,7 @@ from pydantic import StrictInt, model_validator
 
 from mcp_warden.decision_receipts import serialize_signed_receipt, sign_receipt
 from mcp_warden.evidence_coordinator import protected_floors, receipt_from_context, validate_append
+from mcp_warden.evidence_floor import DIGEST_RE, MAX_COUNTER
 from mcp_warden.evidence_helpers import commit_state, read_store_tail
 from mcp_warden.evidence_models import validate_context
 from mcp_warden.evidence_reference import advance_state
@@ -75,6 +76,18 @@ def validate_latch_clear(token, *, generation, prior_event_digest, exit_receipt_
     if (
         type(token) is not AuthorizedLatchClearV1
         or token._seal is not _CLEAR_SEAL
+        or type(generation) is not int
+        or not 0 < generation <= MAX_COUNTER
+        or type(token.generation) is not int
+        or any(
+            type(digest) is not str or DIGEST_RE.fullmatch(digest) is None
+            for digest in (
+                prior_event_digest,
+                exit_receipt_digest,
+                token.prior_event_digest,
+                token.exit_receipt_digest,
+            )
+        )
         or token.generation != generation
         or token.prior_event_digest != prior_event_digest
         or token.exit_receipt_digest != exit_receipt_digest
@@ -213,6 +226,8 @@ class RecoveryCoordinatorV1:
                 expected=primary,
                 store_identity=c.primary.store_identity_digest,
             )
+            if read_store_tail(c.primary) != proof.tail:
+                raise ReceiptError("RCT-TAIL-MISMATCH")
             candidate = advance_state(
                 state,
                 primary_sequence=proof.tail.sequence,

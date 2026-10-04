@@ -6,6 +6,7 @@ kernel testing. They do not survive a process restart or a whole-state snapshot.
 
 from threading import Lock
 
+from mcp_warden.evidence_latch import latch_is_valid
 from mcp_warden.evidence_state import (
     ProtectedStateSnapshotV1,
     RecoveryLatchSnapshotV1,
@@ -71,7 +72,11 @@ class InMemoryRecoveryLatchV1:
     protection_capability = "process-local-reference"
 
     def __init__(self, snapshot=None):
-        self._snapshot = snapshot or RecoveryLatchSnapshotV1(generation=0, latched=False)
+        self._snapshot = (
+            RecoveryLatchSnapshotV1(generation=0, latched=False) if snapshot is None else snapshot
+        )
+        if not latch_is_valid(self._snapshot):
+            raise ReceiptError("RCT-LATCH-FAILED")
         self._lock = Lock()
         self.fail = False
 
@@ -79,20 +84,27 @@ class InMemoryRecoveryLatchV1:
         with self._lock:
             if self.fail:
                 raise ReceiptError("RCT-LATCH-FAILED")
-            if type(self._snapshot) is not RecoveryLatchSnapshotV1:
+            if not latch_is_valid(self._snapshot):
                 raise ReceiptError("RCT-LATCH-FAILED")
-            bad = False
-            try:
-                RecoveryLatchSnapshotV1.model_validate(self._snapshot)
-            except Exception:
-                bad = True
-            if bad:
-                raise ReceiptError("RCT-LATCH-FAILED") from None
             return self._snapshot
 
     def set(self, *, generation, event_digest):
+        candidate = None
+        try:
+            candidate = RecoveryLatchSnapshotV1(
+                generation=generation, latched=True, event_digest=event_digest
+            )
+        except Exception:
+            pass
+        if candidate is None:
+            raise ReceiptError("RCT-LATCH-FAILED")
         with self._lock:
-            if self.fail or generation < self._snapshot.generation:
+            if (
+                self.fail
+                or not latch_is_valid(self._snapshot)
+                or type(generation) is not int
+                or generation < self._snapshot.generation
+            ):
                 raise ReceiptError("RCT-LATCH-FAILED")
             if self._snapshot.latched:
                 if (
@@ -101,9 +113,7 @@ class InMemoryRecoveryLatchV1:
                 ):
                     return self._snapshot
                 raise ReceiptError("RCT-LATCH-FAILED")
-            self._snapshot = RecoveryLatchSnapshotV1(
-                generation=generation, latched=True, event_digest=event_digest
-            )
+            self._snapshot = candidate
             return self._snapshot
 
     def authenticated_clear(
@@ -119,7 +129,7 @@ class InMemoryRecoveryLatchV1:
         )
         with self._lock:
             old = self._snapshot
-            if self.fail:
+            if self.fail or not latch_is_valid(old):
                 raise ReceiptError("RCT-LATCH-FAILED")
             if not old.latched:
                 if (

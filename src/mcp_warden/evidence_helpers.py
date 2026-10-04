@@ -90,6 +90,16 @@ def read_store_tail(provider):
     return tail
 
 
+def require_protected_tails(primary, fallback, state):
+    """Reconcile both independent actual streams against protected state."""
+    for provider, sequence, digest in (
+        (primary, state.primary_sequence, state.primary_tail_digest),
+        (fallback, state.fallback_sequence, state.fallback_tail_digest),
+    ):
+        if read_store_tail(provider) != LogTailV1(sequence=sequence, entry_digest=digest):
+            raise ReceiptError("RCT-TAIL-MISMATCH")
+
+
 def commit_state(provider, expected, candidate):
     from mcp_warden.evidence_reference import validate_protected_state
 
