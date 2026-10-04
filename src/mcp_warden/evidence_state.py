@@ -109,6 +109,7 @@ class ProtectedStateSnapshotV1(BaseModel):
     recovery_generation: StrictInt = 0
     prior_latch_event_digest: str | None = None
     recovery_exit_receipt_digest: str | None = None
+    recovery_authorization_digest: str | None = None
 
     @field_validator("floors")
     @classmethod
@@ -146,7 +147,11 @@ class ProtectedStateSnapshotV1(BaseModel):
             )
         ):
             raise ValueError("negative protected state")
-        for digest in (self.prior_latch_event_digest, self.recovery_exit_receipt_digest):
+        for digest in (
+            self.prior_latch_event_digest,
+            self.recovery_exit_receipt_digest,
+            self.recovery_authorization_digest,
+        ):
             if digest is not None and DIGEST_RE.fullmatch(digest) is None:
                 raise ValueError("invalid recovery digest")
         if self.mode is ProtectedStateModeV1.RECOVERY_EXIT_AUTHORIZED and (

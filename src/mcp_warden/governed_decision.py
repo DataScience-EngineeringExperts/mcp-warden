@@ -32,7 +32,9 @@ RECOVERY_CODES = frozenset(r.value for r in DecisionRecoveryV1)
 class EnforcementDecisionV2(ReceiptModel):
     schema_version: Literal[2] = 2
     request_digest: str
+    effect_digest: str = ZERO_DIGEST
     base_decision_digest: str | None
+    base_verdict: Literal["allow", "deny", "quarantine"] | None = None
     effective_verdict: Literal["allow", "deny", "quarantine"]
     public_reason: str
     recovery_code: str

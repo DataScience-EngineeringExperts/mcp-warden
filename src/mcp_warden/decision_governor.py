@@ -134,7 +134,7 @@ class DecisionGovernorV1:
             "rule_generation": self.rules.bundle.generation,
             "envelope.taints": request.envelope.taints,
             "envelope.media": request.envelope.content.media_type,
-            "envelope.source": request.envelope.source.source_kind,
+            "envelope.source": request.envelope.source.kind,
         }
         fields.update(request.identity.model_dump())
         fields.update(request.operation.model_dump())
@@ -160,7 +160,9 @@ class DecisionGovernorV1:
             verdict, reason, override_digest = "allow", "RULE-OVERRIDE", override.digest
         return create_governed_decision(
             request_digest=request.request_digest,
+            effect_digest=request.operation.arguments_digest,
             base_decision_digest=base.decision_digest,
+            base_verdict=base.verdict,
             effective_verdict=verdict,
             public_reason=reason,
             recovery_code=base.recovery if verdict != "allow" else "none",
