@@ -9,7 +9,7 @@ from typing import Any
 import rfc8785
 from pydantic import BaseModel, ConfigDict, model_validator
 
-from mcp_warden.evidence_state import DIGEST_RE, MAX_COUNTER
+from mcp_warden.evidence_state import DIGEST_RE, MAX_COUNTER, ProtectedStateModeV1
 
 MAX_CANONICAL_BYTES = 256 * 1024
 ZERO_DIGEST = "sha256:" + "0" * 64
@@ -145,10 +145,38 @@ class ReceiptModel(BaseModel):
         return self
 
 
+def _exact_original_scalars(value, *, depth=0):
+    if depth > 32:
+        raise ValueError("nested input over cap")
+    kind = type(value)
+    if kind is ProtectedStateModeV1:
+        return
+    for scalar in (str, int, bytes, tuple):
+        if issubclass(kind, scalar) and kind is not scalar and kind is not bool:
+            raise ValueError("inexact original scalar")
+    if kind is tuple:
+        if len(value) > 4096:
+            raise ValueError("tuple over cap")
+        for item in value:
+            _exact_original_scalars(item, depth=depth + 1)
+    elif issubclass(kind, BaseModel):
+        storage = object.__getattribute__(value, "__dict__")
+        if type(storage) is not dict:
+            raise ValueError("invalid model storage")
+        for name in kind.model_fields:
+            if name not in storage:
+                raise ValueError("missing model field")
+            item = storage[name]
+            if name == "schema_version" and type(item) is not int:
+                raise ValueError("inexact schema")
+            _exact_original_scalars(item, depth=depth + 1)
+
+
 def exact(value: object, cls: type[BaseModel]) -> None:
     bad = type(value) is not cls
     if not bad:
         try:
+            _exact_original_scalars(value)
             cls.model_validate(value)
         except Exception:
             bad = True

@@ -105,3 +105,27 @@ def test_forged_result_rejected_by_code_only_serializer():
     with pytest.raises(ReceiptError) as error:
         serialize_enforcement_result_v2(forged)
     assert error.value.__context__ is None
+
+
+def test_hostile_nested_digest_is_blocked_before_comparison(monkeypatch):
+    pep, request, runtime, effect, p = pep_fixture()
+
+    class Hostile:
+        def __eq__(self, other):
+            raise ValueError("secret nested digest")
+
+        def __ne__(self, other):
+            raise ValueError("secret nested digest")
+
+    forged = request.model_copy(
+        update={"operation": request.operation.model_copy(update={"arguments_digest": Hostile()})}
+    )
+    calls = []
+    monkeypatch.setattr(
+        ActivatedAdapterV1, "_handler", lambda self, name: lambda payload: calls.append(payload)
+    )
+    result, trace = pep._execute_instrumented(forged, runtime=runtime, effect=effect)
+    assert not result.invoked and not calls
+    assert result.decision.effective_verdict == "deny"
+    assert "evidence" in trace.events
+    assert b"secret" not in b"".join(trace.output_channels)

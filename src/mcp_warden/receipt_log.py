@@ -196,7 +196,11 @@ class FileEvidenceStoreV1:
                     tail=LogTailV1(sequence=tail.sequence + 1, entry_digest=digest),
                 )
         except Exception as error:
-            failed = error.code if type(error) is ReceiptError else "RCT-PROVIDER-UNAVAILABLE"
+            failed = (
+                error.code
+                if type(error) is ReceiptError and type(error.code) is str
+                else "RCT-PROVIDER-UNAVAILABLE"
+            )
         finally:
             for descriptor in (fd, dir_fd):
                 if descriptor is not None:

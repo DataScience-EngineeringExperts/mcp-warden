@@ -7,9 +7,11 @@ from pydantic import StrictInt, model_validator
 
 from mcp_warden.decision_receipts import serialize_signed_receipt, sign_receipt
 from mcp_warden.evidence_coordinator import protected_floors, receipt_from_context, validate_append
+from mcp_warden.evidence_helpers import commit_state, read_store_tail
 from mcp_warden.evidence_models import validate_context
 from mcp_warden.evidence_reference import advance_state
 from mcp_warden.evidence_state import ProtectedStateModeV1, operationally_healthy
+from mcp_warden.governance_integrity import validate_runtime_activation
 from mcp_warden.policy_decision import ActivatedRuntimeV1, _has_activation_marker
 from mcp_warden.receipt_kernel import ReceiptError, ReceiptModel, canonical, exact, receipt_digest
 from mcp_warden.receipt_log import LogTailV1
@@ -116,6 +118,7 @@ class RecoveryCoordinatorV1:
             or not _has_activation_marker(runtime, ActivatedRuntimeV1)
         ):
             raise ReceiptError("RCT-RECOVERY-AUTHORIZATION")
+        validate_runtime_activation(runtime)
         self.coordinator, self.governor, self.runtime = coordinator, governor, runtime
 
     def exit(self, active, context):
@@ -165,7 +168,7 @@ class RecoveryCoordinatorV1:
         fallback = LogTailV1(
             sequence=state.fallback_sequence, entry_digest=state.fallback_tail_digest
         )
-        if c.primary.read_tail() != primary or c.fallback.read_tail() != fallback:
+        if read_store_tail(c.primary) != primary or read_store_tail(c.fallback) != fallback:
             raise ReceiptError("RCT-TAIL-MISMATCH")
         if state.mode is ProtectedStateModeV1.RECOVERY_EXIT_AUTHORIZED:
             if (
@@ -221,7 +224,7 @@ class RecoveryCoordinatorV1:
                 recovery_exit_receipt_digest=record.receipt_digest,
                 recovery_authorization_digest=active.digest,
             )
-            if c.protected_state.compare_and_advance(state, candidate) != candidate:
+            if commit_state(c.protected_state, state, candidate) != candidate:
                 raise ReceiptError("RCT-STATE-COMMIT")
             state, latch = c._read()
             if state != candidate:

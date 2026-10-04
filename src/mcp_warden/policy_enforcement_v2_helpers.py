@@ -1,14 +1,16 @@
 """Pure structural preflight, before hostile nested inputs are consumed."""
 
-from mcp_warden.decision_models import DecisionRequestV1
+from mcp_warden.decision_models import DIGEST_RE, DecisionRequestV1
 from mcp_warden.policy_decision import _request_preflight
 from mcp_warden.policy_enforcement import EffectInputV1, create_effect_input
+from mcp_warden.receipt_kernel import exact
 
 
 def preflight(adapter, bundles, request, effect):
     valid = False
     try:
-        valid = type(request) is DecisionRequestV1 and _request_preflight(request)
+        exact(request, DecisionRequestV1)
+        valid = _request_preflight(request)
     except Exception:
         pass
     if not valid:
@@ -16,7 +18,10 @@ def preflight(adapter, bundles, request, effect):
     valid_effect = False
     try:
         valid_effect = (
-            type(effect) is EffectInputV1 and create_effect_input(effect.arguments) == effect
+            type(effect) is EffectInputV1
+            and type(effect.arguments_digest) is str
+            and DIGEST_RE.fullmatch(effect.arguments_digest) is not None
+            and create_effect_input(effect.arguments) == effect
         )
     except Exception:
         pass

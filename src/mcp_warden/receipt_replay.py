@@ -12,9 +12,12 @@ from mcp_warden.evidence_coordinator import receipt_from_context
 from mcp_warden.evidence_models import create_evidence_context
 from mcp_warden.evidence_state import (
     ProtectedStateSnapshotV1,
+    RecoveryLatchSnapshotV1,
     _validate_exact_snapshot,
+    operationally_healthy,
     validate_floor,
 )
+from mcp_warden.governance_integrity import validate_policy_activation, validate_runtime_activation
 from mcp_warden.governed_decision import (
     PUBLIC_REASONS,
     convert_failed_allow,
@@ -69,6 +72,9 @@ class ReplayVectorV1(ReceiptModel):
             or self.runtime == "invalid-input"
         ) and self.structural_reason is None:
             raise ValueError("missing structural reason")
+        validate_policy_activation(self.policy)
+        if type(self.runtime) is ActivatedRuntimeV1:
+            validate_runtime_activation(self.runtime)
         exact(self.event, ReceiptEventContextV1)
         _validate_exact_snapshot(self.snapshot)
         if (
@@ -201,7 +207,9 @@ def replay_historical(vector, *, expected_decision_bytes: bytes, expected_receip
     )
 
 
-def current_eligibility(vector, *, snapshot: ProtectedStateSnapshotV1):
+def current_eligibility(
+    vector, *, snapshot: ProtectedStateSnapshotV1, latch: RecoveryLatchSnapshotV1 | None = None
+):
     exact(vector, ReplayVectorV1)
     _validate_exact_snapshot(snapshot)
     compatible = True
@@ -226,10 +234,38 @@ def current_eligibility(vector, *, snapshot: ProtectedStateSnapshotV1):
             ),
         ):
             validate_floor(snapshot, kind=kind, generation=generation, digest=digest)
+        adapter_digest = (
+            vector.request.operation.adapter_manifest_digest
+            if type(vector.request) is DecisionRequestV1
+            else next(f.digest for f in vector.snapshot.floors if f.kind == "adapter")
+        )
+        validate_floor(snapshot, kind="adapter", generation=0, digest=adapter_digest)
+        if (
+            type(vector.request) is DecisionRequestV1
+            and vector.request.operation.bundle_manifest_digest is not None
+        ):
+            validate_floor(
+                snapshot,
+                kind="executable-bundle",
+                generation=0,
+                digest=vector.request.operation.bundle_manifest_digest,
+            )
+        if vector.override is not None:
+            validate_floor(
+                snapshot,
+                kind="override",
+                generation=vector.override.authorization.generation,
+                digest=vector.override.digest,
+            )
         compatible = (
-            snapshot.mode.value == "healthy"
+            snapshot.mode.value in {"healthy", "recovery-exit-authorized"}
             and snapshot.recovery_generation == vector.snapshot.recovery_generation
         )
     except Exception:
         compatible = False
-    return "eligible-foundation" if compatible else "recovery-only"
+    if not compatible:
+        return "recovery-only"
+    if latch is None:
+        return "floors-compatible-latch-unverified"
+    exact(latch, RecoveryLatchSnapshotV1)
+    return "compatible-foundation" if operationally_healthy(snapshot, latch) else "recovery-only"

@@ -7,6 +7,7 @@ from pydantic import StrictInt, model_validator
 
 from mcp_warden.decision_models import DecisionRequestV1, DecisionV1
 from mcp_warden.evidence_state import validate_floor
+from mcp_warden.governance_integrity import validate_policy_activation
 from mcp_warden.governed_decision import create_governed_decision
 from mcp_warden.policy_decision import ActivatedPolicyV1, serialize_decision
 from mcp_warden.receipt_kernel import ReceiptError, ReceiptModel, canonical, exact, receipt_digest
@@ -81,8 +82,9 @@ class DecisionGovernorV1:
     __slots__ = ("policy", "rules", "authorization")
 
     def __init__(self, *, policy: ActivatedPolicyV1, rules, authorization):
-        if type(policy) is not ActivatedPolicyV1:
-            raise ReceiptError("RCT-MALFORMED")
+        validate_policy_activation(policy)
+        if policy.policy.trust_root_digest != authorization.bundle.trust_root_digest:
+            raise ReceiptError("RCT-SIGNER-UNAUTHORIZED")
         object.__setattr__(self, "policy", policy)
         object.__setattr__(self, "rules", rules)
         object.__setattr__(self, "authorization", authorization)
