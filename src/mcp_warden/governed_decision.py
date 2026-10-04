@@ -49,6 +49,7 @@ class EnforcementDecisionV2(ReceiptModel):
     bundle_digest: str | None
     envelope_digest: str
     override_digest: str | None = None
+    override_generation: StrictInt | None = None
     converted_from_decision_digest: str | None = None
     decision_digest: str
 
@@ -56,6 +57,8 @@ class EnforcementDecisionV2(ReceiptModel):
     def _codes(self):
         if self.public_reason not in PUBLIC_REASONS or self.recovery_code not in RECOVERY_CODES:
             raise ValueError("closed code")
+        if (self.override_digest is None) != (self.override_generation is None):
+            raise ValueError("override generation binding")
         if self.override_digest is not None and (
             self.effective_verdict != "allow" or self.public_reason != "RULE-OVERRIDE"
         ):
@@ -93,6 +96,7 @@ def convert_failed_allow(decision: EnforcementDecisionV2) -> EnforcementDecision
         public_reason="PEP-EVIDENCE-UNAVAILABLE",
         recovery_code="recovery-only",
         override_digest=None,
+        override_generation=None,
         converted_from_decision_digest=decision.decision_digest,
     )
     return create_governed_decision(**values)

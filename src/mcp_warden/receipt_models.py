@@ -154,6 +154,7 @@ class UnsignedReceiptV1(ReceiptModel):
     signer_authorization_generation: StrictInt
     trust_root_digest: str
     override_digest: str | None = None
+    override_generation: StrictInt | None = None
     converted_from_decision_digest: str | None = None
 
     @model_validator(mode="after")

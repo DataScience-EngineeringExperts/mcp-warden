@@ -85,3 +85,29 @@ def test_unactivated_clear_and_wrong_authority_are_rejected():
     with pytest.raises(ReceiptError):
         recovery.exit(object(), context)
     assert p["latch"].read().latched
+
+
+def test_crash_after_protected_authorization_retries_only_exact_clear(monkeypatch):
+    recovery, active, context, p = recovery_fixture()
+    from mcp_warden.evidence_reference import InMemoryRecoveryLatchV1
+
+    before = p["latch"].read()
+
+    def crash(**kwargs):
+        raise ValueError("secret interrupted clear")
+
+    monkeypatch.setattr(p["latch"], "authenticated_clear", crash)
+    with pytest.raises(ReceiptError):
+        recovery.exit(active, context)
+    assert p["state"].read().mode.value == "recovery-exit-authorized"
+    assert p["latch"].read().latched
+    # Persisted latch snapshot recreated by a reference provider: semantic
+    # restart only, without claiming protection against whole-state rollback.
+    restarted = InMemoryRecoveryLatchV1(snapshot=before)
+    recovery.coordinator.recovery_latch = restarted
+    assert recovery.exit(active, context)
+    assert operationally_healthy(p["state"].read(), restarted.read())
+    wrong = before.model_copy(update={"event_digest": receipt_digest(b"wrong", "latch")})
+    recovery.coordinator.recovery_latch = InMemoryRecoveryLatchV1(snapshot=wrong)
+    with pytest.raises(ReceiptError):
+        recovery.exit(active, context)

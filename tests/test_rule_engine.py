@@ -106,3 +106,134 @@ def test_governed_decision_is_self_integrity_checked():
     )
     with pytest.raises(ReceiptError, match="RCT-INTEGRITY"):
         serialize_governed_decision(decision.model_copy(update={"effective_verdict": "allow"}))
+
+
+def test_finite_independent_override_permits_only_exact_noncritical_deny():
+    from mcp_warden.decision_governor import OverrideAuthorizationV1, activate_override
+    from mcp_warden.evidence_models import create_evidence_context
+    from mcp_warden.receipt_kernel import canonical
+    from tests.receipt_fixtures import pep_fixture
+
+    pep, request, runtime, effect, p = pep_fixture(grant=False)
+    denied = pep.execute(request, runtime=runtime, effect=effect)
+    context = create_evidence_context(
+        decision=denied.decision,
+        effect_digest=effect.arguments_digest,
+        trusted_time=200,
+        trusted_time_valid_until=250,
+        signer_authorization_digest=pep._coordinator.authorization.digest,
+    )
+    c = pep._coordinator
+    action = OverrideAuthorizationV1(
+        generation=1,
+        request_digest=request.request_digest,
+        base_decision_digest=denied.decision.base_decision_digest,
+        policy_digest=denied.decision.policy_digest,
+        policy_generation=denied.decision.policy_generation,
+        rule_digest=denied.decision.rule_digest,
+        rule_generation=denied.decision.rule_generation,
+        actor_digest=request.identity.user_digest,
+        scope_digest=request.data_scope_digest,
+        reason="PDP-DENY-DEFAULT",
+        not_before=190,
+        expires_at=220,
+        trusted_time_digest=context.trusted_time_digest,
+    )
+    active = activate_override(
+        action,
+        evidence=c.signer.sign(
+            payload=canonical(action),
+            artifact_kind="override",
+            role="override-authorizer",
+            authorization_digest=c.authorization.digest,
+        ),
+        authorization=c.authorization,
+        verifier=c.verifier,
+        snapshot=p["state"].read(),
+        now=200,
+    )
+    allowed = pep.execute(request, runtime=runtime, effect=effect, override=active)
+    assert allowed.invoked and allowed.decision.override_digest == active.digest
+    with pytest.raises(ReceiptError):
+        activate_override(
+            action,
+            evidence=c.signer.sign(
+                payload=canonical(action),
+                artifact_kind="override",
+                role="override-authorizer",
+                authorization_digest=c.authorization.digest,
+            ),
+            authorization=c.authorization,
+            verifier=c.verifier,
+            snapshot=p["state"].read(),
+            now=220,
+        )
+    from mcp_warden.decision_models import DecisionReasonV1, DecisionRecoveryV1, DecisionVerdictV1
+    from mcp_warden.policy_decision import _make_decision
+
+    critical = _make_decision(
+        request_digest=request.request_digest,
+        active_policy=pep._governor.policy,
+        runtime_digest=runtime.runtime_digest,
+        verdict=DecisionVerdictV1.DENY,
+        reason=DecisionReasonV1.LEASE_REVOKED,
+        recovery=DecisionRecoveryV1.REFRESH_AUTHORITY,
+    )
+    with pytest.raises(ReceiptError, match="RULE-OVERRIDE-INVALID"):
+        pep._governor.govern(
+            critical,
+            request=request,
+            snapshot=p["state"].read(),
+            now=200,
+            trusted_time_digest=context.trusted_time_digest,
+            override=active,
+        )
+
+
+def test_successful_override_advances_its_protected_generation_floor():
+    from mcp_warden.decision_governor import OverrideAuthorizationV1, activate_override
+    from mcp_warden.evidence_models import create_evidence_context
+    from mcp_warden.receipt_kernel import canonical
+    from tests.receipt_fixtures import pep_fixture
+
+    pep, request, runtime, effect, p = pep_fixture(grant=False)
+    denied = pep.execute(request, runtime=runtime, effect=effect)
+    c = pep._coordinator
+    x = create_evidence_context(
+        decision=denied.decision,
+        effect_digest=effect.arguments_digest,
+        trusted_time=200,
+        trusted_time_valid_until=250,
+        signer_authorization_digest=c.authorization.digest,
+    )
+    a = OverrideAuthorizationV1(
+        generation=3,
+        request_digest=request.request_digest,
+        base_decision_digest=denied.decision.base_decision_digest,
+        policy_digest=denied.decision.policy_digest,
+        policy_generation=denied.decision.policy_generation,
+        rule_digest=denied.decision.rule_digest,
+        rule_generation=denied.decision.rule_generation,
+        actor_digest=request.identity.user_digest,
+        scope_digest=request.data_scope_digest,
+        reason="PDP-DENY-DEFAULT",
+        not_before=190,
+        expires_at=220,
+        trusted_time_digest=x.trusted_time_digest,
+    )
+    active = activate_override(
+        a,
+        evidence=c.signer.sign(
+            payload=canonical(a),
+            artifact_kind="override",
+            role="override-authorizer",
+            authorization_digest=c.authorization.digest,
+        ),
+        authorization=c.authorization,
+        verifier=c.verifier,
+        snapshot=p["state"].read(),
+        now=200,
+    )
+    assert pep.execute(request, runtime=runtime, effect=effect, override=active).invoked
+    floor = next(f for f in p["state"].read().floors if f.kind == "override")
+    assert (floor.generation, floor.digest) == (3, active.digest)

@@ -6,21 +6,32 @@ the protocols and must expose only code-only failures to policy code.
 
 from __future__ import annotations
 
-import re
 from enum import StrEnum
-from typing import Literal, Protocol, runtime_checkable
+from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, StrictBool, StrictInt, field_validator, model_validator
 
-DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+from mcp_warden.evidence_floor import DIGEST_RE, FLOOR_KINDS, MAX_COUNTER, ArtifactFloorV1
 
 
 class StateError(Exception):
     """Stable, code-only protected-state failure."""
 
     def __init__(self, code: str, *, provider_detail: str | None = None) -> None:
-        self.code = code
-        super().__init__(code)
+        allowed = {
+            "RCT-STATE-MALFORMED",
+            "RCT-SEQUENCE-BACKWARD",
+            "RCT-GENERATION-BELOW-FLOOR",
+            "RCT-GENERATION-DIGEST",
+            "RCT-TAIL-MISMATCH",
+            "RCT-PROVIDER-UNAVAILABLE",
+            "STATE-FLOOR-MISSING",
+            "STATE-FLOOR-ROLLBACK",
+            "STATE-FLOOR-INTEGRITY",
+            "STATE-RECOVERY-REQUIRED",
+        }
+        self.code = code if type(code) is str and code in allowed else "RCT-STATE-MALFORMED"
+        super().__init__(self.code)
 
     def __str__(self) -> str:
         return self.code
@@ -34,56 +45,6 @@ class ProtectedStateModeV1(StrEnum):
     EVIDENCE_DEGRADED = "evidence-degraded"
     RECOVERY_LATCHED = "recovery-latched"
     RECOVERY_EXIT_AUTHORIZED = "recovery-exit-authorized"
-
-
-FloorKind = Literal[
-    "policy",
-    "rule",
-    "trust-root",
-    "signer-authorization",
-    "adapter",
-    "executable-bundle",
-    "revocation",
-    "receipt-log",
-    "fallback-log",
-    "override",
-]
-FLOOR_KINDS = (
-    "adapter",
-    "executable-bundle",
-    "fallback-log",
-    "override",
-    "policy",
-    "receipt-log",
-    "revocation",
-    "rule",
-    "signer-authorization",
-    "trust-root",
-)
-MAX_COUNTER = 2**53 - 1
-
-
-class ArtifactFloorV1(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True, hide_input_in_errors=True)
-    kind: FloorKind
-    generation: StrictInt
-    digest: str
-
-    @model_validator(mode="before")
-    @classmethod
-    def _exact(cls, value):
-        if type(value) is dict and any(
-            type(value.get(k)) is not t
-            for k, t in (("kind", str), ("generation", int), ("digest", str))
-        ):
-            raise ValueError("inexact floor")
-        return value
-
-    @model_validator(mode="after")
-    def _valid(self) -> ArtifactFloorV1:
-        if not 0 <= self.generation <= MAX_COUNTER or DIGEST_RE.fullmatch(self.digest) is None:
-            raise ValueError("invalid floor")
-        return self
 
 
 class ProtectedStateSnapshotV1(BaseModel):
@@ -264,6 +225,13 @@ class RecoveryLatchSnapshotV1(BaseModel):
     cleared_generation: StrictInt | None = None
     cleared_event_digest: str | None = None
     exit_receipt_digest: str | None = None
+
+    @field_validator("event_digest", "cleared_event_digest", "exit_receipt_digest", mode="before")
+    @classmethod
+    def _exact_digest(cls, value):
+        if value is not None and (type(value) is not str or DIGEST_RE.fullmatch(value) is None):
+            raise ValueError("invalid latch digest")
+        return value
 
     @model_validator(mode="after")
     def _valid(self) -> RecoveryLatchSnapshotV1:
