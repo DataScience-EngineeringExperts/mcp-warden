@@ -177,6 +177,9 @@ class DecisionGovernorV1:
             bundle_digest=request.operation.bundle_manifest_digest,
             envelope_digest=request.envelope.envelope_digest,
             override_digest=override_digest,
+            override_generation=None
+            if override_digest is None
+            else override.authorization.generation,
         )
 
     def _check_override(self, active, *, base, request, snapshot, now, trusted_time_digest):

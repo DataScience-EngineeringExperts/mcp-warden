@@ -46,3 +46,13 @@ def test_forged_nested_state_floor_rejected():
     forged = state.model_copy(update={"floors": (bad,)})
     with pytest.raises(StateError, match="RCT-STATE-MALFORMED"):
         validate_floor(forged, kind="rule", generation=1, digest=D)
+
+
+def test_state_error_code_is_closed_and_latch_digest_types_are_exact():
+    from pydantic import ValidationError
+
+    from mcp_warden.evidence_state import RecoveryLatchSnapshotV1
+
+    assert str(StateError("secret provider detail")) == "RCT-STATE-MALFORMED"
+    with pytest.raises(ValidationError):
+        RecoveryLatchSnapshotV1(generation=1, latched=True, event_digest=DigestSubclass(D))

@@ -15,7 +15,12 @@ from mcp_warden.evidence_state import (
     _validate_exact_snapshot,
     validate_floor,
 )
-from mcp_warden.governed_decision import serialize_governed_decision
+from mcp_warden.governed_decision import (
+    PUBLIC_REASONS,
+    convert_failed_allow,
+    create_governed_decision,
+    serialize_governed_decision,
+)
 from mcp_warden.policy_decision import (
     ActivatedPolicyV1,
     ActivatedRuntimeV1,
@@ -39,10 +44,10 @@ class ReplayVectorV1(ReceiptModel):
         arbitrary_types_allowed=True,
     )
     schema_version: Literal[1] = 1
-    request: DecisionRequestV1
-    effect: EffectInputV1
+    request: DecisionRequestV1 | Literal["invalid-input"]
+    effect: EffectInputV1 | Literal["invalid-input"]
     policy: ActivatedPolicyV1
-    runtime: ActivatedRuntimeV1
+    runtime: ActivatedRuntimeV1 | Literal["invalid-input"]
     rules: ActivatedRuleBundleV1
     signer_authorization: ActivatedSignerAuthorizationV1
     snapshot: ProtectedStateSnapshotV1
@@ -50,18 +55,39 @@ class ReplayVectorV1(ReceiptModel):
     signer_identity_digest: str
     event: ReceiptEventContextV1
     override: ActivatedOverrideV1 | None = None
+    structural_reason: str | None = None
 
     @model_validator(mode="after")
     def _complete(self):
-        exact(self.request, DecisionRequestV1)
+        if type(self.request) is DecisionRequestV1:
+            exact(self.request, DecisionRequestV1)
+        if self.structural_reason is not None and self.structural_reason not in PUBLIC_REASONS:
+            raise ValueError("closed structural reason")
+        if (
+            self.request == "invalid-input"
+            or self.effect == "invalid-input"
+            or self.runtime == "invalid-input"
+        ) and self.structural_reason is None:
+            raise ValueError("missing structural reason")
         exact(self.event, ReceiptEventContextV1)
         _validate_exact_snapshot(self.snapshot)
         if (
-            type(self.effect) is not EffectInputV1
-            or create_effect_input(self.effect.arguments) != self.effect
-            or self.effect.arguments_digest != self.request.operation.arguments_digest
+            (
+                self.effect != "invalid-input"
+                and (
+                    type(self.effect) is not EffectInputV1
+                    or create_effect_input(self.effect.arguments) != self.effect
+                )
+            )
+            or (
+                self.structural_reason is None
+                and self.effect.arguments_digest != self.request.operation.arguments_digest
+            )
             or not _has_activation_marker(self.policy, ActivatedPolicyV1)
-            or not _has_activation_marker(self.runtime, ActivatedRuntimeV1)
+            or (
+                self.runtime != "invalid-input"
+                and not _has_activation_marker(self.runtime, ActivatedRuntimeV1)
+            )
             or type(self.rules) is not ActivatedRuleBundleV1
             or type(self.signer_authorization) is not ActivatedSignerAuthorizationV1
             or self.override is not None
@@ -92,12 +118,15 @@ def replay_historical(vector, *, expected_decision_bytes: bytes, expected_receip
     # Activated historical candidates carry raw models and exact activation
     # digests. No verifier/provider/activation function is called during replay.
     base = PolicyDecisionPointV1(vector.policy).evaluate(vector.request, runtime=vector.runtime)
-    now = vector.runtime.runtime.trusted_time
-    until = vector.runtime.runtime.trusted_time_valid_until
+    runtime_valid = type(vector.runtime) is ActivatedRuntimeV1
+    now = vector.runtime.runtime.trusted_time if runtime_valid else 0
+    until = vector.runtime.runtime.trusted_time_valid_until if runtime_valid else 1
+    invalid_digest = receipt_digest(b"invalid-input", "invalid")
+    runtime_digest = vector.runtime.runtime_digest if runtime_valid else invalid_digest
     time_digest = receipt_digest(
         canonical(
             {
-                "runtime_digest": vector.runtime.runtime_digest,
+                "runtime_digest": runtime_digest,
                 "trusted_time": now,
                 "valid_until": until,
             }
@@ -107,20 +136,54 @@ def replay_historical(vector, *, expected_decision_bytes: bytes, expected_receip
     governor = DecisionGovernorV1(
         policy=vector.policy, rules=vector.rules, authorization=vector.signer_authorization
     )
-    decision = governor.govern(
-        base,
-        request=vector.request,
-        snapshot=vector.snapshot,
-        now=now,
-        trusted_time_digest=time_digest,
-        override=vector.override,
-    )
+    request_valid = type(vector.request) is DecisionRequestV1
+    effect_valid = request_valid and type(vector.effect) is EffectInputV1
+    effect_digest = vector.effect.arguments_digest if effect_valid else invalid_digest
+    if vector.structural_reason is None or vector.structural_reason == "PEP-EVIDENCE-UNAVAILABLE":
+        decision = governor.govern(
+            base,
+            request=vector.request,
+            snapshot=vector.snapshot,
+            now=now,
+            trusted_time_digest=time_digest,
+            override=vector.override,
+        )
+        if vector.structural_reason == "PEP-EVIDENCE-UNAVAILABLE":
+            decision = convert_failed_allow(decision)
+    else:
+        p = vector.policy
+        decision = create_governed_decision(
+            request_digest=vector.request.request_digest if request_valid else invalid_digest,
+            effect_digest=effect_digest,
+            base_decision_digest=base.decision_digest,
+            base_verdict=base.verdict,
+            effective_verdict="deny",
+            public_reason=vector.structural_reason,
+            recovery_code="recovery-only"
+            if vector.structural_reason == "PEP-RECOVERY-ONLY"
+            else base.recovery,
+            policy_digest=p.policy_digest,
+            policy_generation=p.policy.policy_generation,
+            runtime_digest=runtime_digest,
+            rule_digest=vector.rules.digest,
+            rule_generation=vector.rules.bundle.generation,
+            revocation_digest=p.revocation_digest,
+            revocation_generation=p.policy.revocation_generation,
+            adapter_digest=next(f.digest for f in vector.snapshot.floors if f.kind == "adapter"),
+            bundle_digest=vector.request.operation.bundle_manifest_digest
+            if request_valid
+            else None,
+            envelope_digest=vector.request.envelope.envelope_digest
+            if request_valid
+            else invalid_digest,
+        )
     context = create_evidence_context(
         decision=decision,
-        effect_digest=vector.effect.arguments_digest,
+        effect_digest=effect_digest,
         trusted_time=now,
         trusted_time_valid_until=until,
         signer_authorization_digest=vector.signer_authorization.digest,
+        trusted_time_status="verified" if runtime_valid else "unavailable",
         event=vector.event,
     )
     receipt = receipt_from_context(

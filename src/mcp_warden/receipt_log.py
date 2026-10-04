@@ -85,6 +85,9 @@ class FileEvidenceStoreV1:
         self.store_identity_digest = store_identity_digest
         self._validate = validate_payload
 
+    def _validate_frame(self, payload, *, sequence, previous_entry_digest):
+        return None
+
     def _scan(self, fd):
         size = os.fstat(fd).st_size
         if size > LOG_CAP:
@@ -117,6 +120,9 @@ class FileEvidenceStoreV1:
             payload = bytes.fromhex(frame["payload_hex"])
             parse_canonical(payload)
             self._validate(payload)
+            self._validate_frame(
+                payload, sequence=tail.sequence + 1, previous_entry_digest=tail.entry_digest
+            )
             digest = entry_digest(
                 payload, sequence=tail.sequence + 1, previous_entry_digest=tail.entry_digest
             )
@@ -151,6 +157,9 @@ class FileEvidenceStoreV1:
                     raise ReceiptError("RCT-TAIL-MISMATCH")
                 parse_canonical(payload)
                 self._validate(payload)
+                self._validate_frame(
+                    payload, sequence=tail.sequence + 1, previous_entry_digest=tail.entry_digest
+                )
                 digest = entry_digest(
                     payload, sequence=tail.sequence + 1, previous_entry_digest=tail.entry_digest
                 )
@@ -210,11 +219,29 @@ class FileEvidenceStoreV1:
 
 
 class FilePrimaryReceiptStoreV1(FileEvidenceStoreV1):
+    def _validate_frame(self, payload, *, sequence, previous_entry_digest):
+        from mcp_warden.receipt_verification import parse_signed_receipt
+
+        receipt = parse_signed_receipt(payload).receipt
+        if (
+            receipt.sequence != sequence
+            or receipt.previous_entry_digest != previous_entry_digest
+            or receipt.store_identity_digest != self.store_identity_digest
+        ):
+            raise ReceiptError("RCT-INTEGRITY")
+
     def append(self, record, *, expected_tail):
         return self.append_payload(serialize_signed_receipt(record), expected_tail=expected_tail)
 
 
 class FileFallbackEvidenceStoreV1(FileEvidenceStoreV1):
+    def _validate_frame(self, payload, *, sequence, previous_entry_digest):
+        from mcp_warden.evidence_models import FallbackEventV1
+
+        event = FallbackEventV1(**parse_canonical(payload))
+        if event.sequence != sequence or event.previous_entry_digest != previous_entry_digest:
+            raise ReceiptError("RCT-INTEGRITY")
+
     def append(self, event, *, expected_tail):
         from mcp_warden.evidence_models import FallbackEventV1
 
