@@ -67,6 +67,30 @@ jobs:
         run: pytest tests/fuzz -p no:randomly --hypothesis-seed=0
 
   # --------------------------------------------------------------------------
+  # Handler binding has an intentionally narrow, independently tested interpreter contract.
+  # Other MCP-Warden commands retain the package's broader Python support.
+  # --------------------------------------------------------------------------
+  test-handler-compatibility:
+    name: Handler contract (CPython ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up supported CPython
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - name: Install measured handler dependencies
+        run: pip install -e ".[dev]"
+      - name: Verify handler binding and enforcement
+        run: pytest -q tests/test_handler_boundary.py tests/test_policy_enforcement.py tests/test_policy_enforcement_v2.py tests/test_adapter_conformance.py
+
+  # --------------------------------------------------------------------------
   # Job 1a: mcp 1.x compatibility leg (#105)
   #
   # The digest-parity claim across the mcp SDK major rests on BOTH lines being

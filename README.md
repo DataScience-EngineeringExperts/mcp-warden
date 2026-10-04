@@ -1,6 +1,6 @@
 # mcp-warden
 
-Last Updated: 2026-10-03
+Last Updated: 2026-10-04
 
 [![CI](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml/badge.svg)](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -28,8 +28,10 @@ The opt-in [artifact trust foundation](docs/ARTIFACT_TRUST.md) adds public-key
 verification for the existing kernel activation APIs and `trust` CLI commands
 to prepare unsigned review artifacts and verify external signatures. Keys and
 signer roles require an independently protected root pin. This development
-feature is not in the published 2.0.0 package; live checkpoint enforcement still
-depends on DSE-717 evidence and DSE-1076 guard integration.
+feature is not in the published 2.0.0 package. The development
+[decision receipt foundation](docs/DECISION_RECEIPTS.md) adds signed evidence,
+governed decisions and recovery ports. Live checkpoint enforcement still requires
+an independently protected platform provider and DSE-1076 guard integration.
 
 > ⚠️ **Install `mcp-warden-cli`, not `mcp-warden`.** The PyPI name `mcp-warden` is
 > an **unrelated package by a different author** — it is not this project. The
@@ -412,34 +414,19 @@ See [runtime examples](docs/archive/2026-10-02-runtime-cli-examples.md) and the
 
 ## Community consensus — `check --against-community` (phase 1)
 
-A single lock is trust-on-first-use: it cannot tell you the surface was poisoned on
-day one, or that you are being served a surface nobody else
-sees. `--against-community` compares what you just captured with what independent
-attesters **you pin** Sigstore-signed for the same package version:
+Compare a captured surface with Sigstore-signed observations from independently
+pinned attesters. **Consensus attests observation, not safety**; no trusted attestation
+is a pass only when consensus is optional. Pin the corpus revision and your own attesters:
 
 ```bash
 mcp-warden check npx -y @foo/server@1.2.3 --lock warden.lock \
     --against-community --corpus https://github.com/<org>/mcp-warden-locks.git \
     --corpus-ref <40-hex corpus commit> --attesters-file trusted-attesters.json
-#  -> WRD-CONSENSUS-MISMATCH:     observed surface differs from every attested digest … (exit 1)
-#  -> WRD-CONSENSUS-SPLIT:        attesters disagree — corpus or upstream may be compromised (exit 1)
-#  -> WRD-CONSENSUS-NOVEL:        no trusted attestation exists yet (exit 0)
-#  -> WRD-CONSENSUS-INSUFFICIENT: fewer than --min-attesters (default 2) agree (exit 0)
-#  add --require-consensus in CI that EXPECTS the package to be attested: NOVEL and
-#  INSUFFICIENT then exit 1 — a corpus that withholds an entry cannot turn a MISMATCH into a pass
 ```
 
-The trust root is yours: the corpus's `attesters.json` is only a discovery list, and
-without `--attester`/`--attesters-file` the command exits 2. Each signature binds the
-attester identity, the lock digest **and** the package coordinate, so a genuine
-signature cannot be relocated under another package. Everything that cannot be
-established — an unpinned launch, an unpinned trust root, an undeclared attester, a
-missing or failing signature, an unreachable or disallowed corpus URL — is exit 2.
-**Consensus attests observation, not safety**; the CLI says so on every verdict. The
-default `check` path is unchanged when the flag is absent.
-
-Contract, trust model, layout, and the pending phase-2 live corpus:
-[`docs/COMMUNITY_CORPUS.md`](docs/COMMUNITY_CORPUS.md).
+The [community contract](docs/COMMUNITY_CORPUS.md) defines trust and verdicts;
+[advanced examples](docs/archive/2026-10-04-readme-community-consensus.md) explain
+failure codes and `--require-consensus`.
 
 ---
 
@@ -462,11 +449,14 @@ empty `allow_paths` = deny-all. See [`docs/POLICY_MODEL.md`](docs/POLICY_MODEL.m
 
 Agent Trust Kernel development is intentionally isolated from the shipped `guard` path:
 DSE-715's content envelope and DSE-716's deterministic PDP/PEP, exact signed adapter/bundle load
-gates, frozen handler identity, and fixed-corpus adapter harness are implemented foundations, but
-the default evidence gate denies effects. DSE-717 is now in progress: its isolated branch has
-the reviewed receipt/recovery design and protected-state contract, but durable signed receipts,
-fallback evidence, rollback-resistant state, the recovery latch, and any whole-kernel conformance
-claim remain incomplete. See [`docs/POLICY_ENFORCEMENT.md`](docs/POLICY_ENFORCEMENT.md) and
+gates, frozen handler identity, and fixed-corpus adapter harness are implemented foundations.
+V1's default evidence gate denies effects. DSE-717 adds a separate V2 PEP with independently
+authorized signed receipts, strengthening rules, finite noncritical overrides, primary/fallback
+logs, protected-state/recovery ports, pure replay and a mandatory reference failure corpus.
+Reference providers prove local durability and fail-closed ordering; they cannot establish
+platform rollback resistance or whole-kernel conformance. These development APIs are absent
+from the published 2.0.0 package. See [`docs/DECISION_RECEIPTS.md`](docs/DECISION_RECEIPTS.md),
+[`docs/POLICY_ENFORCEMENT.md`](docs/POLICY_ENFORCEMENT.md) and
 [`docs/AGENT_TRUST_KERNEL.md`](docs/AGENT_TRUST_KERNEL.md).
 
 See [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md) and

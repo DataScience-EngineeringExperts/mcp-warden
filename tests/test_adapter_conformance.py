@@ -16,6 +16,7 @@ from mcp_warden.adapter_conformance import (
 from mcp_warden.policy_decision import PolicyDecisionPointV1
 from mcp_warden.policy_enforcement import (
     EnforcementCodeV1,
+    EnforcementTraceV1,
     PolicyEnforcementPointV1,
     create_effect_input,
 )
@@ -66,6 +67,26 @@ def test_conformance_report_passes_with_full_operation_and_negative_coverage() -
     assert report.failures == ()
     assert trace == ["evidence"]
     assert b"planted-secret" not in serialize_conformance_report(report)
+
+
+@pytest.mark.parametrize("mode", ["before-sink", "missing"])
+def test_successful_effect_requires_output_after_sink(monkeypatch, mode) -> None:
+    original = PolicyEnforcementPointV1._execute_instrumented
+
+    def invalid_order(self, request, *, runtime, effect):
+        result, trace = original(self, request, runtime=runtime, effect=effect)
+        events = list(trace.events)
+        if result.code == EnforcementCodeV1.EXECUTED.value:
+            events.remove("output")
+            if mode == "before-sink":
+                events.insert(events.index("sink"), "output")
+        return result, EnforcementTraceV1(tuple(events), trace.output_channels)
+
+    monkeypatch.setattr(PolicyEnforcementPointV1, "_execute_instrumented", invalid_order)
+    pep, cases, _ = _pep_and_cases()
+    report = run_adapter_conformance(pep, cases=cases)
+    assert report.passed is False
+    assert ConformanceFailureV1.INSTRUMENTATION.value in report.failures
 
 
 def test_missing_allow_vector_fails_operation_coverage() -> None:

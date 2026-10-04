@@ -6,8 +6,9 @@ is not included in the published **2.0.0** package. Install a reviewed Git commi
 with the `artifact-trust` extra to use it.
 
 It prepares unsigned review artifacts and verifies external Ed25519 signatures.
-Live human-checkpoint enforcement still requires the durable evidence layer and
-guard integration.
+The separate [decision receipt foundation](decision-receipts.md) adds evidence
+before effects. Live human-checkpoint enforcement still requires independently
+protected platform providers and guard integration.
 
 ## Enroll public keys and signer roles
 
@@ -54,7 +55,9 @@ protected boundary. The signature must be exactly 64 raw bytes.
 Signature validity alone does not check current authority, expiry, revocation,
 dependency measurements, or whether an action is allowed. Existing activation
 and policy enforcement APIs remain responsible for those checks. The default
-evidence gate continues to block effects pending durable evidence integration.
+V1 evidence gate continues to block effects. The separate V2 receipt APIs require
+signed append and protected-state commitment before effect; their reference
+providers cannot establish platform rollback resistance.
 
 See the [artifact trust contract](https://github.com/DataScience-EngineeringExperts/mcp-warden/blob/main/docs/ARTIFACT_TRUST.md)
 for the roots schema, exact signing frame, SDK usage and remaining dependencies.

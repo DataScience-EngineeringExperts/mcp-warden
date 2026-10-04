@@ -30,6 +30,22 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+### Decision receipt foundation
+
+- Add protocol-neutral V2 enforcement with independently authorized signed decision
+  receipts before allowed effects, strengthening rules and exact finite noncritical
+  overrides. Every negative path attempts evidence; failed allow evidence creates a
+  separately bound deny and never invokes the handler.
+- Add independent primary/fallback logs, protected-state and recovery-latch ports,
+  recovery with administrator approval, verified receipt chains, pure historical replay,
+  separate current eligibility and safe human/agent projections.
+- Add mandatory receipt failure/restart corpus and property fuzzing. Reference
+  providers remain unsupported for real platform rollback resistance; live `guard`
+  integration and whole-kernel conformance remain separate gates.
+- Harden frozen handlers against nested serialized code. Handler identity supports
+  CPython 3.11–3.13 only, with a dedicated CI matrix; other interpreters fail closed
+  at this SDK boundary. Existing artifact-signature domains and V1 defaults remain.
+
 ### Artifact trust foundation
 
 - Add opt-in Ed25519 verification for existing policy, runtime, adapter and

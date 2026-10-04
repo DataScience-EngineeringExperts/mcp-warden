@@ -327,6 +327,22 @@ def test_revoked_lease_denies() -> None:
     assert decision.recovery == DecisionRecoveryV1.OBTAIN_NEW_LEASE.value
 
 
+@pytest.mark.parametrize("explicitly_revoked", [False, True])
+def test_revocation_generation_bump_requires_explicit_lease_membership(explicitly_revoked) -> None:
+    request, policy, _, _, _ = _request_and_policy()
+    revoked = (request.lease.lease_digest,) if explicitly_revoked else ()
+    newer = policy.policy.model_copy(
+        update={
+            "revocation_generation": policy.policy.revocation_generation + 1,
+            "revoked_lease_digests": revoked,
+        }
+    )
+    active_policy, _ = _activate_policy(newer)
+    runtime, _ = _activate_runtime(active_policy)
+    decision = PolicyDecisionPointV1(active_policy).evaluate(request, runtime=runtime)
+    assert decision.verdict == ("deny" if explicitly_revoked else "allow")
+
+
 @pytest.mark.parametrize(
     "taint,reason",
     [

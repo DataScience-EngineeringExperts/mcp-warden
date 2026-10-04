@@ -172,9 +172,10 @@ canonical effect bytes -> request/adapter/bundle match -> PDP -> bound evidence 
   returns `PEP-SINK-FAILED`, includes no exception text, and never retries automatically.
 
 The shipped `FailClosedEvidenceGateV1` permits nothing. Test-only/instrumented gates can exercise
-the ordering contract. DSE-717 must replace this seam with durable signed receipt append,
-independent negative-decision fallback evidence, rollback-resistant sequence/generation state,
-and the persistent recovery latch before production effects or whole-ATK conformance.
+the ordering contract. The separate [DSE-717 V2 foundation](DECISION_RECEIPTS.md) records signed
+receipts and negative fallback evidence through protected-state/latch ports. V1 behavior remains
+unchanged. Production effects and whole-ATK claims still require independently protected platform
+providers, real restart/rollback verification and complete live adapter mediation.
 
 ## Adapter conformance harness
 
@@ -198,8 +199,11 @@ cases, so it must never be pointed at a live production adapter. A passing found
 Manifest/registration bijection, late-registration rejection, code/delegate drift, signed bundle
 activation, evidence-before-sink ordering, decision/evidence substitution, malformed-input
 behavior, and no-I/O imports are covered by the repository test suite. This is deliberately a
-DSE-716 foundation corpus, not the complete ATK §11 suite: DSE-717 must still add the fixed
-receipt/fallback/log/restart/rollback cases. An alternate raw sink outside the registry is
+DSE-716 foundation corpus. DSE-717's separate `run_receipt_conformance()` requires all eleven
+receipt/fallback/state/latch/rollback/reopened-file scenarios plus five fixed malformed-input
+probes for every registered operation. It scans actual receipt/fallback bytes and safe projections,
+and reports `platform_status=unsupported` and `atk_conformant=false` even on success. Neither
+reference profile establishes the complete ATK §11 platform gate. An alternate raw sink outside the registry is
 nonconformant and is not made safe by a passing foundation report.
 
 ## Resource limits
@@ -239,4 +243,5 @@ module markers are outside the supported API and are TCB compromise, not an auth
   [artifact trust foundation](ARTIFACT_TRUST.md) now implements its external verifier port
   with pinned public keys and explicit signer roles; it supplies no durable evidence gate,
   recovery store, or live protocol adapter.
-- DSE-717 remains required before any whole-kernel or production effect claim.
+- DSE-717 supplies a separate V2 reference evidence foundation; independently protected platform
+  providers and live `guard` integration remain required before whole-kernel or production claims.
