@@ -5,6 +5,7 @@ from __future__ import annotations
 import builtins
 import dis
 import marshal
+import sys
 from types import CodeType, FunctionType
 
 from mcp_warden.decision_models import DecisionDigestDomain, digest_decision_bytes
@@ -28,6 +29,31 @@ def _encode_component(value: bytes) -> bytes:
     return len(value).to_bytes(8, "big") + value
 
 
+def _reject_executable_constants(value: object) -> None:
+    pending = [value]
+    checked = 0
+    while pending:
+        item = pending.pop()
+        checked += 1
+        if checked > MAX_HANDLER_IDENTITY_BYTES or type(item) is CodeType:
+            raise HandlerIdentityError() from None
+        if type(item) in (tuple, frozenset):
+            pending.extend(item)
+        elif type(item) is bytes:
+            if len(item) > MAX_HANDLER_IDENTITY_BYTES:
+                raise HandlerIdentityError() from None
+            decoded = None
+            failed = False
+            try:
+                decoded = marshal.loads(item)
+            except (EOFError, ValueError, TypeError):
+                pass  # Ordinary non-marshal byte data remains supported.
+            except Exception:
+                failed = True
+            if failed or type(decoded) is CodeType:
+                raise HandlerIdentityError() from None
+
+
 def _immutable_global_bytes(value: object) -> bytes | None:
     if value is None:
         return b"none"
@@ -40,6 +66,7 @@ def _immutable_global_bytes(value: object) -> bytes | None:
     if type(value) is str:
         return b"str:" + value.encode("utf-8")
     if type(value) is bytes:
+        _reject_executable_constants(value)
         return b"bytes:" + value
     if type(value) is tuple:
         parts: list[bytes] = []
@@ -79,8 +106,7 @@ def _canonical_handler_bytes(handler: object, seen: frozenset[int]) -> bytes:
         raise HandlerIdentityError() from None
     next_seen = seen | {id(handler)}
     try:
-        if any(type(item) is CodeType for item in handler.__code__.co_consts):
-            raise HandlerIdentityError() from None
+        _reject_executable_constants(handler.__code__.co_consts)
         forbidden_opcodes = {
             "DELETE_DEREF",
             "DELETE_GLOBAL",
@@ -117,13 +143,15 @@ def _canonical_handler_bytes(handler: object, seen: frozenset[int]) -> bytes:
             )
         payload = b"mcp-warden/handler/v1\x00" + _encode_component(code) + b"".join(dependencies)
     except Exception:
-        raise HandlerIdentityError() from None
+        payload = b""
     if not payload or len(payload) > MAX_HANDLER_IDENTITY_BYTES:
         raise HandlerIdentityError() from None
     return payload
 
 
 def canonical_handler_bytes(handler: object) -> bytes:
+    if sys.implementation.name != "cpython" or not (3, 11) <= sys.version_info[:2] <= (3, 13):
+        raise HandlerIdentityError() from None
     return _canonical_handler_bytes(handler, frozenset())
 
 

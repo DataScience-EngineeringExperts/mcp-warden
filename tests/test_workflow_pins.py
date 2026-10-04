@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml
 
 WORKFLOWS_DIR = Path(__file__).parent.parent / ".github" / "workflows"
 
@@ -35,9 +36,7 @@ def _collect_uses_lines(path: Path) -> list[tuple[int, str]]:
     """Return (lineno, line) pairs for every line containing a `uses:` with an @."""
     lines = path.read_text(encoding="utf-8").splitlines()
     return [
-        (i + 1, line)
-        for i, line in enumerate(lines)
-        if re.search(r"\buses:", line) and "@" in line
+        (i + 1, line) for i, line in enumerate(lines) if re.search(r"\buses:", line) and "@" in line
     ]
 
 
@@ -75,13 +74,20 @@ def test_at_least_one_workflow_file() -> None:
     assert wf_files, f"No .yml files found in {WORKFLOWS_DIR}"
 
 
+def test_handler_contract_runs_on_each_supported_cpython_minor() -> None:
+    workflow = yaml.safe_load((WORKFLOWS_DIR / "integrity-gate.yml").read_text())
+    job = workflow["jobs"]["test-handler-compatibility"]
+    assert job["strategy"]["matrix"]["python"] == ["3.11", "3.12", "3.13"]
+    commands = "\n".join(step.get("run", "") for step in job["steps"])
+    assert "tests/test_handler_boundary.py" in commands
+    assert "tests/test_policy_enforcement.py" in commands
+    assert "tests/test_policy_enforcement_v2.py" in commands
+
+
 @pytest.mark.parametrize(
     "wf_path,lineno,line,uses_value",
     _ENTRIES,
-    ids=[
-        f"{e[0].name}:L{e[1]}"
-        for e in _ENTRIES
-    ],
+    ids=[f"{e[0].name}:L{e[1]}" for e in _ENTRIES],
 )
 def test_uses_is_sha_pinned(wf_path: Path, lineno: int, line: str, uses_value: str) -> None:
     """Every `uses:` in a workflow file must end with a 40-hex commit SHA."""
@@ -97,10 +103,7 @@ def test_uses_is_sha_pinned(wf_path: Path, lineno: int, line: str, uses_value: s
 @pytest.mark.parametrize(
     "wf_path,lineno,line,uses_value",
     _ENTRIES,
-    ids=[
-        f"{e[0].name}:L{e[1]}"
-        for e in _ENTRIES
-    ],
+    ids=[f"{e[0].name}:L{e[1]}" for e in _ENTRIES],
 )
 def test_uses_has_version_comment(wf_path: Path, lineno: int, line: str, uses_value: str) -> None:
     """Every `uses:` line in a workflow file must carry a non-empty version comment (# vX.Y.Z)."""

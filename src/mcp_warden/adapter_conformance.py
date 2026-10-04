@@ -438,6 +438,10 @@ def run_adapter_conformance(
                 ordered_effect = (
                     events.index("decision") < events.index("evidence") < events.index("sink")
                 )
+                if result.code == EnforcementCodeV1.EXECUTED.value:
+                    ordered_effect = ordered_effect and events.index("sink") < events.index(
+                        "output"
+                    )
             except ValueError:
                 ordered_effect = False
         if (
