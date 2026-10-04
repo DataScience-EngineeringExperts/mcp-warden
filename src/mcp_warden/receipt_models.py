@@ -122,8 +122,10 @@ class UnsignedReceiptV1(ReceiptModel):
     schema_version: Literal[1] = 1
     event: ReceiptEventContextV1
     request_digest: str
+    effect_digest: str
     decision_digest: str
     base_decision_digest: str | None
+    base_verdict: Literal["allow", "deny", "quarantine"] | None = None
     effective_verdict: Literal["allow", "deny", "quarantine"]
     public_reason: str
     recovery_code: str

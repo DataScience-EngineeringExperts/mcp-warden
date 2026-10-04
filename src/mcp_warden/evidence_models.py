@@ -13,12 +13,15 @@ from mcp_warden.receipt_kernel import (
     exact,
     receipt_digest,
 )
+from mcp_warden.receipt_models import ReceiptEventContextV1
 
 
 class EvidenceContextV1(ReceiptModel):
     schema_version: Literal[1] = 1
     decision: EnforcementDecisionV2
+    event: ReceiptEventContextV1
     effect_digest: str
+    trusted_time_status: Literal["verified", "unavailable"] = "verified"
     trusted_time: StrictInt
     trusted_time_valid_until: StrictInt
     trusted_time_digest: str
@@ -28,6 +31,17 @@ class EvidenceContextV1(ReceiptModel):
     @model_validator(mode="after")
     def _binding(self):
         serialize_governed_decision(self.decision)
+        exact(self.event, ReceiptEventContextV1)
+        if self.decision.effect_digest != self.effect_digest:
+            raise ValueError("effect binding")
+        if self.decision.override_digest is not None:
+            if (
+                self.event.kind != "override"
+                or self.event.authority_digest != self.decision.override_digest
+            ):
+                raise ValueError("override event binding")
+        elif self.event.kind not in {self.decision.effective_verdict, "recovery-exit"}:
+            raise ValueError("event binding")
         if not self.trusted_time < self.trusted_time_valid_until:
             raise ValueError("stale trusted time")
         expected = receipt_digest(
@@ -52,6 +66,8 @@ def create_evidence_context(
     trusted_time: int,
     trusted_time_valid_until: int,
     signer_authorization_digest: str,
+    trusted_time_status: str = "verified",
+    event: ReceiptEventContextV1 | None = None,
 ):
     time_digest = receipt_digest(
         canonical(
@@ -65,7 +81,9 @@ def create_evidence_context(
     )
     draft = EvidenceContextV1(
         decision=decision,
+        event=event or ReceiptEventContextV1(kind=decision.effective_verdict),
         effect_digest=effect_digest,
+        trusted_time_status=trusted_time_status,
         trusted_time=trusted_time,
         trusted_time_valid_until=trusted_time_valid_until,
         trusted_time_digest=time_digest,

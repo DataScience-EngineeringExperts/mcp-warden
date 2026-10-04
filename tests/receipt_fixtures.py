@@ -207,3 +207,106 @@ def coordinator_fixture(verdict="allow"):
         verifier=verifier,
     )
     return coordinator, context, providers
+
+
+def pep_fixture(grant=True):
+    from mcp_warden.decision_governor import DecisionGovernorV1
+    from mcp_warden.decision_models import (
+        SignedPolicyCandidateV1,
+        SignedRuntimeCandidateV1,
+        VerificationAlgorithmV1,
+    )
+    from mcp_warden.evidence_coordinator import DecisionEvidenceCoordinatorV1
+    from mcp_warden.evidence_reference import InMemoryProtectedStateV1, InMemoryRecoveryLatchV1
+    from mcp_warden.policy_decision import PolicyDecisionPointV1, activate_policy, activate_runtime
+    from mcp_warden.policy_enforcement_v2 import PolicyEnforcementPointV2
+    from mcp_warden.rule_engine import activate_rule_bundle
+    from mcp_warden.rule_models import RuleBundleV1
+    from tests.test_policy_enforcement import (
+        Verifier,
+        _activated_adapter,
+        _active_components,
+        _noop_handler,
+    )
+
+    auth, verifier, signer, state = authority()
+    effect, request, old_policy, old_runtime = _active_components(grant=grant)
+    bundle = RuleBundleV1(generation=1, valid_from=0, valid_until=1000, rules=())
+    rules_digest = receipt_digest(canonical(bundle), "rule")
+    policy_model = old_policy.policy.model_copy(
+        update={"rule_set_digest": rules_digest, "trust_root_digest": auth.bundle.trust_root_digest}
+    )
+    policy = activate_policy(
+        SignedPolicyCandidateV1(
+            policy=policy_model,
+            algorithm=VerificationAlgorithmV1.EXTERNAL_V1,
+            signer_identity=ZERO_DIGEST,
+            signature=b"valid-signature",
+        ),
+        verifier=Verifier(),
+    )
+    runtime_model = old_runtime.runtime.model_copy(
+        update={
+            "policy_digest_at_floor": policy.policy_digest,
+            "revocation_digest_at_floor": policy.revocation_digest,
+        }
+    )
+    runtime = activate_runtime(
+        SignedRuntimeCandidateV1(
+            runtime=runtime_model,
+            algorithm=VerificationAlgorithmV1.EXTERNAL_V1,
+            signer_identity=ZERO_DIGEST,
+            signature=b"valid-signature",
+        ),
+        verifier=Verifier(),
+    )
+    adapter, _, _ = _activated_adapter(policy, _noop_handler)
+    floor_updates = {
+        "policy": (policy.policy.policy_generation, policy.policy_digest),
+        "rule": (bundle.generation, rules_digest),
+        "revocation": (policy.policy.revocation_generation, policy.revocation_digest),
+        "adapter": (0, adapter.manifest_digest),
+    }
+    floors = tuple(
+        ArtifactFloorV1(
+            kind=f.kind, generation=floor_updates[f.kind][0], digest=floor_updates[f.kind][1]
+        )
+        if f.kind in floor_updates
+        else f
+        for f in state.floors
+    )
+    state = state.model_copy(update={"floors": floors})
+    active_rules = activate_rule_bundle(
+        bundle,
+        evidence=signer.sign(
+            payload=canonical(bundle),
+            artifact_kind="rule",
+            role="rule-publisher",
+            authorization_digest=auth.digest,
+        ),
+        authorization=auth,
+        verifier=verifier,
+        snapshot=state,
+        now=200,
+        policy_rule_digest=rules_digest,
+    )
+    governor = DecisionGovernorV1(policy=policy, rules=active_rules, authorization=auth)
+    providers = {
+        "primary": MemoryLog(receipt_digest(b"primary", "log-entry")),
+        "fallback": MemoryLog(receipt_digest(b"fallback", "log-entry")),
+        "state": InMemoryProtectedStateV1(state),
+        "latch": InMemoryRecoveryLatchV1(),
+    }
+    coordinator = DecisionEvidenceCoordinatorV1(
+        primary=providers["primary"],
+        fallback=providers["fallback"],
+        protected_state=providers["state"],
+        recovery_latch=providers["latch"],
+        signer=signer,
+        authorization=auth,
+        verifier=verifier,
+    )
+    pep = PolicyEnforcementPointV2(
+        PolicyDecisionPointV1(policy), adapter, governor=governor, coordinator=coordinator
+    )
+    return pep, request, runtime, effect, providers

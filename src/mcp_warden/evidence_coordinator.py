@@ -12,7 +12,7 @@ from mcp_warden.evidence_state import (
 )
 from mcp_warden.receipt_kernel import ReceiptError, canonical, exact, receipt_digest
 from mcp_warden.receipt_log import DurableAppendEvidenceV1, LogTailV1, entry_digest
-from mcp_warden.receipt_models import ReceiptEventContextV1, UnsignedReceiptV1
+from mcp_warden.receipt_models import UnsignedReceiptV1
 from mcp_warden.signer_authorization import check_authorization
 
 
@@ -22,9 +22,7 @@ def receipt_from_context(
     validate_context(context)
     d = context.decision
     if event is None:
-        event = ReceiptEventContextV1(kind=d.effective_verdict)
-        if d.override_digest is not None:
-            raise ReceiptError("RCT-EVENT-BINDING")
+        event = context.event
     values = d.model_dump(exclude={"schema_version"})
     return UnsignedReceiptV1(
         **values,
@@ -122,6 +120,14 @@ class DecisionEvidenceCoordinatorV1:
         return state, latch
 
     def record_decision(self, context):
+        return self._record_decision(context, channels=None)
+
+    def record_decision_instrumented(self, context):
+        channels = []
+        result = self._record_decision(context, channels=channels)
+        return result, tuple(channels)
+
+    def _record_decision(self, context, *, channels):
         validate_context(context)
         state = None
         failure = "RCT-PROVIDER-UNAVAILABLE"
@@ -129,6 +135,8 @@ class DecisionEvidenceCoordinatorV1:
         try:
             state, latch = self._read()
             if not operationally_healthy(state, latch):
+                raise ReceiptError("RCT-RECOVERY-ONLY")
+            if context.trusted_time_status != "verified":
                 raise ReceiptError("RCT-RECOVERY-ONLY")
             check_authorization(self.authorization, snapshot=state, now=context.trusted_time)
             if context.signer_authorization_digest != self.authorization.digest:
@@ -155,6 +163,8 @@ class DecisionEvidenceCoordinatorV1:
                 now=context.trusted_time,
             )
             payload = serialize_signed_receipt(record)
+            if channels is not None:
+                channels.append(payload)
             proof = self.primary.append(record, expected_tail=expected)
             validate_append(
                 proof,
@@ -206,9 +216,11 @@ class DecisionEvidenceCoordinatorV1:
         failed_digest = (
             context.decision.decision_digest if record is None else record.receipt_digest
         )
-        return self._fallback(context, state=state, failure=failure, failed_digest=failed_digest)
+        return self._fallback(
+            context, state=state, failure=failure, failed_digest=failed_digest, channels=channels
+        )
 
-    def _fallback(self, context, *, state, failure, failed_digest):
+    def _fallback(self, context, *, state, failure, failed_digest, channels):
         generation = 0 if state is None else state.recovery_generation
         try:
             if state is None:
@@ -235,6 +247,8 @@ class DecisionEvidenceCoordinatorV1:
                 previous_entry_digest=expected.entry_digest,
                 recovery_generation=generation,
             )
+            if channels is not None:
+                channels.append(canonical(event))
             proof = self.fallback.append(event, expected_tail=expected)
             validate_append(
                 proof,

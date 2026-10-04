@@ -102,6 +102,12 @@ class ReceiptModel(BaseModel):
         for name, value in data.items():
             if value is None:
                 continue
+            if (
+                type(value) is bool
+                and name in cls.model_fields
+                and cls.model_fields[name].annotation is bool
+            ):
+                continue
             for scalar in (str, int, bytes, tuple):
                 if isinstance(value, scalar) and type(value) is not scalar:
                     raise ValueError("inexact scalar")
