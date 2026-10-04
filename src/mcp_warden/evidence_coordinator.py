@@ -1,7 +1,13 @@
 """One-attempt evidence ordering over independent trusted ports."""
 
 from mcp_warden.decision_receipts import serialize_signed_receipt, sign_receipt
-from mcp_warden.evidence_helpers import protected_floors, receipt_from_context, validate_append
+from mcp_warden.evidence_helpers import (
+    commit_state,
+    protected_floors,
+    read_store_tail,
+    receipt_from_context,
+    validate_append,
+)
 from mcp_warden.evidence_models import FallbackEventV1, create_evidence_result, validate_context
 from mcp_warden.evidence_reference import advance_state, validate_protected_state
 from mcp_warden.evidence_state import (
@@ -80,7 +86,7 @@ class DecisionEvidenceCoordinatorV1:
             expected = LogTailV1(
                 sequence=state.primary_sequence, entry_digest=state.primary_tail_digest
             )
-            if self.primary.read_tail() != expected:
+            if read_store_tail(self.primary) != expected:
                 raise ReceiptError("RCT-TAIL-MISMATCH")
             receipt = receipt_from_context(
                 context,
@@ -116,7 +122,7 @@ class DecisionEvidenceCoordinatorV1:
                 ),
                 mode=ProtectedStateModeV1.HEALTHY,
             )
-            committed = self.protected_state.compare_and_advance(state, candidate)
+            committed = commit_state(self.protected_state, state, candidate)
             if committed != candidate:
                 raise ReceiptError("RCT-STATE-COMMIT")
             latest, latch = self._read()
@@ -132,13 +138,18 @@ class DecisionEvidenceCoordinatorV1:
                 recovery_mode="healthy",
             )
         except Exception as error:
-            if type(error) is ReceiptError and error.code in {
-                "RCT-TAIL-MISMATCH",
-                "RCT-STATE-COMMIT",
-                "RCT-SIGNATURE-INVALID",
-                "RCT-RECOVERY-ONLY",
-                "RCT-INTEGRITY",
-            }:
+            if (
+                type(error) is ReceiptError
+                and type(error.code) is str
+                and error.code
+                in {
+                    "RCT-TAIL-MISMATCH",
+                    "RCT-STATE-COMMIT",
+                    "RCT-SIGNATURE-INVALID",
+                    "RCT-RECOVERY-ONLY",
+                    "RCT-INTEGRITY",
+                }
+            ):
                 failure = error.code
         if context.decision.effective_verdict == "allow":
             return create_evidence_result(
@@ -166,13 +177,13 @@ class DecisionEvidenceCoordinatorV1:
             generation = state.recovery_generation
             if state.mode is ProtectedStateModeV1.HEALTHY:
                 degraded = advance_state(state, mode=ProtectedStateModeV1.EVIDENCE_DEGRADED)
-                if self.protected_state.compare_and_advance(state, degraded) != degraded:
+                if commit_state(self.protected_state, state, degraded) != degraded:
                     raise ReceiptError("RCT-STATE-COMMIT")
                 state = degraded
             expected = LogTailV1(
                 sequence=state.fallback_sequence, entry_digest=state.fallback_tail_digest
             )
-            if self.fallback.read_tail() != expected:
+            if read_store_tail(self.fallback) != expected:
                 raise ReceiptError("RCT-TAIL-MISMATCH")
             event = FallbackEventV1(
                 sequence=expected.sequence + 1,
@@ -211,7 +222,7 @@ class DecisionEvidenceCoordinatorV1:
                 fallback_tail_digest=proof.tail.entry_digest,
                 floors=floors,
             )
-            if self.protected_state.compare_and_advance(state, candidate) != candidate:
+            if commit_state(self.protected_state, state, candidate) != candidate:
                 raise ReceiptError("RCT-STATE-COMMIT")
             return create_evidence_result(
                 context,
@@ -246,7 +257,14 @@ class DecisionEvidenceCoordinatorV1:
                     generation=max(generation, existing.generation), event_digest=event_digest
                 )
                 exact(result, RecoveryLatchSnapshotV1)
-                latched = result.latched and result.event_digest == event_digest
+                latest = self.recovery_latch.read()
+                exact(latest, RecoveryLatchSnapshotV1)
+                latched = (
+                    result.latched
+                    and result.event_digest == event_digest
+                    and result.generation == max(generation, existing.generation)
+                    and latest == result
+                )
         except Exception:
             pass
         return create_evidence_result(

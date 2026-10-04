@@ -75,3 +75,33 @@ def validate_append(proof, *, payload, expected, store_identity):
         or proof.tail.entry_digest != digest
     ):
         raise ReceiptError("RCT-INTEGRITY")
+
+
+def read_store_tail(provider):
+    failed = False
+    tail = None
+    try:
+        tail = provider.read_tail()
+    except Exception:
+        failed = True
+    if failed:
+        raise ReceiptError("RCT-PROVIDER-UNAVAILABLE") from None
+    exact(tail, LogTailV1)
+    return tail
+
+
+def commit_state(provider, expected, candidate):
+    from mcp_warden.evidence_reference import validate_protected_state
+
+    failed = False
+    committed = None
+    try:
+        committed = provider.compare_and_advance(expected, candidate)
+    except Exception:
+        failed = True
+    if failed:
+        raise ReceiptError("RCT-STATE-COMMIT") from None
+    validate_protected_state(committed)
+    if committed != candidate:
+        raise ReceiptError("RCT-STATE-COMMIT")
+    return committed
