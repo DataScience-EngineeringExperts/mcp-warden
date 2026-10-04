@@ -469,7 +469,8 @@ negative evidence/recovery behavior. Authenticated recovery clears the latch las
 pure historical replay, current eligibility and closed human/agent projections remain separate.
 
 The mandatory reference corpus includes allow/deny, primary and dual log failures, protected-state
-commit failure, a pre-set latch, a rolled-back log and a reopened file log, plus five malformed-input
+commit failure, a pre-set latch, a rolled-back log, a reopened file log, malformed latch values
+and false primary/fallback commit acknowledgments, plus five malformed-input
 probes per registered operation. It scans actual artifact bytes and safe output channels. Even a
 passing report states `platform_status=unsupported` and `atk_conformant=false`: process-local
 protected state and file durability cannot resist restoration of the entire host snapshot. No

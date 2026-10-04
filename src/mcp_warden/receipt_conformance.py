@@ -75,7 +75,7 @@ def _matches(name, result, scenario):
         return d.converted_from_decision_digest is None and e.mode == "primary-durable"
     if name == "primary_failure":
         return d.converted_from_decision_digest is not None and e.mode == "fallback-durable"
-    if name == "dual_failure":
+    if name in {"dual_failure", "false_primary_commit", "false_fallback_commit"}:
         return (
             d.converted_from_decision_digest is not None
             and e.mode in {"unavailable", "recovery-latched"}
@@ -85,6 +85,8 @@ def _matches(name, result, scenario):
         return d.converted_from_decision_digest is not None and e.recovery_mode != "healthy"
     if name in {"latched", "rollback"}:
         return d.recovery_code == "recovery-only" and e.recovery_mode != "healthy"
+    if name == "malformed_latch":
+        return d.recovery_code == "recovery-only" and e.mode in {"unavailable", "recovery-latched"}
     return True
 
 
@@ -220,7 +222,7 @@ def run_receipt_conformance(vectors, *, planted_secrets=()):
         failures.add("CONF-OPERATION-UNCOVERED")
     report = ReceiptConformanceReportV1(
         manifest_digest=vectors[0].allow.pep.manifest_digest,
-        total_cases=len(vectors) * 13,
+        total_cases=len(vectors) * 16,
         fixed_cases=len(vectors) * 5,
         instrumented_cases=instrumented,
         registration_operations=registrations,

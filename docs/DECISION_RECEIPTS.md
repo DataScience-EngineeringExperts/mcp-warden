@@ -131,10 +131,16 @@ registered codes rather than provider paths, exception text or planted secrets.
 
 The POSIX reference file log requires `fcntl` locks and directory `fsync`. It
 locks its expected tail, writes complete bounded frames,
-flushes the file, and flushes the directory on creation. Startup verifies canonical
+flushes the file and directory before every durable append acknowledgment. Startup verifies canonical
 records, signatures, chain continuity, sequences and caps. Partial tails, missing
 entries, reordered records and primary/protected-state disagreement block normal
 operation. Primary and fallback providers cannot alias the same store identity.
+
+Acknowledgments alone do not establish persistence. The coordinator re-reads the
+actual append tail before advancing floors, then independently re-reads the exact
+protected snapshot and latch after every primary/fallback state transition. Normal
+permits and the final pre-sink check reconcile both evidence streams. Inconsistent
+or malformed latch values, tails and state acknowledgments keep effects blocked.
 
 The log and protected state do not share a transaction. A crash after append but
 before protected advancement leaves a detectable disagreement. A log rolled back
@@ -177,15 +183,34 @@ provider exceptions.
 - DSE-1076 must wire the foundation into the actual guard path before the product
   can claim live human-checkpoint enforcement.
 
-`run_receipt_conformance()` requires eight independently configured scenarios for
+`run_receipt_conformance()` requires eleven independently configured scenarios for
 every registered operation: allow, deny, primary-log failure, dual-log failure,
 protected-state commit failure, a pre-set latch, log rollback and a reopened file
-log. It adds five nonoptional probes for malformed request/runtime/effect,
+log, plus a malformed latch and false primary/fallback state-commit acknowledgments.
+It adds five nonoptional probes for malformed request/runtime/effect,
 hostile nested data and effect substitution. Ordering and negative sink absence
 are checked against the PEP's own trace; actual signed/fallback artifact bytes,
 serialized results and safe projections are scanned for planted secrets.
 It invokes positive test handlers, so use isolated test deployments. A passing
 report always says `platform_status=unsupported` and `atk_conformant=false`.
+
+## Resource limits
+
+| Surface | Limit |
+| --- | ---: |
+| Canonical DSE-717 payload or frame | 256 KiB |
+| Reference log file | 64 MiB |
+| Counter/generation or trusted-time integer | 0 through 2⁵³ − 1 |
+| Rules in a bundle | 256 |
+| Conditions in one non-nested group | 64 |
+| Membership values in a condition | 128 |
+| Override validity interval | 3,600 seconds |
+| Reference vectors / total cases | 64 / 1,024 |
+| Planted markers / bytes per marker | 64 / 4,096 |
+
+File payloads are hex-encoded inside a canonical frame, so their effective capacity
+is lower than the standalone canonical-payload cap. Over-cap values fail closed;
+they are not silently truncated.
 
 The normative requirements remain in [Agent Trust Kernel](AGENT_TRUST_KERNEL.md).
 The V1 isolation and adapter contract remain in

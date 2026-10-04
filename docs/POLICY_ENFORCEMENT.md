@@ -199,7 +199,7 @@ cases, so it must never be pointed at a live production adapter. A passing found
 Manifest/registration bijection, late-registration rejection, code/delegate drift, signed bundle
 activation, evidence-before-sink ordering, decision/evidence substitution, malformed-input
 behavior, and no-I/O imports are covered by the repository test suite. This is deliberately a
-DSE-716 foundation corpus. DSE-717's separate `run_receipt_conformance()` requires all eight
+DSE-716 foundation corpus. DSE-717's separate `run_receipt_conformance()` requires all eleven
 receipt/fallback/state/latch/rollback/reopened-file scenarios plus five fixed malformed-input
 probes for every registered operation. It scans actual receipt/fallback bytes and safe projections,
 and reports `platform_status=unsupported` and `atk_conformant=false` even on success. Neither

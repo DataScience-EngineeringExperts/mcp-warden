@@ -27,15 +27,33 @@ def matrix(tmp_path):
         "latched",
         "rollback",
         "restarted",
+        "malformed_latch",
+        "false_primary_commit",
+        "false_fallback_commit",
     ):
         pep, request, runtime, effect, providers = pep_fixture(grant=name != "deny")
         if name in {"primary_failure", "dual_failure"}:
             providers["primary"].fail = True
         if name == "dual_failure":
             providers["fallback"].fail = True
+        if name == "malformed_latch":
+            from mcp_warden.evidence_state import RecoveryLatchSnapshotV1
+
+            providers["latch"].read = lambda: RecoveryLatchSnapshotV1.model_construct(
+                schema_version=1,
+                generation=0,
+                latched=0,
+                event_digest=ZERO_DIGEST,
+                cleared_generation=None,
+                cleared_event_digest=None,
+            )
+        if name in {"false_primary_commit", "false_fallback_commit"}:
+            providers["state"].compare_and_advance = lambda expected, candidate: candidate
+            if name == "false_fallback_commit":
+                providers["primary"].fail = True
         if name == "state_failure":
 
-            def fail_commit(**kwargs):
+            def fail_commit(expected, candidate):
                 raise ValueError("PLANTED-COMMIT-SECRET")
 
             providers["state"].compare_and_advance = fail_commit
@@ -68,7 +86,7 @@ def test_fixed_reference_matrix_runs_and_never_claims_platform_support(tmp_path)
         (matrix(tmp_path),), planted_secrets=(b"PLANTED-COMMIT-SECRET", b"secret provider text")
     )
     assert report.passed, report.failures
-    assert report.total_cases == 13
+    assert report.total_cases == 16
     assert report.fixed_cases == 5
     assert report.platform_status == "unsupported"
     assert report.atk_conformant is False
@@ -148,3 +166,26 @@ def test_empty_matrix_is_closed_error():
     with pytest.raises(ReceiptError) as error:
         run_receipt_conformance(())
     assert error.value.__context__ is None
+
+
+@pytest.mark.parametrize(
+    "attack", ["malformed_latch", "false_primary_commit", "false_fallback_commit"]
+)
+def test_required_hostile_provider_scenarios_cannot_claim_success_or_resume(tmp_path, attack):
+    from mcp_warden.evidence_reference import InMemoryProtectedStateV1
+
+    scenario = getattr(matrix(tmp_path), attack)
+    pep = scenario.pep
+    result, trace = pep._execute_instrumented(
+        scenario.request, runtime=scenario.runtime, effect=scenario.effect
+    )
+    assert not result.invoked and "sink" not in trace.events
+    assert result.evidence.mode in {"unavailable", "recovery-latched"}
+    if attack == "false_fallback_commit":
+        state = pep._coordinator.protected_state
+        state.compare_and_advance = InMemoryProtectedStateV1.compare_and_advance.__get__(state)
+        pep._coordinator.primary.fail = False
+        second, trace = pep._execute_instrumented(
+            scenario.request, runtime=scenario.runtime, effect=scenario.effect
+        )
+        assert not second.invoked and "sink" not in trace.events

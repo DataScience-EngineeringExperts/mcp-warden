@@ -34,6 +34,9 @@ SCENARIOS = (
     "latched",
     "rollback",
     "restarted",
+    "malformed_latch",
+    "false_primary_commit",
+    "false_fallback_commit",
 )
 
 
@@ -64,7 +67,7 @@ class ReceiptConformanceScenarioV1:
 
 @dataclass(frozen=True, slots=True)
 class ReceiptConformanceVectorV1:
-    """All eight independently configured scenarios are mandatory for each operation."""
+    """All eleven independently configured scenarios are mandatory for each operation."""
 
     allow: ReceiptConformanceScenarioV1
     deny: ReceiptConformanceScenarioV1
@@ -74,6 +77,9 @@ class ReceiptConformanceVectorV1:
     latched: ReceiptConformanceScenarioV1
     rollback: ReceiptConformanceScenarioV1
     restarted: ReceiptConformanceScenarioV1
+    malformed_latch: ReceiptConformanceScenarioV1
+    false_primary_commit: ReceiptConformanceScenarioV1
+    false_fallback_commit: ReceiptConformanceScenarioV1
 
     def __post_init__(self):
         for field in fields(self):
@@ -109,8 +115,8 @@ class ReceiptConformanceReportV1(ReceiptModel):
     def _report(self):
         if (
             self.atk_conformant is not False
-            or not 13 <= self.total_cases <= 832
-            or self.fixed_cases * 13 != self.total_cases * 5
+            or not 16 <= self.total_cases <= 1024
+            or self.fixed_cases * 16 != self.total_cases * 5
             or not 0 <= self.instrumented_cases <= self.total_cases
             or self.failures != tuple(sorted(set(self.failures)))
             or any(f not in FAILURES for f in self.failures)
