@@ -113,3 +113,97 @@ def authority():
         trust_root_generation=1,
     )
     return auth, verifier, TestSigner(key, identity), snapshot
+
+
+class MemoryLog:
+    """Independent deterministic test store; semantic signing checked by coordinator."""
+
+    protection_capability = "process-local-reference"
+
+    def __init__(self, identity):
+        from mcp_warden.receipt_log import LogTailV1
+
+        self.store_identity_digest = identity
+        self.tail = LogTailV1(sequence=0, entry_digest=ZERO_DIGEST)
+        self.payloads = []
+        self.fail = False
+
+    def read_tail(self):
+        return self.tail
+
+    def append(self, value, *, expected_tail):
+        from mcp_warden.decision_receipts import serialize_signed_receipt
+        from mcp_warden.receipt_kernel import ReceiptError
+        from mcp_warden.receipt_log import DurableAppendEvidenceV1, LogTailV1, entry_digest
+        from mcp_warden.receipt_models import SignedReceiptV1
+
+        if self.fail:
+            raise ValueError("secret provider text")
+        if expected_tail != self.tail:
+            raise ReceiptError("RCT-TAIL-MISMATCH")
+        payload = (
+            serialize_signed_receipt(value) if type(value) is SignedReceiptV1 else canonical(value)
+        )
+        self.tail = LogTailV1(
+            sequence=self.tail.sequence + 1,
+            entry_digest=entry_digest(
+                payload,
+                sequence=self.tail.sequence + 1,
+                previous_entry_digest=self.tail.entry_digest,
+            ),
+        )
+        self.payloads.append(payload)
+        return DurableAppendEvidenceV1(
+            store_identity_digest=self.store_identity_digest,
+            payload_digest=receipt_digest(payload, "log-entry"),
+            tail=self.tail,
+        )
+
+
+def coordinator_fixture(verdict="allow"):
+    from mcp_warden.evidence_coordinator import DecisionEvidenceCoordinatorV1
+    from mcp_warden.evidence_models import create_evidence_context
+    from mcp_warden.evidence_reference import InMemoryProtectedStateV1, InMemoryRecoveryLatchV1
+    from mcp_warden.governed_decision import create_governed_decision
+
+    auth, verifier, signer, state = authority()
+    decision = create_governed_decision(
+        request_digest=ZERO_DIGEST,
+        base_decision_digest=None,
+        effective_verdict=verdict,
+        public_reason="PDP-ALLOW-EXACT-GRANT" if verdict == "allow" else "PDP-DENY-DEFAULT",
+        recovery_code="none",
+        policy_digest=ZERO_DIGEST,
+        policy_generation=0,
+        runtime_digest=ZERO_DIGEST,
+        rule_digest=ZERO_DIGEST,
+        rule_generation=0,
+        revocation_digest=ZERO_DIGEST,
+        revocation_generation=0,
+        adapter_digest=ZERO_DIGEST,
+        bundle_digest=None,
+        envelope_digest=ZERO_DIGEST,
+    )
+    context = create_evidence_context(
+        decision=decision,
+        effect_digest=ZERO_DIGEST,
+        trusted_time=10,
+        trusted_time_valid_until=20,
+        signer_authorization_digest=auth.digest,
+    )
+    providers = {
+        "primary": MemoryLog(receipt_digest(b"primary", "log-entry")),
+        "fallback": MemoryLog(receipt_digest(b"fallback", "log-entry")),
+        "state": InMemoryProtectedStateV1(state),
+        "latch": InMemoryRecoveryLatchV1(),
+    }
+    coordinator = DecisionEvidenceCoordinatorV1(
+        primary=providers["primary"],
+        fallback=providers["fallback"],
+        protected_state=providers["state"],
+        recovery_latch=providers["latch"],
+        signer=signer,
+        authorization=auth,
+        verifier=verifier,
+    )
+    return coordinator, context, providers
