@@ -1,6 +1,6 @@
 # mcp-warden — System Context Diagram
 
-Last Updated: 2026-10-03
+Last Updated: 2026-10-04
 
 **CLI 2.0.0 / schema level 4** extends capture/lock/check to complete tool annotations and output
 schemas, with structural output drift and Python/TypeScript parity. The existing
@@ -33,10 +33,12 @@ logic) plus a separate informational provenance section. It never prints raw
 > is the normative contract. DSE-715 implements the isolated content-envelope foundation.
 > DSE-716 implements isolated signed policy/runtime/adapter/bundle activation, exact
 > adapter/bundle lease binding, deterministic PDP, evidence-gated PEP, frozen handler identity,
-> and fixed-corpus adapter-conformance APIs. None is wired into `guard`; the default evidence gate denies
-> effects. DSE-717 is in progress (its protected-state contract is implemented in an isolated
-> branch), but it must still deliver durable signed evidence, fallback, rollback-resistant state,
-> and the recovery latch. The current `guard` path is not represented as ATK-conformant.
+> and fixed-corpus adapter-conformance APIs. V1's default evidence gate denies effects.
+> DSE-717 adds a separate [V2 receipt foundation](docs/DECISION_RECEIPTS.md): signed primary
+> evidence, independent fallback, strengthening rules, finite overrides, protected-state/latch
+> ports, recovery, replay and a mandatory reference failure corpus. No kernel API is wired into
+> `guard`; real protected-platform restart/rollback gates remain unsupported by the reference
+> providers. The current `guard` path is not represented as ATK-conformant.
 
 > The opt-in [artifact verifier](docs/ARTIFACT_TRUST.md) implements DSE-716's external
 > signature port using pinned Ed25519 public keys and explicit artifact-kind roles.
@@ -115,7 +117,7 @@ flowchart TB
     envelope["Content Envelope V1\nDSE-715 · implemented evidence foundation\nNOT wired to guard · grants no authority"]
     decision["Deterministic PDP/PEP V1\nDSE-716 · signed adapter/bundle gates + fixed corpus\nNOT wired to guard"]
     artifactTrust["Opt-in Ed25519 artifact verifier\nartifact_trust.py · protected root pin + key roles\ntrust CLI: unsigned preparation / signature verification"]
-    evidence["Durable evidence + recovery state\nDSE-717 · IN PROGRESS\ncurrent default gate denies effects"]
+    evidence["PEP V2 · signed evidence before effect\nDSE-717 reference SDK · recovery + replay\nindependent platform provider still required"]
     atk -. "governs partial foundation" .-> envelope
     envelope -. "required input" .-> decision
     artifactTrust -. "external signature verification port" .-> decision

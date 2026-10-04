@@ -1,6 +1,6 @@
 # mcp-warden
 
-Last Updated: 2026-10-03
+Last Updated: 2026-10-04
 
 [![CI](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml/badge.svg)](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -28,8 +28,10 @@ The opt-in [artifact trust foundation](docs/ARTIFACT_TRUST.md) adds public-key
 verification for the existing kernel activation APIs and `trust` CLI commands
 to prepare unsigned review artifacts and verify external signatures. Keys and
 signer roles require an independently protected root pin. This development
-feature is not in the published 2.0.0 package; live checkpoint enforcement still
-depends on DSE-717 evidence and DSE-1076 guard integration.
+feature is not in the published 2.0.0 package. The development
+[decision receipt foundation](docs/DECISION_RECEIPTS.md) adds signed evidence,
+governed decisions and recovery ports. Live checkpoint enforcement still requires
+an independently protected platform provider and DSE-1076 guard integration.
 
 > ⚠️ **Install `mcp-warden-cli`, not `mcp-warden`.** The PyPI name `mcp-warden` is
 > an **unrelated package by a different author** — it is not this project. The
@@ -462,11 +464,14 @@ empty `allow_paths` = deny-all. See [`docs/POLICY_MODEL.md`](docs/POLICY_MODEL.m
 
 Agent Trust Kernel development is intentionally isolated from the shipped `guard` path:
 DSE-715's content envelope and DSE-716's deterministic PDP/PEP, exact signed adapter/bundle load
-gates, frozen handler identity, and fixed-corpus adapter harness are implemented foundations, but
-the default evidence gate denies effects. DSE-717 is now in progress: its isolated branch has
-the reviewed receipt/recovery design and protected-state contract, but durable signed receipts,
-fallback evidence, rollback-resistant state, the recovery latch, and any whole-kernel conformance
-claim remain incomplete. See [`docs/POLICY_ENFORCEMENT.md`](docs/POLICY_ENFORCEMENT.md) and
+gates, frozen handler identity, and fixed-corpus adapter harness are implemented foundations.
+V1's default evidence gate denies effects. DSE-717 adds a separate V2 PEP with independently
+authorized signed receipts, strengthening rules, finite noncritical overrides, primary/fallback
+logs, protected-state/recovery ports, pure replay and a mandatory reference failure corpus.
+Reference providers prove local durability and fail-closed ordering; they cannot establish
+platform rollback resistance or whole-kernel conformance. These development APIs are absent
+from the published 2.0.0 package. See [`docs/DECISION_RECEIPTS.md`](docs/DECISION_RECEIPTS.md),
+[`docs/POLICY_ENFORCEMENT.md`](docs/POLICY_ENFORCEMENT.md) and
 [`docs/AGENT_TRUST_KERNEL.md`](docs/AGENT_TRUST_KERNEL.md).
 
 See [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md) and

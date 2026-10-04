@@ -1,11 +1,11 @@
 # Agent Trust Kernel — Normative Security Contract
 
-**Status:** Design contract (DSE-714). DSE-715 implements the isolated content-envelope
-foundation; whole-kernel conformance remains pending DSE-716 and DSE-717.
+**Status:** Design contract (DSE-714). DSE-715/716/717 implement isolated SDK foundations;
+whole-kernel conformance remains pending protected-platform and live adapter gates.
 **Scope:** Deterministic reference monitor beneath agents and protocol adapters.
 **Document owner:** Security. Changes require threat-model review.
 
-> **Current-product boundary:** MCP-Warden v1.1 does **not** claim conformance with this
+> **Current-product boundary:** MCP-Warden 2.0.0 does **not** claim conformance with this
 > contract. Its shipped `guard` runtime intentionally has opt-outs and fail-open paths, and
 > it does not yet provide universal provenance, complete mediation, bounded authority, or
 > evidence-before-effect. Those differences remain honest product limits until downstream
@@ -455,11 +455,26 @@ allowed effect.
 This is still a partial implementation. It is not wired into the historical `guard`. A separate
 opt-in [artifact trust verifier](ARTIFACT_TRUST.md) implements the signature port using explicit
 public-key/role roots and an independently protected digest pin. It supplies no live protocol
-adapter and does not implement DSE-717's durable
-signed receipts, independent fallback evidence, rollback-resistant state, or persistent recovery
-latch. A custom evidence gate becomes TCB code and does not create an ATK-conformance claim. No
-production effect or whole-kernel claim is valid until DSE-717 closes ATK-10 through ATK-12 and
-the full §11 platform/restart/rollback gates pass.
+adapter or protected platform provider. A custom evidence gate becomes TCB code and does not
+create an ATK-conformance claim. No production effect or whole-kernel claim is valid until the
+full §11 platform/restart/rollback and complete mediation gates pass.
+
+### DSE-717 implementation status
+
+The [decision receipt foundation](DECISION_RECEIPTS.md) implements independently activated signer
+authority, canonical signed receipts, strengthening-only rules and finite noncritical overrides.
+Its separate V2 PEP attempts evidence for every path and requires signed primary append plus
+protected-state advancement before effect. Independent fallback counters and latch ports preserve
+negative evidence/recovery behavior. Authenticated recovery clears the latch last. Verification,
+pure historical replay, current eligibility and closed human/agent projections remain separate.
+
+The mandatory reference corpus includes allow/deny, primary and dual log failures, protected-state
+commit failure, a pre-set latch, a rolled-back log and a reopened file log, plus five malformed-input
+probes per registered operation. It scans actual artifact bytes and safe output channels. Even a
+passing report states `platform_status=unsupported` and `atk_conformant=false`: process-local
+protected state and file durability cannot resist restoration of the entire host snapshot. No
+production protected platform provider or DSE-1076 live `guard` integration ships in this wave.
+These development features remain absent from the published 2.0.0 package.
 
 ## 11. Conformance gates
 
