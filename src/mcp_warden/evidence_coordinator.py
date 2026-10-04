@@ -1,6 +1,7 @@
 """One-attempt evidence ordering over independent trusted ports."""
 
 from mcp_warden.decision_receipts import serialize_signed_receipt, sign_receipt
+from mcp_warden.evidence_floor import REQUIRED_V2_FLOOR_KINDS
 from mcp_warden.evidence_helpers import (
     commit_state,
     protected_floors,
@@ -15,6 +16,7 @@ from mcp_warden.evidence_state import (
     ArtifactFloorV1,
     ProtectedStateModeV1,
     RecoveryLatchSnapshotV1,
+    StateError,
     operationally_healthy,
     validate_floor,
 )
@@ -57,6 +59,8 @@ class DecisionEvidenceCoordinatorV1:
     def _read(self):
         state = self.protected_state.read()
         validate_protected_state(state)
+        if not REQUIRED_V2_FLOOR_KINDS.issubset(f.kind for f in state.floors):
+            raise StateError("STATE-FLOOR-MISSING")
         latch = self.recovery_latch.read()
         exact(latch, RecoveryLatchSnapshotV1)
         return state, latch

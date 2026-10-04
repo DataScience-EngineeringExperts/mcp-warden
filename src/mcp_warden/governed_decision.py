@@ -7,6 +7,7 @@ from pydantic import StrictInt, model_validator
 from mcp_warden.decision_models import DecisionReasonV1, DecisionRecoveryV1
 from mcp_warden.policy_enforcement import EnforcementCodeV1
 from mcp_warden.receipt_kernel import (
+    ERROR_CODES,
     ZERO_DIGEST,
     ReceiptError,
     ReceiptModel,
@@ -16,7 +17,8 @@ from mcp_warden.receipt_kernel import (
 )
 
 PUBLIC_REASONS = (
-    frozenset(r.value for r in DecisionReasonV1)
+    ERROR_CODES
+    | frozenset(r.value for r in DecisionReasonV1)
     | frozenset(r.value for r in EnforcementCodeV1)
     | {
         "RULE-BLOCKED",

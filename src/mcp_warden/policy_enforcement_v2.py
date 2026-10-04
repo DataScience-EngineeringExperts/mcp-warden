@@ -18,7 +18,7 @@ from mcp_warden.evidence_models import (
     create_evidence_result,
     validate_evidence_result,
 )
-from mcp_warden.evidence_state import operationally_healthy, validate_floor
+from mcp_warden.evidence_state import StateError, operationally_healthy, validate_floor
 from mcp_warden.governed_decision import convert_failed_allow, create_governed_decision
 from mcp_warden.policy_decision import (
     ActivatedRuntimeV1,
@@ -140,16 +140,44 @@ class PolicyEnforcementPointV2:
                     ),
                     "time",
                 )
-                d = self._governor.govern(
-                    base,
-                    request=request,
-                    snapshot=state,
-                    now=now,
-                    trusted_time_digest=time_digest,
-                    override=override,
-                )
-            except Exception:
-                code = "PEP-RECOVERY-ONLY"
+                try:
+                    d = self._governor.govern(
+                        base,
+                        request=request,
+                        snapshot=state,
+                        now=now,
+                        trusted_time_digest=time_digest,
+                        override=override,
+                    )
+                except ReceiptError as error:
+                    if type(error) is not ReceiptError:
+                        raise ReceiptError("RCT-INTERNAL-ERROR") from None
+                    if error.code != "RULE-OVERRIDE-INVALID":
+                        raise
+                    # Reject the supplied override while retaining all strengthening
+                    # rules and critical quarantine reasons from the valid decision.
+                    unoverridden = self._governor.govern(
+                        base,
+                        request=request,
+                        snapshot=state,
+                        now=now,
+                        trusted_time_digest=time_digest,
+                    )
+                    values = unoverridden.model_dump(exclude={"decision_digest"})
+                    if unoverridden.effective_verdict != "quarantine":
+                        values.update(effective_verdict="deny", public_reason=error.code)
+                    d = create_governed_decision(**values)
+            except Exception as error:
+                # Only actual state/recovery failures use the recovery-only reason.
+                # ReceiptError closes its codes; arbitrary provider text is discarded.
+                if type(error) is StateError or (
+                    type(error) is ReceiptError and error.code == "RCT-RECOVERY-ONLY"
+                ):
+                    code = "PEP-RECOVERY-ONLY"
+                elif type(error) is ReceiptError:
+                    code = ReceiptError(error.code).code
+                else:
+                    code = "RCT-INTERNAL-ERROR"
         if d is None:
             p = self._governor.policy
             d = create_governed_decision(
@@ -157,8 +185,8 @@ class PolicyEnforcementPointV2:
                 effect_digest=effect.arguments_digest if effect_valid else INVALID_DIGEST,
                 base_decision_digest=base.decision_digest,
                 base_verdict=base.verdict,
-                effective_verdict="deny",
-                public_reason=code or base.reason,
+                effective_verdict="quarantine" if base.verdict == "quarantine" else "deny",
+                public_reason=base.reason if base.verdict == "quarantine" else code or base.reason,
                 recovery_code="recovery-only" if code == "PEP-RECOVERY-ONLY" else base.recovery,
                 policy_digest=p.policy_digest,
                 policy_generation=p.policy.policy_generation,

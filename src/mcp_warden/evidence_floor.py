@@ -32,6 +32,8 @@ FLOOR_KINDS = (
     "signer-authorization",
     "trust-root",
 )
+# The override floor is conditional; every other floor is required by V2.
+REQUIRED_V2_FLOOR_KINDS = frozenset(FLOOR_KINDS) - {"override"}
 MAX_COUNTER = 2**53 - 1
 
 
