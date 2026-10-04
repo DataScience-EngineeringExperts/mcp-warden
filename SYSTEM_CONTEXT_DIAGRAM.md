@@ -282,7 +282,7 @@ sequenceDiagram
     CI->>CI: intersect with pin — unpinned id ignored (warn), divergent identity → exit 2
     CI->>CI: confine paths under corpus root · size caps · schema_version == implemented
     CI->>SG: verify each bundle over build_statement(overall_digest, DIRECTORY coordinate) for the pinned identity/issuer
-    SG-->>CI: ok / raise (any raise → UNVERIFIABLE, exit 2; relocated signature fails here)
+    SG-->>CI: ok / raise (any raise → UNVERIFIABLE, exit 2, relocated signature fails here)
     CI->>CI: lock entries must reproduce overall_digest → derive surface_digest
     CI->>CI: MATCH(≥ --min-attesters) · INSUFFICIENT(0) · NOVEL(0) · MISMATCH(1) · SPLIT(1) — "consensus attests observation, not safety"
 ```
