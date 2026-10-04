@@ -94,6 +94,22 @@ class ReceiptModel(BaseModel):
     def __delattr__(self, name):
         raise ReceiptError("RCT-MALFORMED") from None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _exact_inputs(cls, data):
+        if type(data) is not dict:
+            return data
+        for name, value in data.items():
+            if value is None:
+                continue
+            for scalar in (str, int, bytes, tuple):
+                if isinstance(value, scalar) and type(value) is not scalar:
+                    raise ValueError("inexact scalar")
+            if name in {"schema_version", "validity_boundary", "minimum", "maximum"}:
+                if type(value) is not int or not 0 <= value <= MAX_COUNTER:
+                    raise ValueError("invalid bounded integer")
+        return data
+
     @model_validator(mode="after")
     def _closed_scalars(self):
         for name in type(self).model_fields:
