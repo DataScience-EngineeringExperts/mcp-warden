@@ -31,14 +31,21 @@ def _encode_component(value: bytes) -> bytes:
 
 def _reject_executable_constants(value: object) -> None:
     pending = [value]
+    seen: dict[int, object] = {}
     checked = 0
     while pending:
         item = pending.pop()
+        if id(item) in seen:
+            continue
+        seen[id(item)] = item  # Keep decoded objects alive; object IDs cannot be reused.
         checked += 1
         if checked > MAX_HANDLER_IDENTITY_BYTES or type(item) is CodeType:
             raise HandlerIdentityError() from None
-        if type(item) in (tuple, frozenset):
+        if type(item) in (tuple, frozenset, list, set):
             pending.extend(item)
+        elif type(item) is dict:
+            pending.extend(item.keys())
+            pending.extend(item.values())
         elif type(item) is bytes:
             if len(item) > MAX_HANDLER_IDENTITY_BYTES:
                 raise HandlerIdentityError() from None
@@ -52,6 +59,8 @@ def _reject_executable_constants(value: object) -> None:
                 failed = True
             if failed or type(decoded) is CodeType:
                 raise HandlerIdentityError() from None
+            if decoded is not None:
+                pending.append(decoded)
 
 
 def _immutable_global_bytes(value: object) -> bytes | None:
@@ -165,6 +174,7 @@ def digest_handler(handler: object) -> str:
 def freeze_handler(handler: object) -> FunctionType:
     """Clone a function so later mutation of the caller's object cannot drift it."""
     canonical_handler_bytes(handler)
+    frozen = None
     try:
         frozen_globals = dict(handler.__globals__)
         for name in handler.__code__.co_names:
@@ -179,5 +189,7 @@ def freeze_handler(handler: object) -> FunctionType:
             None,
         )
     except Exception:
+        pass
+    if frozen is None:
         raise HandlerIdentityError() from None
     return frozen

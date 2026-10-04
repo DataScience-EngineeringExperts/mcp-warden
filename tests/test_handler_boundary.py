@@ -35,6 +35,20 @@ def test_marshaled_code_in_referenced_immutable_global_is_rejected() -> None:
         canonical_handler_bytes(namespace["handler"])
 
 
+@pytest.mark.parametrize("container", [tuple, list, dict])
+def test_marshaled_container_cannot_hide_nested_code(container) -> None:
+    code = compile("pass", "reviewed-fixture", "exec")
+    value = {"nested": code} if container is dict else container((code,))
+    with pytest.raises(HandlerIdentityError, match="^PEP-HANDLER-MALFORMED$"):
+        canonical_handler_bytes(_constant_handler(marshal.dumps(value)))
+
+
+def test_marshaled_recursive_noncode_data_terminates_and_remains_supported() -> None:
+    value: list[object] = []
+    value.append(value)
+    assert canonical_handler_bytes(_constant_handler(marshal.dumps(value)))
+
+
 @pytest.mark.parametrize("value", [b"ordinary bytes", b"", marshal.dumps((1, "data"))])
 def test_normal_byte_constants_remain_supported(value: bytes) -> None:
     assert canonical_handler_bytes(_constant_handler(value))
