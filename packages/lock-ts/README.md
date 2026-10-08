@@ -1,5 +1,10 @@
 # @mcp-warden/lock
 
+Implements schema level **4**, including complete tool annotations and output schemas.
+Missing/null metadata hashes JSON null; empty objects differ. Hint changes and output
+schema drift fail verification. Older locks remain readable but require review/re-pin
+to acquire the new coverage; annotations are declarations and grant no authority.
+
 Zero-dependency **verifier** for [MCP Lock Format v1](../../docs/SPEC.md) — the
 `warden.lock` baseline that [mcp-warden](https://github.com/DataScience-EngineeringExperts/mcp-warden)
 pins an MCP server's declared tool/resource/prompt surface into.
@@ -32,6 +37,18 @@ if (!result.ok) {
 }
 console.log("surface matches baseline", digest(surface));
 ```
+
+## Install the released artifact
+
+Version 0.2.0 is distributed with the CLI 2.0.0 GitHub Release:
+
+```bash
+npm install https://github.com/DataScience-EngineeringExperts/mcp-warden/releases/download/v2.0.0/mcp-warden-lock-0.2.0.tgz
+```
+
+The release includes SHA-256 checksums and a Sigstore bundle for this tarball.
+It is an npm-installable artifact, not an npm registry publication. Review the
+[release migration notes](https://github.com/DataScience-EngineeringExperts/mcp-warden/releases/tag/v2.0.0) before re-pinning old locks.
 
 ## API
 

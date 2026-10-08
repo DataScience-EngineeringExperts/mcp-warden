@@ -1,11 +1,12 @@
 {
-  "schema_version": 3,
-  "warden_version": "0.3.0",
+  "schema_version": 4,
+  "warden_version": "1.2.0",
   "server": {
     "command": "python",
     "args": [
       "tests/fixtures/clean_server.py"
     ],
+    "url": null,
     "command_digest": "sha256:db5131f204944f8a4d13cba802e2a47c576c3932b0eaff0fc0304bba7795904c"
   },
   "tools": [
@@ -40,7 +41,10 @@
           }
         }
       },
-      "entry_digest": "sha256:1a3b7e7ce145db27d63fb3ade3a3d2f6822d1e5b570b62f80a6c2f3de5d17569"
+      "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_skeleton": null,
+      "entry_digest": "sha256:a5878781086596122bad370e739dadc591856844fde379ce4b5081b3623df219"
     },
     {
       "name": "read_file",
@@ -73,7 +77,10 @@
           }
         }
       },
-      "entry_digest": "sha256:54e67f392b48e7adeaee4760d0827cc46e069b852b56d502d4d0e59791da5164"
+      "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+      "output_schema_skeleton": null,
+      "entry_digest": "sha256:06a11d6872a89f3182f92b9fed40f39056b908fe192098199221a3cfbb403bf0"
     }
   ],
   "resources": [
@@ -109,19 +116,19 @@
       "snippet": "name token 'read'"
     }
   ],
-  "overall_digest": "sha256:cb20a16ce572cca8f682672c42036e351359d32ca8265e5af3bfc861ab6f9219",
+  "overall_digest": "sha256:5d7b40f00837bb8747701e81ac9f17db6ad96a17208c84b018227a7456719be9",
   "pin": {
-    "created_at": "2026-06-09T21:24:46Z",
-    "warden_version": "0.3.0",
+    "created_at": "2026-10-02T02:32:29Z",
+    "warden_version": "1.2.0",
     "mcp_protocol_version": "2025-11-25",
     "approved": true,
     "approver": "ci-bot@example.invalid",
-    "approved_at": "2026-06-09T21:24:46Z",
-    "approved_digest": "sha256:cb20a16ce572cca8f682672c42036e351359d32ca8265e5af3bfc861ab6f9219",
+    "approved_at": "2026-10-02T02:32:29Z",
+    "approved_digest": "sha256:5d7b40f00837bb8747701e81ac9f17db6ad96a17208c84b018227a7456719be9",
     "provenance_version": 1,
     "pinner": {
       "tool": "mcp-warden",
-      "tool_version": "0.3.0",
+      "tool_version": "1.2.0",
       "actor": null,
       "environment": null
     },
@@ -130,9 +137,10 @@
         "actor": "ci-bot@example.invalid",
         "role": "approver",
         "method": "manual",
-        "created_at": "2026-06-09T21:24:46Z",
-        "bound_digest": "sha256:cb20a16ce572cca8f682672c42036e351359d32ca8265e5af3bfc861ab6f9219",
-        "note": null
+        "created_at": "2026-10-02T02:32:29Z",
+        "bound_digest": "sha256:5d7b40f00837bb8747701e81ac9f17db6ad96a17208c84b018227a7456719be9",
+        "note": null,
+        "signature_bundle": null
       }
     ],
     "rotated_at": null,

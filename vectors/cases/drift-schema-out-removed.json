@@ -1,0 +1,83 @@
+{
+  "id": "drift/schema-out-removed",
+  "kind": "drift",
+  "description": "Output-schema commitment with structural classification.",
+  "lock": {
+    "schema_version": 4,
+    "warden_version": "0.0.0",
+    "server": {
+      "command": "python",
+      "args": [
+        "server.py"
+      ],
+      "url": null,
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [
+      {
+        "name": "t",
+        "description_hash": "sha256:12ae32cb1ec02d01eda3581b127c1fee3b0dc53572ed6baf239721a03d82e126",
+        "input_schema_hash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {}
+        },
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+        "output_schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": null,
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "entry_digest": "sha256:eae21e6a44a86b2f68ce0d8f51b42e7efefcda2eb610403b8f3312aead3b859a"
+      }
+    ],
+    "resources": [],
+    "prompts": [],
+    "findings": [],
+    "overall_digest": "sha256:bc70055828e9dfcb36e22fa5175cb99020b414c62ad6e9880088e6195b1dc14a",
+    "pin": {
+      "created_at": "2026-01-01T00:00:00Z",
+      "warden_version": "0.0.0",
+      "mcp_protocol_version": "2025-06-18",
+      "approved": false,
+      "approver": null,
+      "approved_at": null,
+      "approved_digest": null,
+      "provenance_version": 1,
+      "pinner": null,
+      "attestations": [],
+      "rotated_at": null,
+      "rotation_count": 0
+    }
+  },
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [
+      {
+        "name": "t",
+        "outputSchema": null
+      }
+    ],
+    "resources": [],
+    "prompts": []
+  },
+  "expect": [
+    {
+      "drift_class": "schema-out-removed",
+      "severity": "high",
+      "target": "tools/t",
+      "detail": null
+    }
+  ]
+}

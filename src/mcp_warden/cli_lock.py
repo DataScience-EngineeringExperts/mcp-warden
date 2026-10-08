@@ -61,7 +61,8 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         # OWN stored entries. A mismatch means the lock was hand-edited / tampered
         # — rotate must never "launder" it by re-stamping; refuse and re-pin.
         recomputed = compute_overall_digest(
-            lock_doc.server, lock_doc.tools, lock_doc.resources, lock_doc.prompts
+            lock_doc.server, lock_doc.tools, lock_doc.resources, lock_doc.prompts,
+            schema_version=lock_doc.schema_version,
         )
         if recomputed != lock_doc.overall_digest:
             err_console.print(

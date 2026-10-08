@@ -1,17 +1,10 @@
 # =============================================================================
 # Release & publish workflow (v1.0 — W1.1 / W1.2 / W2.3)
 #
-# !!! INERT UNTIL CONFIGURED — SAFE TO MERGE !!!
-#
-# This workflow does NOTHING until BOTH of the following are true:
-#   (a) a GitHub *Release* is published (a pushed git tag ALONE does not trigger
-#       it — the trigger is `release: published`, the explicit human gesture), AND
-#   (b) the `mcp-warden-cli` PyPI project + its Trusted Publisher (OIDC) are configured
-#       by the owner (see RELEASING.md "One-time PyPI setup").
-#
-# Until (a) AND (b) hold, merging this file changes nothing at runtime: no tag is
-# cut here, no version is bumped here, nothing is published here. Cutting v1.0.0 is
-# then a single tag + GitHub Release away (the full runbook is in RELEASING.md).
+# A published GitHub Release builds and signs artifacts. Production uploads
+# additionally require the existing PyPI Trusted Publisher and enabled repo gate.
+# A pushed tag alone does not trigger publication. Manual choices are TestPyPI,
+# build-only, or a production authentication-only check that uploads nothing.
 #
 # What it does WHEN a Release is published:
 #   build         — builds sdist + wheel, uploads them as workflow artifacts.
@@ -41,18 +34,23 @@ on:
   release:
     types: [published]
 
-  # Manual escape hatch for a dry run to TestPyPI (no Release required, no signing,
-  # no production PyPI). Nice-to-have; kept deliberately simple.
+  # Manual TestPyPI/build-only paths and an authentication-only production check.
   workflow_dispatch:
     inputs:
       publish-target:
-        description: "Where to publish on a manual run"
+        description: "TestPyPI upload, build-only, or production OIDC verification (no upload)"
         required: true
         default: "testpypi"
         type: choice
         options:
           - testpypi
           - none
+          - verify-pypi
+      publisher-checked:
+        description: "verify-pypi only: inspected existing project publisher and no matching pending publisher in owner account"
+        type: boolean
+        required: true
+        default: false
 
 # Least-privilege at the top level; each job widens scope locally only as needed.
 permissions:
@@ -65,6 +63,7 @@ jobs:
   # --------------------------------------------------------------------------
   build:
     name: Build sdist + wheel
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.publish-target != 'verify-pypi'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -95,6 +94,37 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+      - name: Set up Node 22
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/lock-ts/package-lock.json
+
+      - name: Test and pack TypeScript verifier
+        working-directory: packages/lock-ts
+        run: |
+          npm ci
+          npm test
+          mkdir -p ../../node-dist
+          npm pack --pack-destination ../../node-dist
+
+      - name: Checksum Python and TypeScript release artifacts
+        run: |
+          python - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+          artifacts = sorted([*Path("dist").glob("*.whl"), *Path("dist").glob("*.tar.gz"), *Path("node-dist").glob("*.tgz")])
+          Path("node-dist/SHA256SUMS").write_text("".join(f"{sha256(p.read_bytes()).hexdigest()}  {p.name}\n" for p in artifacts))
+          PY
+
+      - name: Upload TypeScript and checksum artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: lock-ts
+          path: node-dist/
+          if-no-files-found: error
+
   # --------------------------------------------------------------------------
   # Job 2: publish to PyPI via OIDC Trusted Publishing.
   #
@@ -107,7 +137,7 @@ jobs:
   #
   # On a `release: published` run -> production PyPI.
   # On a manual `workflow_dispatch` with publish-target=testpypi -> TestPyPI only.
-  # publish-target=none short-circuits (build + artifacts only).
+  # publish-target=none builds only; verify-pypi skips the build and upload jobs.
   # --------------------------------------------------------------------------
   pypi-publish:
     name: Publish to PyPI (OIDC Trusted Publishing)
@@ -128,7 +158,7 @@ jobs:
     if: >-
       vars.PYPI_TRUSTED_PUBLISHER == 'true' &&
       (github.event_name == 'release' ||
-       (github.event_name == 'workflow_dispatch' && github.event.inputs.publish-target != 'none'))
+       (github.event_name == 'workflow_dispatch' && github.event.inputs.publish-target == 'testpypi'))
 
     steps:
       - name: Download dist artifacts
@@ -158,6 +188,32 @@ jobs:
           repository-url: https://test.pypi.org/legacy/
           # Re-running a dry run no-ops on an already-uploaded TestPyPI version.
           skip-existing: true
+
+  # Authentication-only production check: no build, upload, signing or stored token.
+  # Uses this SAME workflow identity and no deployment environment, like publication.
+  pypi-verify:
+    name: Verify PyPI OIDC (no upload)
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish-target == 'verify-pypi'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      WARDEN_PYPI_PUBLISHER_CONFIRMED: ${{ github.event.inputs.publisher-checked }}
+    steps:
+      - name: Require reviewed main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo '::error::Production verification requires reviewed main.'
+          exit 1
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python 3.11
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+      - name: Verify production OIDC exchange without uploading
+        run: python scripts/verify_pypi_oidc.py
 
   # --------------------------------------------------------------------------
   # Job 3: sign the release artifacts with Sigstore keyless ("heal thyself", W2.3).
@@ -190,10 +246,16 @@ jobs:
           name: dist
           path: dist/
 
-      - name: Sign sdist + wheel and attach bundles to the Release
+      - name: Download TypeScript and checksum artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: lock-ts
+          path: dist/
+
+      - name: Sign release artifacts and attach bundles to the Release
         uses: sigstore/gh-action-sigstore-python@790bc6befb9d733738f18d8f895854b453640ec9 # v3.5.0
         with:
-          inputs: ./dist/*.tar.gz ./dist/*.whl
+          inputs: ./dist/*.tar.gz ./dist/*.whl ./dist/*.tgz ./dist/SHA256SUMS
           # Self-check: verify what we just signed against THIS workflow's own
           # identity so a broken run never publishes a bad bundle.
           verify: true

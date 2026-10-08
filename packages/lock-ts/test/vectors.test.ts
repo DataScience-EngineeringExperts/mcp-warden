@@ -90,6 +90,30 @@ test("manifest shape", () => {
   assert.equal(new Set(manifest.vectors.map((v) => v.id)).size, manifest.vectors.length);
 });
 
+test("metadata-only mutation blocks through the public verifier", () => {
+  const v = load(manifest.vectors.find((e) => e.id === "digest/tool-metadata-full")!);
+  const lock = lockFromDigestVector(v);
+  const surface = v["surface"] as Surface;
+  const changed = structuredClone(surface);
+  changed.tools![0].annotations = { destructiveHint: true, readOnlyHint: true, title: "Record" };
+  assert.ok(verify(lock, changed).findings.some((d) => d.drift_class === "tool-annotations-modified"));
+  changed.tools![0].annotations = surface.tools![0].annotations;
+  changed.tools![0].outputSchema = { type: "object", properties: { value: { type: ["string", "number"], maxLength: 64 } }, required: ["value"] };
+  assert.ok(verify(lock, changed).findings.some((d) => d.drift_class === "schema-out-type-broadened"));
+});
+
+test("malformed observed metadata cannot silently normalize to absence", () => {
+  const v = load(manifest.vectors.find((e) => e.id === "digest/tool-metadata-full")!);
+  const lock = lockFromDigestVector(v);
+  for (const key of ["annotations", "outputSchema"] as const) {
+    for (const value of [[], "not-an-object", true]) {
+      const surface = structuredClone(v["surface"]) as Surface;
+      surface.tools![0][key] = value;
+      assert.throws(() => verify(lock, surface), LockFormatError);
+    }
+  }
+});
+
 for (const entry of manifest.vectors) {
   test(entry.id, () => {
     const v = load(entry);

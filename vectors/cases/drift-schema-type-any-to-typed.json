@@ -3,7 +3,7 @@
   "kind": "drift",
   "description": "any -> typed is a narrowing (low); typed -> any is a broadening (high).",
   "lock": {
-    "schema_version": 3,
+    "schema_version": 4,
     "warden_version": "0.0.0",
     "server": {
       "command": "python",
@@ -51,13 +51,16 @@
             }
           }
         },
-        "entry_digest": "sha256:e2235490b06847445b96cdf5ff6ff27c70a8858d12d91b9db3e897c6c1260899"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:6221ebac367e2b387195c0d9b1ecf18e9e85755427434da6ab0f101c9c0a42d2"
       }
     ],
     "resources": [],
     "prompts": [],
     "findings": [],
-    "overall_digest": "sha256:a40c514127abb67c7965523a88f60c55921bf2817554b6126c23b10f231eccd7",
+    "overall_digest": "sha256:8b97888c706317ccf17f7af214b89e405fc2e44eedaf6f3c9bae4e6083795347",
     "pin": {
       "created_at": "2026-01-01T00:00:00Z",
       "warden_version": "0.0.0",

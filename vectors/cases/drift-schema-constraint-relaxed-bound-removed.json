@@ -3,7 +3,7 @@
   "kind": "drift",
   "description": "Removing an upper bound relaxes; adding a lower bound tightens.",
   "lock": {
-    "schema_version": 3,
+    "schema_version": 4,
     "warden_version": "0.0.0",
     "server": {
       "command": "python",
@@ -44,13 +44,16 @@
             }
           }
         },
-        "entry_digest": "sha256:b168ac2d98713763fc21bb84f2478fd06eb20dcac982d419f2c27d5ffd949283"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:685eab49e7c974532a4f5ff90e5956c301d3eb00285a7e58d3369664f5b872a0"
       }
     ],
     "resources": [],
     "prompts": [],
     "findings": [],
-    "overall_digest": "sha256:9002475f2bac4aa37f7c916e9f8f154ff69eb1cb9369ea07c1b8c2f91c15b6a6",
+    "overall_digest": "sha256:f3edb104245d78d5ac3c0d2384f7bffa7fbb60bee9cf7c93c81858b3be4e757a",
     "pin": {
       "created_at": "2026-01-01T00:00:00Z",
       "warden_version": "0.0.0",

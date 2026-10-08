@@ -9,7 +9,7 @@ import { checkDepth, cmpCodepoint, isPlainObject } from "./py.js";
 import { extractSkeleton, skeletonFromJson, type Skeleton } from "./skeleton.js";
 
 /** The format level this verifier implements (SPEC.md §14). */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export class LockFormatError extends Error {}
 
@@ -20,6 +20,9 @@ export interface LockToolEntry {
   capabilities: string[];
   inspection: Record<string, unknown> | null;
   schema_skeleton: Skeleton | null;
+  annotations_hash: string | null;
+  output_schema_hash: string | null;
+  output_schema_skeleton: Skeleton | null;
   entry_digest: string;
 }
 
@@ -55,7 +58,7 @@ export interface Surface {
   command?: string;
   args?: string[];
   url?: string | null;
-  tools?: Array<{ name: string; description?: string | null; inputSchema?: unknown }>;
+  tools?: Array<{ name: string; description?: string | null; inputSchema?: unknown; annotations?: unknown; outputSchema?: unknown }>;
   resources?: Array<{ uri: string; name?: string | null; description?: string | null; mimeType?: string | null }>;
   prompts?: Array<{ name: string; description?: string | null; arguments?: unknown[] | null }>;
 }
@@ -67,6 +70,9 @@ export interface BuiltTool {
   input_schema_hash: string;
   capabilities: string[];
   schema_skeleton: Skeleton;
+  annotations_hash: string;
+  output_schema_hash: string;
+  output_schema_skeleton: Skeleton | null;
   entry_digest: string;
 }
 
@@ -110,9 +116,16 @@ function obj(v: unknown, where: string): Record<string, unknown> {
   return v;
 }
 
-function toolEntry(raw: unknown, i: number): LockToolEntry {
+function toolEntry(raw: unknown, i: number, schemaVersion: number): LockToolEntry {
   const o = obj(raw, `tools[${i}]`);
   const w = `tools[${i}]`;
+  if (schemaVersion >= 4) {
+    for (const key of ["annotations_hash", "output_schema_hash"]) str(o, key, w);
+    if (!("output_schema_skeleton" in o)) fail(`${w}.output_schema_skeleton is required`);
+  }
+  for (const key of ["annotations_hash", "output_schema_hash"]) {
+    if (o[key] !== undefined && o[key] !== null && typeof o[key] !== "string") fail(`${w}.${key} must be a string or null`);
+  }
   const caps = arr(o, "capabilities", w);
   if (!caps.every((c) => typeof c === "string")) fail(`${w}.capabilities must be strings`);
   const inspection = o["inspection"];
@@ -130,6 +143,9 @@ function toolEntry(raw: unknown, i: number): LockToolEntry {
     capabilities: caps as string[],
     inspection: inspection === undefined || inspection === null ? null : inspection,
     schema_skeleton: skeleton,
+    annotations_hash: (o["annotations_hash"] ?? null) as string | null,
+    output_schema_hash: (o["output_schema_hash"] ?? null) as string | null,
+    output_schema_skeleton: skeletonFromJson(o["output_schema_skeleton"]),
     entry_digest: str(o, "entry_digest", w),
   };
 }
@@ -202,7 +218,7 @@ function parseLockStrict(doc: unknown): Lock {
       url: url === undefined ? null : url,
       command_digest: str(server, "command_digest", "server"),
     },
-    tools: arr(o, "tools", "lock").map(toolEntry),
+    tools: arr(o, "tools", "lock").map((entry, i) => toolEntry(entry, i, sv)),
     resources: arr(o, "resources", "lock").map(resourceEntry),
     prompts: arr(o, "prompts", "lock").map(promptEntry),
     findings: arr(o, "findings", "lock"),
@@ -239,12 +255,18 @@ export function buildFromSurface(surface: Surface): BuiltLock {
   const tools: BuiltTool[] = (surface.tools ?? [])
     .map((t) => {
       const schema = isPlainObject(t.inputSchema) ? t.inputSchema : null;
+      for (const key of ["annotations", "outputSchema"] as const) {
+        if (t[key] !== undefined && t[key] !== null && !isPlainObject(t[key])) fail(`tool.${key} must be an object or null`);
+      }
       const body = {
         name: t.name,
         description_hash: hashDescription(t.description),
         input_schema_hash: hashInputSchema(schema),
         capabilities: deriveCapabilities(t.name, schema),
         schema_skeleton: extractSkeleton(t.inputSchema),
+        annotations_hash: hashValue(t.annotations ?? null),
+        output_schema_hash: hashValue(t.outputSchema ?? null),
+        output_schema_skeleton: t.outputSchema === undefined || t.outputSchema === null ? null : extractSkeleton(t.outputSchema),
       };
       return { ...body, entry_digest: hashValue(body) };
     })

@@ -2,6 +2,23 @@
 
 **Status:** v0.1 security contract + v0.2 per-tool inspection addendum (§11).
 Implementation-ready.
+
+**Schema level 4 (DSE-1539):** Fresh tool entries add annotations_hash,
+output_schema_hash, and output_schema_skeleton to their hashed body. The hashes
+commit complete wire objects with JCS/SHA-256; absent/null is JSON null, distinct
+from {}. Non-null non-object values are refused. The output skeleton uses the input
+extraction, participates in entry_digest, and is null when the schema is absent.
+V4 readers require both hash strings and the skeleton field. Historical v1–v3
+documents retain their fields and remain readable; fresh v4 bodies extend the
+earlier formulas below. [SPEC §7.1](SPEC.md#71-tool-entry-array-sorted-by-name)
+defines the current field set and [§8](SPEC.md#8-overall-digest-and-drift) the new
+annotation/output drift classes.
+
+Annotations remain untrusted declarations and grant no permissions. Output schemas
+do not certify content. Raw metadata is not stored; top-level title/icons/_meta stay
+excluded. Migration requires review/re-pin: approved legacy locks keep high
+unapproved-change plus the advisory; unapproved legacy locks also get a migration
+finding. Historical signatures cannot extend approval to the new commitments.
 **Purpose:** Define the on-disk baseline that `pin` writes and `check` verifies, the
 exact canonicalization + hashing so the two are bit-reproducible, and the precise
 definition of "drift." **§11 (v0.2)** adds optional, deterministic per-tool inspection

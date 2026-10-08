@@ -27,6 +27,8 @@ class _Tool:
         self.name = name
         self.description = desc
         self.input_schema = schema or {"type": "object", "properties": {"q": {"type": "string"}}}
+        self.annotations = None
+        self.output_schema = None
 
 
 # --- fail-safe defaults (absent => max protection) ---------------------------
@@ -55,20 +57,20 @@ def test_absent_policy_ansi_strict_secret_block_url_note():
     assert secret and secret[0].tier == "block"
 
 
-# --- digest inclusion: absent inspection hashes identically to v0.1 ----------
+# --- digest inclusion: absent inspection does not change a current-format entry ----------
 
 
-def test_tool_entry_without_inspection_hashes_identically_to_v01():
-    """A tool with no inspection block must hash byte-identically to v0.1."""
+def test_tool_entry_without_inspection_hashes_identically_to_explicit_none():
+    """Omitting inspection and explicitly passing None have identical current-format hashes."""
     t = _Tool("read_file")
-    # Build the entry the way a v0.1 build would (no inspection arg at all).
-    v01_like = _tool_entry(t)
+    # Build the current-format entry without an inspection arg.
+    without_inspection = _tool_entry(t)
     # Build it again with explicit inspection=None.
-    v02_none = _tool_entry(t, inspection=None)
-    assert v01_like.entry_digest == v02_none.entry_digest
+    explicit_none = _tool_entry(t, inspection=None)
+    assert without_inspection.entry_digest == explicit_none.entry_digest
     # Adding an inspection block CHANGES the digest.
-    v02_with = _tool_entry(t, inspection={"expected_output_charset": "text"})
-    assert v02_with.entry_digest != v01_like.entry_digest
+    with_inspection = _tool_entry(t, inspection={"expected_output_charset": "text"})
+    assert with_inspection.entry_digest != without_inspection.entry_digest
 
 
 def test_overall_digest_unchanged_when_no_inspection():

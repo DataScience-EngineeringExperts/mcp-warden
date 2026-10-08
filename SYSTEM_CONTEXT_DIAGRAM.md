@@ -1,5 +1,15 @@
 # mcp-warden — System Context Diagram
 
+Last Updated: 2026-10-04
+
+**CLI 2.0.0 / schema level 4** extends capture/lock/check to complete tool annotations and output
+schemas, with structural output drift and Python/TypeScript parity. The existing
+tools/list gate compares those commitments for v4 locks; legacy locks retain narrower
+runtime coverage and require re-pin for the new fields. Annotations grant no authority.
+The [Warden checkpoint proposal](docs/plans/2026-10-02-tool-integrity-upgrade.md)
+shows a future kernel beneath prompt/retrieval/code/serverless adapters with signing
+authority outside agent-editable state. It does not expand current runtime claims.
+
 Where mcp-warden sits, what it talks to, and where its outputs go. The **definition-only
 path introduced in v0.1** (`pin`/`check`/`policy`) is read-only: it captures the
 *declared* surface and writes a baseline + machine reports — no proxy, no runtime
@@ -23,10 +33,17 @@ logic) plus a separate informational provenance section. It never prints raw
 > is the normative contract. DSE-715 implements the isolated content-envelope foundation.
 > DSE-716 implements isolated signed policy/runtime/adapter/bundle activation, exact
 > adapter/bundle lease binding, deterministic PDP, evidence-gated PEP, frozen handler identity,
-> and fixed-corpus adapter-conformance APIs. None is wired into `guard`; the default evidence gate denies
-> effects. DSE-717 is in progress (its protected-state contract is implemented in an isolated
-> branch), but it must still deliver durable signed evidence, fallback, rollback-resistant state,
-> and the recovery latch. The current `guard` path is not represented as ATK-conformant.
+> and fixed-corpus adapter-conformance APIs. V1's default evidence gate denies effects.
+> DSE-717 adds a separate [V2 receipt foundation](docs/DECISION_RECEIPTS.md): signed primary
+> evidence, independent fallback, strengthening rules, finite overrides, protected-state/latch
+> ports, recovery, replay and a mandatory reference failure corpus. No kernel API is wired into
+> `guard`; real protected-platform restart/rollback gates remain unsupported by the reference
+> providers. The current `guard` path is not represented as ATK-conformant.
+
+> The opt-in [artifact verifier](docs/ARTIFACT_TRUST.md) implements DSE-716's external
+> signature port using pinned Ed25519 public keys and explicit artifact-kind roles.
+> `trust prepare` emits unsigned review/signing bytes; `trust verify` checks signatures
+> only. Human signing remains external and the root pin must be host-protected.
 
 > `conclave` (the 4-model adversarial council referenced in `docs/THREAT_MODEL.md`)
 > is a **dev-time design reviewer** that shaped this contract. It is **NOT** a
@@ -74,6 +91,15 @@ logic) plus a separate informational provenance section. It never prints raw
 > the same way ("heal thyself"). Signing is the optional `mcp-warden-cli[sigstore]` extra — the
 > core gate has no crypto dependency.
 
+> **Release authentication:** `release.yml` keeps production uploads behind the existing
+> OIDC publisher and repo gate. Manual `verify-pypi` checks only the credential exchange;
+> build, upload and signing jobs are skipped. The script logs neither identity nor upload
+> tokens, requires reviewed `main` and an owner publisher-inspection acknowledgment.
+> Minting can change PyPI pending-publisher records; it is not universally read-only.
+> Successful exchange is not proof of project upload permission. CLI 2.0.0's
+> failed OIDC exchange was recovered with an authorized manual upload of the signed bytes;
+> publisher alignment must be verified independently. See [`RELEASING.md`](RELEASING.md).
+
 ---
 
 ## C1 — System context
@@ -90,9 +116,11 @@ flowchart TB
 
     envelope["Content Envelope V1\nDSE-715 · implemented evidence foundation\nNOT wired to guard · grants no authority"]
     decision["Deterministic PDP/PEP V1\nDSE-716 · signed adapter/bundle gates + fixed corpus\nNOT wired to guard"]
-    evidence["Durable evidence + recovery state\nDSE-717 · IN PROGRESS\ncurrent default gate denies effects"]
+    artifactTrust["Opt-in Ed25519 artifact verifier\nartifact_trust.py · protected root pin + key roles\ntrust CLI: unsigned preparation / signature verification"]
+    evidence["PEP V2 · signed evidence before effect\nDSE-717 reference SDK · recovery + replay\nnine live floors · retained historical signer pins\nindependent platform provider still required"]
     atk -. "governs partial foundation" .-> envelope
     envelope -. "required input" .-> decision
+    artifactTrust -. "external signature verification port" .-> decision
     decision -. "requires production gate" .-> evidence
 
     subgraph ci["CI pipeline (GitHub Actions / local)"]
@@ -177,8 +205,8 @@ sequenceDiagram
     end
 ```
 
-> `compute_drift` structurally classifies tool `inputSchema` changes via the normalized
-> `schema_skeleton` stored in the lock (`schema_version` 3 — skeleton added at v2, in-document
+> `compute_drift` structurally classifies tool `inputSchema` and v4 `outputSchema` changes via the normalized
+> `schema_skeleton` stored in the lock (`schema_version` 4 — annotations/output added at v4, skeleton added at v2, in-document
 > `$ref` resolution at v3, #29): each security-relevant mutation is a per-fact
 > `WRD-DRIFT-SCHEMA-*` item (`docs/WARDEN_LOCK_SCHEMA.md` §6.2). v1 locks fall
 > back to a single high-severity `schema-modified` until re-pinned.
@@ -254,7 +282,7 @@ sequenceDiagram
     CI->>CI: intersect with pin — unpinned id ignored (warn), divergent identity → exit 2
     CI->>CI: confine paths under corpus root · size caps · schema_version == implemented
     CI->>SG: verify each bundle over build_statement(overall_digest, DIRECTORY coordinate) for the pinned identity/issuer
-    SG-->>CI: ok / raise (any raise → UNVERIFIABLE, exit 2; relocated signature fails here)
+    SG-->>CI: ok / raise (any raise → UNVERIFIABLE, exit 2, relocated signature fails here)
     CI->>CI: lock entries must reproduce overall_digest → derive surface_digest
     CI->>CI: MATCH(≥ --min-attesters) · INSUFFICIENT(0) · NOVEL(0) · MISMATCH(1) · SPLIT(1) — "consensus attests observation, not safety"
 ```

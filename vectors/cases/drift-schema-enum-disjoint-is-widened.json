@@ -3,7 +3,7 @@
   "kind": "drift",
   "description": "Same size but different members counts as widening.",
   "lock": {
-    "schema_version": 3,
+    "schema_version": 4,
     "warden_version": "0.0.0",
     "server": {
       "command": "python",
@@ -44,13 +44,16 @@
             }
           }
         },
-        "entry_digest": "sha256:c0f73b86d221bddb7998df88692d5bf939926d540d315686cebc1ef9a29eb041"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:30708f3b94f06cc2cc003e6d458f1c5f0de75487ebd4c14c5f6b2b6a36206dbf"
       }
     ],
     "resources": [],
     "prompts": [],
     "findings": [],
-    "overall_digest": "sha256:9372b30a06253525070e39981b1d0429800bc44713d4d161065cefa337aaa1e4",
+    "overall_digest": "sha256:34139eab0fddee4df789fe216d83bc427aab8abebab97eed114863db2fa927d1",
     "pin": {
       "created_at": "2026-01-01T00:00:00Z",
       "warden_version": "0.0.0",

@@ -30,6 +30,75 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+### Decision receipt foundation
+
+- Add protocol-neutral V2 enforcement with independently authorized signed decision
+  receipts before allowed effects, strengthening rules and exact finite noncritical
+  overrides. Every negative path attempts evidence; failed allow evidence creates a
+  separately bound deny and never invokes the handler.
+- Add independent primary/fallback logs, protected-state and recovery-latch ports,
+  recovery with administrator approval, verified receipt chains, pure historical replay,
+  separate current eligibility and safe human/agent projections.
+- Add mandatory receipt failure/restart corpus and property fuzzing. Reference
+  providers remain unsupported for real platform rollback resistance; live `guard`
+  integration and whole-kernel conformance remain separate gates.
+- Harden frozen handlers against nested serialized code. Handler identity supports
+  CPython 3.11–3.13 only, with a dedicated CI matrix; other interpreters fail closed
+  at this SDK boundary. Existing artifact-signature domains and V1 defaults remain.
+
+### Artifact trust foundation
+
+- Add opt-in Ed25519 verification for existing policy, runtime, adapter and
+  executable-bundle activation APIs, with an independently pinned public-key
+  configuration and explicit artifact-kind signer roles.
+- Add `trust roots-digest`, `trust prepare` and `trust verify` for enrollment
+  inspection, unsigned canonical review/signing artifacts, and offline signature
+  checks. Human signing stays external; signature validity alone does not permit
+  effects. Durable receipts and live guard integration remain separate work.
+
+### Release engineering
+
+- Add a manual `verify-pypi` production OIDC exchange check in the existing release
+  workflow, without building, signing, uploading or storing credentials. Identity
+  mismatches, redirects, failed exchanges and malformed responses fail closed.
+- Correct release documentation: existing-project publisher setup, non-reserving
+  pending publishers, 2.0.0's manual recovery, and unchanged-artifact failed-job reruns.
+
+## [2.0.0] — 2026-10-02
+
+### Breaking compatibility
+
+- CLI 2.0.0 and TypeScript verifier 0.2.0 implement schema level 4. Existing v1–v3
+  locks remain readable, but operators must review and re-pin before v4 approval.
+  Historical signatures must not be treated as approval for the expanded surface.
+- The GitHub Release ships the npm-installable TypeScript tarball, signed by the
+  same release identity as the Python artifacts, with SHA-256 checksums.
+  This is GitHub artifact distribution, not an npm registry publication.
+
+### Fixed — release validation
+
+- Refresh the dev/CI and Action dependency locks from PyJWT 2.13.0 to 2.15.1
+  with artifact hashes; the audited closure passes without advisory suppression.
+- Re-capture the three committed public examples at schema level 4 using the same
+  pinned server versions. Their prior fields are unchanged; new commitments are
+  reviewed example baselines, not transferred historical signatures.
+
+### Added — tool metadata integrity (DSE-1539)
+
+- Schema level **4** commits complete tool annotations and output schemas, including
+  output structural skeletons. Hint flips/removal and output changes cause drift;
+  schema-out-* classes distinguish structural/cosmetic changes. Python/TypeScript
+  share the vectors. The runtime tools/list gate compares new commitments for v4.
+- Missing/null hashes JSON null; {} is distinct. Invalid object fields and v4 locks
+  omitting commitments are refused. Raw annotations are not rendered, and hints
+  grant no capability or proof of behavioral safety.
+- V1–v3 locks remain readable. Approved legacy locks retain unapproved-change plus
+  migration; unapproved old locks also fail migration rather than claiming coverage.
+  Review/re-pin/re-approve for v4; historical signatures do not carry across.
+  Lock rotation preserves recorded schema.
+- The human checkpoint and protocol-neutral Warden direction over prompts, retrieval,
+  code, and serverless adapters are documented proposals, not shipped guarantees.
+
 ### Changed
 
 - **`mcp` SDK 2.x is now supported — the `<2` cap from #92 is lifted to `<3` (supersedes

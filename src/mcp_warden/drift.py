@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+from .drift_tool_metadata import metadata_changes
 from .models import (
     PromptEntry,
     ResourceEntry,
@@ -126,6 +127,10 @@ def _diff_tools(baseline: list[ToolEntry], current: list[ToolEntry]) -> list[Dri
         schema_changed = b.input_schema_hash != c.input_schema_hash
         if schema_changed:
             items.extend(_diff_tool_schema(name, target, b, c))
+        items.extend(
+            DriftItem(cls, severity, target, f"Tool '{name}' {message}", detail)
+            for cls, severity, message, detail in metadata_changes(b, c)
+        )
 
         added_caps = sorted(set(c.capabilities) - set(b.capabilities))
         removed_caps = sorted(set(b.capabilities) - set(c.capabilities))
@@ -231,6 +236,14 @@ def compute_drift(baseline: WardenLock, current: WardenLock) -> list[DriftItem]:
     items.extend(_diff_tools(baseline.tools, current.tools))
     items.extend(_diff_resources(baseline.resources, current.resources))
     items.extend(_diff_prompts(baseline.prompts, current.prompts))
+
+    # An unapproved legacy lock also lacks commitments to the newly covered
+    # metadata. Never report a clean v4 check against that unknown baseline.
+    if baseline.schema_version < 4 <= current.schema_version and not baseline.pin.approved:
+        items.append(DriftItem(
+            "schema-version-migrated", "low", "pin/approved_digest",
+            "Legacy lock does not commit tool annotations/outputSchema; review and re-pin under schema v4",
+        ))
 
     # Unapproved-change finding (§8): approved baseline whose attested digest no
     # longer matches the recomputed surface.

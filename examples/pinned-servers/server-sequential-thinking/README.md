@@ -37,3 +37,8 @@ Exit 0 = surface matches the lock. Exit 1 = drift. Exit 2 = capture error.
   it never registers as drift.
 - `command_digest` hashes the literal launch argv, so this lock verifies
   identically on any machine.
+
+The committed example was re-captured at **schema level 4** on 2026-10-02,
+including complete tool annotations and output schemas. The approver is an
+obviously synthetic example identity; this lock is a reproducible demonstration,
+not an authenticated human authorization receipt.

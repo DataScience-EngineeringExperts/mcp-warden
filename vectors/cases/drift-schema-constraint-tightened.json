@@ -3,7 +3,7 @@
   "kind": "drift",
   "description": "maxLength down + additionalProperties object -> false are both tightenings (low).",
   "lock": {
-    "schema_version": 3,
+    "schema_version": 4,
     "warden_version": "0.0.0",
     "server": {
       "command": "python",
@@ -46,13 +46,16 @@
             }
           }
         },
-        "entry_digest": "sha256:8f7ead1c3f00cf5682dec0fd36255f7ce755417db1768f1bf95393e0a61e4ac5"
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:e5022b07f23de8bb1f66a8dbdbac44f25a201a5a3f7260d0d7c1c1dad6a580e1"
       }
     ],
     "resources": [],
     "prompts": [],
     "findings": [],
-    "overall_digest": "sha256:abed128e8d40f45fcb2e616a622fdc66cc384f2a172014cf537b8d4a3a280e0e",
+    "overall_digest": "sha256:0f4d50cf996f012a894c54b935d094079e6ea1de5c5b2c236c6ce60dddb2947c",
     "pin": {
       "created_at": "2026-01-01T00:00:00Z",
       "warden_version": "0.0.0",

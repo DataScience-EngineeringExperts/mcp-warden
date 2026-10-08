@@ -1,5 +1,7 @@
 # mcp-warden
 
+Last Updated: 2026-10-04
+
 [![CI](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml/badge.svg)](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
@@ -10,11 +12,31 @@
 tool/resource/prompt surface into a signed `warden.lock`, then fails CI when that surface
 drifts.** `pin` and `check` support stdio and Streamable HTTP; `guard` is stdio-only.
 
+**CLI 2.0.0 / schema level 4** locks complete tool annotations and output schemas. Changing
+destructiveHint, removing a result schema, or widening its types now triggers drift;
+the existing runtime tools/list gate checks these fields against v4 locks too.
+Older locks stay readable, but require review and re-pinning for this coverage.
+Hints are server claims, not proof of safety, and schemas do not certify content. Release
+operators can check production OIDC without uploading via [`RELEASING.md`](RELEASING.md).
+
+The proposed next direction is a protocol-neutral **Warden**: human-approved tool versions and bounded actions, with untrusted inputs kept separate from authority.
+The [upgrade plan and checkpoint proposal](docs/plans/2026-10-02-tool-integrity-upgrade.md)
+maps prompts, retrieval, code execution, and serverless adapters to existing Agent
+Trust Kernel work. Those broader checkpoints are proposals, not shipped guarantees.
+
+The opt-in [artifact trust foundation](docs/ARTIFACT_TRUST.md) adds public-key
+verification for the existing kernel activation APIs and `trust` CLI commands
+to prepare unsigned review artifacts and verify external signatures. Keys and
+signer roles require an independently protected root pin. This development
+feature is not in the published 2.0.0 package. The development
+[decision receipt foundation](docs/DECISION_RECEIPTS.md) adds signed evidence,
+governed decisions and recovery ports. Live checkpoint enforcement still requires
+an independently protected platform provider and DSE-1076 guard integration.
+
 > ⚠️ **Install `mcp-warden-cli`, not `mcp-warden`.** The PyPI name `mcp-warden` is
 > an **unrelated package by a different author** — it is not this project. The
 > correct install is `pip install mcp-warden-cli` (the CLI command is still
-> `mcp-warden`). Or use the [GitHub Action](#github-action-one-step-drop-in) / a
-> git-pinned install.
+> `mcp-warden`). Or use the [GitHub Action](#github-action-one-step-drop-in) / a git-pinned install.
 
 If you already follow the published guidance — *pin versions, hash tool
 definitions, alert on drift* — mcp-warden is the deterministic tool that does it.
@@ -380,84 +402,31 @@ For stdio, `<server-cmd...>` is passed to the OS as an **argv array, never throu
 shell.** `--url` instead connects to an already-running Streamable HTTP endpoint and
 is mutually exclusive with a server command. Set `WARDEN_LOG_LEVEL=INFO` for diagnostics.
 
-### Runtime result inspection (v0.3 — blocks by default)
+### Runtime result inspection
 
-`guard` sits transparently between an MCP client and server and inspects tool *results*.
-**As of v0.3 the deterministic tier blocks out of the box** (council-established field
-false-positive rate ~0):
-
-```bash
-# Default: ANSI is stripped in place; echoed secrets + exfil domains are error-replaced;
-# a mid-session tools/list swap that diverges from warden.lock is blocked (needs --lock);
-# an argument-policy deny is blocked (needs --policy). The fuzzy injection tier stays log-only.
-mcp-warden guard node ./build/index.js --lock warden.lock --policy policy.yaml --sarif guard.sarif
-
-# Observe-first rollout: --audit-only restores full v0.2 shadow in one flag (detect + log only).
-mcp-warden guard node ./build/index.js --lock warden.lock --audit-only
-
-# Opt a single category back to shadow (still detected/logged/SARIF, frame forwarded):
-mcp-warden guard node ./build/index.js --no-block-ansi --allow-exfil-domain
-# Or shadow the whole deterministic tier + both gates:
-mcp-warden guard node ./build/index.js --no-block-deterministic
-# Opt INTO the fuzzy injection tier (never default):
-mcp-warden guard node ./build/index.js --block-inject-phrase
-
-# Fail-CLOSED (high-security): TERMINATE the session (exit 3, -32003 to the client) if an
-# internal inspection (result / argument-policy / tools-list) cannot complete, instead of the
-# default fail-open pass-through. Opt-in; integrity over availability.
-mcp-warden guard node ./build/index.js --lock warden.lock --policy policy.yaml --strict
-
-# Re-analyze a recorded session offline with the identical rule catalog (always report-only):
-mcp-warden inspect session.trace.jsonl --lock warden.lock --sarif inspect.sarif
-```
-
-**Flag scheme:** opt-out is canonical `--no-block-<category>`
-(`ansi|secret-echo|exfil-domain|list-changed|policy`, plus `--no-block-deterministic` for the
-whole tier); `--allow-exfil-domain` is the sole affirmative alias. Precedence:
-`--audit-only` > `--no-block-*` > default-block / `--block-inject-phrase`. The v0.2
-`--block-*` enable flags are accepted but **inert no-ops** (one-line stderr deprecation note),
-so old scripts keep working. **`--strict`** (opt-in, default off) trades availability for
-integrity: an internal inspection error at the result / argument-policy / tools-list layer
-**terminates the session** (exit `3`, `-32003` non-retriable error to the client) instead of
-failing open — framing/EOF/over-cap stay fail-open in all modes (known limitation). Reserved
-error codes: **`-32001`** (policy/result block), **`-32002`** (transport/lifecycle), **`-32003`**
-(`--strict` abort, non-retriable). See
-[`docs/RESULT_INSPECTION.md`](docs/RESULT_INSPECTION.md),
-[`docs/GUARD_PROXY.md`](docs/GUARD_PROXY.md), and
-[`docs/GUARD_PROXY_V3.md`](docs/GUARD_PROXY_V3.md).
+`guard` inspects stdio tool results and blocks deterministic hazards by default.
+`--audit-only` restores observation; `--strict` terminates on inspection errors.
+Framing errors still fail open. Prompt-injection phrase matching remains monitor-only.
+See [runtime examples](docs/archive/2026-10-02-runtime-cli-examples.md) and the
+[guard contract](docs/GUARD_PROXY_V3.md) for flags, reserved errors, and limitations.
 
 ---
 
 ## Community consensus — `check --against-community` (phase 1)
 
-A single lock is trust-on-first-use: it cannot tell you the surface was poisoned on
-day one, or that you are being served a surface nobody else
-sees. `--against-community` compares what you just captured with what independent
-attesters **you pin** Sigstore-signed for the same package version:
+Compare a captured surface with Sigstore-signed observations from independently
+pinned attesters. **Consensus attests observation, not safety**; no trusted attestation
+is a pass only when consensus is optional. Pin the corpus revision and your own attesters:
 
 ```bash
 mcp-warden check npx -y @foo/server@1.2.3 --lock warden.lock \
     --against-community --corpus https://github.com/<org>/mcp-warden-locks.git \
     --corpus-ref <40-hex corpus commit> --attesters-file trusted-attesters.json
-#  -> WRD-CONSENSUS-MISMATCH:     observed surface differs from every attested digest … (exit 1)
-#  -> WRD-CONSENSUS-SPLIT:        attesters disagree — corpus or upstream may be compromised (exit 1)
-#  -> WRD-CONSENSUS-NOVEL:        no trusted attestation exists yet (exit 0)
-#  -> WRD-CONSENSUS-INSUFFICIENT: fewer than --min-attesters (default 2) agree (exit 0)
-#  add --require-consensus in CI that EXPECTS the package to be attested: NOVEL and
-#  INSUFFICIENT then exit 1 — a corpus that withholds an entry cannot turn a MISMATCH into a pass
 ```
 
-The trust root is yours: the corpus's `attesters.json` is only a discovery list, and
-without `--attester`/`--attesters-file` the command exits 2. Each signature binds the
-attester identity, the lock digest **and** the package coordinate, so a genuine
-signature cannot be relocated under another package. Everything that cannot be
-established — an unpinned launch, an unpinned trust root, an undeclared attester, a
-missing or failing signature, an unreachable or disallowed corpus URL — is exit 2.
-**Consensus attests observation, not safety**; the CLI says so on every verdict. The
-default `check` path is unchanged when the flag is absent.
-
-Contract, trust model, layout, and the pending phase-2 live corpus:
-[`docs/COMMUNITY_CORPUS.md`](docs/COMMUNITY_CORPUS.md).
+The [community contract](docs/COMMUNITY_CORPUS.md) defines trust and verdicts;
+[advanced examples](docs/archive/2026-10-04-readme-community-consensus.md) explain
+failure codes and `--require-consensus`.
 
 ---
 
@@ -480,14 +449,18 @@ empty `allow_paths` = deny-all. See [`docs/POLICY_MODEL.md`](docs/POLICY_MODEL.m
 
 Agent Trust Kernel development is intentionally isolated from the shipped `guard` path:
 DSE-715's content envelope and DSE-716's deterministic PDP/PEP, exact signed adapter/bundle load
-gates, frozen handler identity, and fixed-corpus adapter harness are implemented foundations, but
-the default evidence gate denies effects. DSE-717 is now in progress: its isolated branch has
-the reviewed receipt/recovery design and protected-state contract, but durable signed receipts,
-fallback evidence, rollback-resistant state, the recovery latch, and any whole-kernel conformance
-claim remain incomplete. See [`docs/POLICY_ENFORCEMENT.md`](docs/POLICY_ENFORCEMENT.md) and
+gates, frozen handler identity, and fixed-corpus adapter harness are implemented foundations.
+V1's default evidence gate denies effects. DSE-717 adds a separate V2 PEP with independently
+authorized signed receipts, strengthening rules, finite noncritical overrides, primary/fallback
+logs, protected-state/recovery ports, pure replay and a mandatory reference failure corpus.
+Reference providers prove local durability and fail-closed ordering; they cannot establish
+platform rollback resistance or whole-kernel conformance. These development APIs are absent
+from the published 2.0.0 package. See [`docs/DECISION_RECEIPTS.md`](docs/DECISION_RECEIPTS.md),
+[`docs/POLICY_ENFORCEMENT.md`](docs/POLICY_ENFORCEMENT.md) and
 [`docs/AGENT_TRUST_KERNEL.md`](docs/AGENT_TRUST_KERNEL.md).
 
-See [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md). The security-contract specs
+See [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md) and
+[`SYSTEM_CONTEXT_DIAGRAM.md`](SYSTEM_CONTEXT_DIAGRAM.md). The security-contract specs
 under `docs/` (including [`GUARD_PROXY_V3.md`](docs/GUARD_PROXY_V3.md) for the v0.3
 default-block + lifecycle contract) are the source of truth for every algorithm; the
 schemas in `warden.lock` and the SARIF output match them byte-for-byte.
@@ -495,7 +468,7 @@ schemas in `warden.lock` and the SARIF output match them byte-for-byte.
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest -q
+PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m pytest -q
 ```
 
 The headline test is a real stdio round-trip: spawn the clean fixture → `pin` →

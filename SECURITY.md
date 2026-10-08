@@ -44,19 +44,16 @@ sharpen those boundaries are still welcome.
 
 ## Supported versions
 
-Security fixes are issued for the latest minor series. Older series are not
+Security fixes are issued for the latest released series. Older series are not
 patched — upgrade to a supported release.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 0.3.x   | :white_check_mark: |
-| 0.2.x   | :x:                |
-| 0.1.x   | :x:                |
-| < 0.1   | :x:                |
+| Version | Supported |
+| ------- | --------- |
+| 2.0.x | :white_check_mark: |
+| 1.x and earlier | :x: |
 
-> Pre-1.0 note: the public surface is still evolving. The supported series will
-> advance with each minor release; only the most recent `0.x` minor receives
-> security patches.
+CLI 2.0.0 implements schema level 4. Historical v1–v3 **lock formats** remain
+readable, but review and re-pin are required to approve the newly covered fields.
 
 ## Response window
 
