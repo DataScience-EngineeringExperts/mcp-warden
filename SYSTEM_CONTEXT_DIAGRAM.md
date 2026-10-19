@@ -1,6 +1,6 @@
 # mcp-warden — System Context Diagram
 
-Last Updated: 2026-10-04
+Last Updated: 2026-10-19
 
 **CLI 2.0.0 / schema level 4** extends capture/lock/check to complete tool annotations and output
 schemas, with structural output drift and Python/TypeScript parity. The existing
@@ -101,6 +101,29 @@ logic) plus a separate informational provenance section. It never prints raw
 > publisher alignment must be verified independently. See [`RELEASING.md`](RELEASING.md).
 
 ---
+
+## Capability preparation foundation (DSE-725)
+
+The [pure preparation API](docs/CAPABILITY_BROKER.md) accepts explicit activated
+artifacts and exact candidate requests. It performs no signing, execution or IO.
+The dotted path requires an independent caller to reauthorize through the PEP;
+there is no new connection to the legacy `guard` or a live MCP server.
+
+```mermaid
+flowchart LR
+    I[Untrusted capability intent] --> B[capability_broker.py]
+    A[Activated policy / adapter / runtime] --> B
+    B --> P[Prepared request data or no selection]
+    B --> L[Minimal synthetic tool descriptor]
+    M[mcp_capability_adapter.py] --> B
+    C[client_capability_adapter.py] --> M
+    P -. independent final authorization .-> E[Existing PDP / V2 PEP]
+    E --> R[Existing durable signed evidence before synthetic handler]
+```
+
+The preparation scope orders only strictly contained time windows for the same
+exact bound operation. It provides no general tool ranking, lease issuance,
+single-use accounting, live transport mediation or new ATK conformance claim.
 
 ## C1 — System context
 

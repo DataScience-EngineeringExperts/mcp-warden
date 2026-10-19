@@ -1,6 +1,6 @@
 # Documentation Index — mcp-warden
 
-Last Updated: 2026-10-04
+Last Updated: 2026-10-19
 
 Master index of every document in this repository. The `docs/` files are the
 **security contract and source of truth** for all algorithms; the three core docs
@@ -155,6 +155,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 
 | Doc | Defines |
 |-----|---------|
+| [`docs/CAPABILITY_BROKER.md`](docs/CAPABILITY_BROKER.md) | **(DSE-725, isolated development foundation)** Exact signed-grant selection with temporal containment for identical operations, minimal synthetic tool-list projection and canonical MCP/client request preparation. No issuance, signing, IO, single-use accounting or live enforcement |
 | [`docs/ARTIFACT_TRUST.md`](docs/ARTIFACT_TRUST.md) | Opt-in Ed25519 implementation of DSE-716's external artifact verifier: explicit key/kind roles, independently pinned canonical roots, exact version/kind/key-bound signing frame, unsigned review preparation and offline signature verification. No private signing capability, durable receipts, live guard wiring or whole-kernel claim |
 | [`docs/PIN_CHECK_DEMO.md`](docs/PIN_CHECK_DEMO.md) | Full end-to-end pin/check walkthrough, archived out of `README.md` on 2026-08-24 to hold the 500-line core-doc limit |
 | [`docs/SPEC.md`](docs/SPEC.md) | **MCP Lock Format v1** — the vendor-neutral, self-contained format specification any tool can implement: on-disk `warden.lock` schema, RFC 8785 (JCS) canonicalization, SHA-256 `sha256:<hex>` hashing, `overall_digest` construction, the normative drift class + severity table, the optional per-tool inspection block, and a Conformance section (§12.1: passing `vectors/` **is** conformance) + worked example. `WARDEN_LOCK_SCHEMA.md` is the mcp-warden implementation of this format |
@@ -220,6 +221,14 @@ scope-honesty box and makes no compliance/regulatory claim.
 
 ## Source layout
 
+Capability preparation modules are additive and remain outside the live guard:
+
+| Modules | Purpose |
+|---|---|
+| [`capability_models.py`](src/mcp_warden/capability_models.py) | Strict immutable intent/prepared/projection data and canonical advisory serialization |
+| [`capability_broker.py`](src/mcp_warden/capability_broker.py) | Existing exact grant/PDP eligibility, unique temporal minimum and synthetic projection |
+| [`mcp_capability_adapter.py`](src/mcp_warden/mcp_capability_adapter.py) · [`client_capability_adapter.py`](src/mcp_warden/client_capability_adapter.py) | Bounded canonical method/name/arguments checks; no transport or callable retention |
+
 `src/mcp_warden/artifact_payload.py`, `artifact_trust.py`, and `cli_trust.py` implement
 the strict existing-artifact decoder, opt-in public-key verifier, and unsigned
 review/signature CLI. Tests are `tests/test_artifact_trust.py`,
@@ -275,6 +284,7 @@ review/signature CLI. Tests are `tests/test_artifact_trust.py`,
 
 | File | Covers |
 |------|--------|
+| `tests/test_capability_models.py` · `test_capability_broker.py` · `test_capability_adapters.py` · `test_capability_broker_conformance.py` | **(DSE-725)** Positive temporal-minimum selection, ambiguity/default deny, scope/identity/manifest substitution, strict expiry, caps, canonical MCP/client parity, method/name rejection, no IO imports/sink access and existing V2 evidence/failure corpus |
 | `tests/test_dse717_council_fixes.py` | **(DSE-717)** Critical/rule quarantine preservation after rejected overrides, closed governor errors, every mandatory V2 floor omission, conditional override/legacy compatibility, retired live signer rejection and root/key rotation followed by append/reopen/chain verification |
 | `tests/test_receipt_conformance.py` · `test_dse717_review_regressions.py` · `test_policy_enforcement_v2.py` · `test_handler_boundary.py` | **(DSE-717)** Mandatory failure/restart corpus, actual evidence/projection scans, negative sink absence, distinct failed-allow conversion, closed hostile inputs and supported interpreter/serialized-code boundaries |
 | `tests/test_decision_receipts.py` · `test_receipt_hardening.py` · `test_rule_engine.py` · `test_evidence_coordinator.py` · `test_evidence_recovery.py` · `test_receipt_verification.py` · `test_receipt_replay.py` · `test_receipt_projection.py` | **(DSE-717)** Canonical signing/authority isolation, strict rules/finite overrides, independent log/state/latch failures, authenticated recovery, chain verification, effect-free replay and closed projections |

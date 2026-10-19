@@ -30,6 +30,15 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+### Capability preparation foundation
+
+- Add pure selection from existing exact signed grants, minimal synthetic
+  tool-list projection and canonical MCP/client request preparation (DSE-725).
+  A unique narrower time interval can be selected only for the same bound
+  operation; equal or incomparable candidates prepare nothing.
+- Preserve independent final PDP/PEP authorization. This development foundation
+  adds no lease issuance, signing, transport, call accounting or live enforcement.
+
 ### Decision receipt foundation
 
 - Add protocol-neutral V2 enforcement with independently authorized signed decision

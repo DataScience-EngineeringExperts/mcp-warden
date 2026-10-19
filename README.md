@@ -1,6 +1,6 @@
 # mcp-warden
 
-Last Updated: 2026-10-04
+Last Updated: 2026-10-19
 
 [![CI](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml/badge.svg)](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -24,14 +24,16 @@ The [upgrade plan and checkpoint proposal](docs/plans/2026-10-02-tool-integrity-
 maps prompts, retrieval, code execution, and serverless adapters to existing Agent
 Trust Kernel work. Those broader checkpoints are proposals, not shipped guarantees.
 
-The opt-in [artifact trust foundation](docs/ARTIFACT_TRUST.md) adds public-key
-verification for the existing kernel activation APIs and `trust` CLI commands
-to prepare unsigned review artifacts and verify external signatures. Keys and
-signer roles require an independently protected root pin. This development
-feature is not in the published 2.0.0 package. The development
-[decision receipt foundation](docs/DECISION_RECEIPTS.md) adds signed evidence,
-governed decisions and recovery ports. Live checkpoint enforcement still requires
-an independently protected platform provider and DSE-1076 guard integration.
+The opt-in [artifact trust foundation](docs/ARTIFACT_TRUST.md) verifies signatures
+for kernel artifacts via `trust`; keys and signers require an independently
+protected root pin. It is development-only, not in 2.0.0. The [decision receipt
+foundation](docs/DECISION_RECEIPTS.md) adds signed evidence, governed decisions
+and recovery ports. Live enforcement still requires a protected provider and
+DSE-1076 integration.
+
+The isolated [capability preparation foundation](docs/CAPABILITY_BROKER.md) uses exact signed grants to prepare canonical MCP/client requests and minimal synthetic descriptors.
+It selects a narrower approved time window only for the same bound operation; ambiguity denies. It issues no lease, signs no receipt or opens transport.
+Final PEP authorization, call consumption and live bypass protection remain separate gates.
 
 > ⚠️ **Install `mcp-warden-cli`, not `mcp-warden`.** The PyPI name `mcp-warden` is
 > an **unrelated package by a different author** — it is not this project. The
