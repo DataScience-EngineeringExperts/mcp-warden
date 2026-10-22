@@ -70,7 +70,8 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
   existing sidecar (a dangling symlink included), and a lock that already carries a
   signature pointer, so it never overwrites or stacks a signature. The sidecar is placed
   with `os.link` before the lock is rewritten, so a run that loses a race to another
-  signer exits 2 and leaves the winner's files untouched. A symlinked lock is resolved
+  signer exits 2 and leaves the winner's files untouched (a filesystem without hard
+  links fails closed with exit 1). A symlinked lock is resolved
   so the sidecar sits beside the file that is verified.
 - `pin --sign` and `lock sign` stage the bundle in a uniquely named `O_EXCL` temp file,
   so a planted `.sigstore.tmp` symlink is never followed.

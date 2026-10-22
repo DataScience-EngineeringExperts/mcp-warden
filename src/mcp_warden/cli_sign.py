@@ -21,8 +21,9 @@ from __future__ import annotations
 
 import datetime as dt
 import os
-import tempfile
+import secrets
 from pathlib import Path
+from typing import Callable
 
 import typer
 from rich.console import Console
@@ -168,8 +169,9 @@ def sign_after_pin(
     # the temp file. Every error path therefore exits with no orphan .sigstore or
     # .tmp and no pointer-bearing lock lacking its bundle.
     #
-    # The temp sidecar has a unique name created with O_EXCL (mkstemp), so a
-    # planted ``.tmp`` symlink is never followed and concurrent runs never share it.
+    # The temp sidecar has a unique name created with O_EXCL|O_NOFOLLOW, so a
+    # planted ``.tmp`` symlink is never followed and concurrent runs never share
+    # it. Mode 0o644 under the umask keeps the sidecar readable by verifiers.
     sidecar = _sidecar_path_for(lock_path)
     tmp: Path | None = None
 
@@ -181,8 +183,10 @@ def sign_after_pin(
             pass
 
     try:
-        fd, tmp_name = tempfile.mkstemp(dir=sidecar.parent, prefix=sidecar.name + ".", suffix=".tmp")
-        tmp = Path(tmp_name)
+        candidate = sidecar.with_name(f"{sidecar.name}.{secrets.token_hex(8)}.tmp")
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+        fd = os.open(candidate, flags, 0o644)
+        tmp = candidate
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(bundle_json)
     except OSError as exc:
@@ -219,7 +223,14 @@ def sign_after_pin(
     return signed
 
 
-def _place_exclusive(signed, lock_path, sidecar, tmp, cleanup_tmp, err_console) -> WardenLock:
+def _place_exclusive(
+    signed: WardenLock,
+    lock_path: Path,
+    sidecar: Path,
+    tmp: Path,
+    cleanup_tmp: Callable[[], None],
+    err_console: Console,
+) -> WardenLock:
     """Create the sidecar with ``os.link`` (fails if ANY entry exists, a dangling
     symlink included), then write the pointer-bearing lock. Losing a race exits
     2 before the lock is touched; a lock-write failure removes our sidecar, so

@@ -7,6 +7,8 @@ overwrites or stacks a signature, no partial sidecar on a signing failure.
 from __future__ import annotations
 
 import json
+import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -147,6 +149,17 @@ def test_sign_leaves_no_temp_file_behind(tmp_path, signed_statements):
     lock_path = _write_unsigned_lock(tmp_path)
     assert _sign(lock_path).exit_code == 0
     assert sorted(p.name for p in tmp_path.iterdir()) == ["warden.lock", "warden.lock.sigstore"]
+
+
+def test_sidecar_is_readable_by_verifiers(tmp_path, signed_statements):
+    """The staged temp file must not leave the sidecar owner-only (0600)."""
+    lock_path = _write_unsigned_lock(tmp_path)
+    old = os.umask(0o022)
+    try:
+        assert _sign(lock_path).exit_code == 0
+    finally:
+        os.umask(old)
+    assert stat.S_IMODE((tmp_path / "warden.lock.sigstore").stat().st_mode) == 0o644
 
 
 def test_sign_refuses_a_stale_approval(tmp_path, signed_statements):
