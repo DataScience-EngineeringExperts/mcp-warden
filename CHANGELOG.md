@@ -66,8 +66,14 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
   unsigned lock (DSE-1530), for attesters that capture inside a network-less sandbox and
   sign afterwards. Same contract as `pin --sign`: v2 statement with `--coordinate`, v1
   without, exit 1 on signing failure with no partial sidecar. It refuses (exit 2) a lock
-  that fails the integrity gate, an invalid coordinate, an existing sidecar, and a lock
-  that already carries a signature pointer, so it never overwrites or stacks a signature.
+  that fails the integrity gate or carries a stale approval, an invalid coordinate, an
+  existing sidecar (a dangling symlink included), and a lock that already carries a
+  signature pointer, so it never overwrites or stacks a signature. The sidecar is placed
+  with `os.link` before the lock is rewritten, so a run that loses a race to another
+  signer exits 2 and leaves the winner's files untouched. A symlinked lock is resolved
+  so the sidecar sits beside the file that is verified.
+- `pin --sign` and `lock sign` stage the bundle in a uniquely named `O_EXCL` temp file,
+  so a planted `.sigstore.tmp` symlink is never followed.
 
 ### Decision receipt foundation
 

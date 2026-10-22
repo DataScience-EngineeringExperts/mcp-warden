@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+import tempfile
 from pathlib import Path
 
 import typer
@@ -87,6 +88,7 @@ def sign_after_pin(
     identity_token: str | None,
     err_console: Console,
     coordinate: str | None = None,
+    exclusive: bool = False,
 ) -> WardenLock:
     """Sign a freshly-pinned lock's ``overall_digest`` and write the bundle sidecar.
 
@@ -105,14 +107,19 @@ def sign_after_pin(
         lock_path: Where the lock lives (the sidecar goes alongside it).
         identity_token: Explicit OIDC token, or ``None`` for ambient/CI OIDC.
         err_console: stderr console for fail-closed messages.
+        exclusive: Never replace an existing sidecar (``lock sign``). The sidecar
+            is created with ``os.link`` BEFORE the lock is touched, so a run
+            that loses a race to another signer exits 2 and leaves both files
+            exactly as the winner wrote them.
 
     Returns:
         A NEW :class:`WardenLock` with the pointer attestation + bumped
         provenance_version. ``overall_digest`` is byte-identical to ``lock_doc``.
 
     Raises:
-        typer.Exit: code 2 on the sigstore-absent path; code 1 on any signing
-            failure (no partial sidecar left behind).
+        typer.Exit: code 2 on the sigstore-absent path or (``exclusive``) an
+            existing sidecar; code 1 on any signing failure (no partial sidecar
+            left behind).
     """
     # Import lazily so the absent-extra branch can be tested by monkeypatching the
     # flag without sigstore installed.
@@ -160,21 +167,31 @@ def sign_after_pin(
     # sidecar), we re-write the UNSIGNED lock to restore BOTH-or-NEITHER and drop
     # the temp file. Every error path therefore exits with no orphan .sigstore or
     # .tmp and no pointer-bearing lock lacking its bundle.
+    #
+    # The temp sidecar has a unique name created with O_EXCL (mkstemp), so a
+    # planted ``.tmp`` symlink is never followed and concurrent runs never share it.
     sidecar = _sidecar_path_for(lock_path)
-    tmp = sidecar.with_name(sidecar.name + ".tmp")
+    tmp: Path | None = None
 
     def _cleanup_tmp() -> None:
         try:
-            tmp.unlink(missing_ok=True)
+            if tmp is not None:
+                tmp.unlink(missing_ok=True)
         except OSError:
             pass
 
     try:
-        tmp.write_text(bundle_json, encoding="utf-8")
+        fd, tmp_name = tempfile.mkstemp(dir=sidecar.parent, prefix=sidecar.name + ".", suffix=".tmp")
+        tmp = Path(tmp_name)
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(bundle_json)
     except OSError as exc:
         _cleanup_tmp()
         err_console.print(f"[red]signing failed:[/red] could not write bundle sidecar: {exc}")
         raise typer.Exit(code=1) from exc
+
+    if exclusive:
+        return _place_exclusive(signed, lock_path, sidecar, tmp, _cleanup_tmp, err_console)
 
     try:
         write_lock(signed, lock_path)
@@ -199,6 +216,34 @@ def sign_after_pin(
         err_console.print(f"[red]signing failed:[/red] could not place bundle sidecar: {exc}")
         raise typer.Exit(code=1) from exc
 
+    return signed
+
+
+def _place_exclusive(signed, lock_path, sidecar, tmp, cleanup_tmp, err_console) -> WardenLock:
+    """Create the sidecar with ``os.link`` (fails if ANY entry exists, a dangling
+    symlink included), then write the pointer-bearing lock. Losing a race exits
+    2 before the lock is touched; a lock-write failure removes our sidecar, so
+    both-or-neither still holds."""
+    try:
+        os.link(tmp, sidecar)
+    except FileExistsError as exc:
+        cleanup_tmp()
+        err_console.print(f"[red]error:[/red] {sidecar} already exists; refusing to overwrite a signature")
+        raise typer.Exit(code=2) from exc
+    except OSError as exc:
+        cleanup_tmp()
+        err_console.print(f"[red]signing failed:[/red] could not place bundle sidecar: {exc}")
+        raise typer.Exit(code=1) from exc
+    cleanup_tmp()
+    try:
+        write_lock(signed, lock_path)
+    except OSError as exc:
+        try:
+            sidecar.unlink(missing_ok=True)
+        except OSError:
+            pass
+        err_console.print(f"[red]signing failed:[/red] could not re-write signed lock: {exc}")
+        raise typer.Exit(code=1) from exc
     return signed
 
 

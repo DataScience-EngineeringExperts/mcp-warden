@@ -127,13 +127,80 @@ def test_sign_without_the_extra_exits_2(tmp_path, monkeypatch):
 
 def test_sign_rejects_bad_coordinate_tampered_and_missing_locks(tmp_path, signed_statements):
     lock_path = _write_unsigned_lock(tmp_path)
+    before = lock_path.read_bytes()
     assert _sign(lock_path, "--coordinate", "npm:srv").exit_code == 2
+    assert lock_path.read_bytes() == before
 
     doc = json.loads(lock_path.read_text())
     doc["overall_digest"] = "sha256:" + "1" * 64
     lock_path.write_text(json.dumps(doc))
+    tampered = lock_path.read_bytes()
     assert _sign(lock_path).exit_code == 2
+    assert lock_path.read_bytes() == tampered
 
     assert _sign(tmp_path / "absent.lock").exit_code == 2
     assert signed_statements == []
     assert not (tmp_path / "warden.lock.sigstore").exists()
+
+
+def test_sign_leaves_no_temp_file_behind(tmp_path, signed_statements):
+    lock_path = _write_unsigned_lock(tmp_path)
+    assert _sign(lock_path).exit_code == 0
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["warden.lock", "warden.lock.sigstore"]
+
+
+def test_sign_refuses_a_stale_approval(tmp_path, signed_statements):
+    lock_path = _write_unsigned_lock(tmp_path)
+    doc = json.loads(lock_path.read_text())
+    doc["pin"]["approved"] = True
+    doc["pin"]["approved_digest"] = "sha256:" + "2" * 64
+    lock_path.write_text(json.dumps(doc))
+    before = lock_path.read_bytes()
+
+    assert _sign(lock_path).exit_code == 2
+    assert lock_path.read_bytes() == before
+    assert signed_statements == []
+
+
+def test_sign_refuses_a_dangling_symlink_sidecar(tmp_path, signed_statements):
+    lock_path = _write_unsigned_lock(tmp_path)
+    sidecar = tmp_path / "warden.lock.sigstore"
+    sidecar.symlink_to(tmp_path / "elsewhere")
+
+    assert _sign(lock_path).exit_code == 2
+    assert sidecar.is_symlink() and not (tmp_path / "elsewhere").exists()
+    assert signed_statements == []
+
+
+def test_sign_losing_a_race_exits_2_and_leaves_the_winner_intact(tmp_path, monkeypatch):
+    """Another signer places the sidecar while this run is signing."""
+    monkeypatch.setattr(signing, "_SIGSTORE_AVAILABLE", True)
+    lock_path = _write_unsigned_lock(tmp_path)
+    sidecar = tmp_path / "warden.lock.sigstore"
+    before = lock_path.read_bytes()
+
+    def racing_sign(statement, token):
+        sidecar.write_text("winner-bundle")
+        return {"stmt": statement.decode()}
+
+    monkeypatch.setattr(cli_sign, "sign_statement", racing_sign)
+    monkeypatch.setattr(cli_sign, "bundle_to_json", lambda bundle: json.dumps(bundle))
+
+    result = _sign(lock_path)
+
+    assert result.exit_code == 2, result.output
+    assert sidecar.read_text() == "winner-bundle"
+    assert lock_path.read_bytes() == before
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["warden.lock", "warden.lock.sigstore"]
+
+
+def test_sign_through_a_symlinked_lock_puts_the_sidecar_beside_the_target(tmp_path, signed_statements):
+    real_dir = tmp_path / "real"
+    real_dir.mkdir()
+    target = _write_unsigned_lock(real_dir)
+    link = tmp_path / "link.lock"
+    link.symlink_to(target)
+
+    assert _sign(link).exit_code == 0
+    assert (real_dir / "warden.lock.sigstore").exists()
+    assert not (tmp_path / "link.lock.sigstore").exists()

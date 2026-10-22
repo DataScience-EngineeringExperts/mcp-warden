@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -34,10 +35,10 @@ def _now_rfc3339() -> str:
 
 
 def _read_consistent_lock(lock: Path, err_console: Console, remedy: str) -> WardenLock:
-    """Read ``lock`` and refuse (exit 2) one whose entries do not reproduce its digest.
+    """Read ``lock``; refuse (exit 2) a tampered lock or one with a stale approval.
 
-    A mismatch means the lock was hand-edited / tampered; neither rotate nor sign
-    may "launder" it by re-stamping it.
+    A digest mismatch means the lock was hand-edited / tampered; neither rotate
+    nor sign may "launder" it by re-stamping it.
     """
     try:
         lock_doc = read_lock(lock)
@@ -52,6 +53,14 @@ def _read_consistent_lock(lock: Path, err_console: Console, remedy: str) -> Ward
         err_console.print(
             "[red]error:[/red] lock is internally inconsistent / tampered "
             f"(stored entries do not reproduce overall_digest); {remedy}"
+        )
+        raise typer.Exit(code=2)
+    # A stale approval (surface changed since approval) must not be silently
+    # re-blessed by a rotation or lent credibility by a signature.
+    if lock_doc.pin.approved and lock_doc.pin.approved_digest != lock_doc.overall_digest:
+        err_console.print(
+            "[red]error:[/red] approval is stale (approved_digest does not bind the "
+            "current surface); re-pin + re-approve"
         )
         raise typer.Exit(code=2)
     return lock_doc
@@ -81,15 +90,6 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         # Integrity gate (fail closed): recompute overall_digest from the lock's
         # OWN stored entries; refuse and re-pin on a mismatch.
         lock_doc = _read_consistent_lock(lock, err_console, "re-pin instead of rotating")
-
-        # A stale approval (surface changed since approval) must not be silently
-        # re-blessed by rotate; refuse so the operator re-pins/re-approves.
-        if lock_doc.pin.approved and lock_doc.pin.approved_digest != lock_doc.overall_digest:
-            err_console.print(
-                "[red]error:[/red] approval is stale (approved_digest does not bind the "
-                "current surface); re-pin + re-approve instead of rotating"
-            )
-            raise typer.Exit(code=2)
 
         old_count = lock_doc.pin.rotation_count
         # Capture the pre-rotate digest so the "unchanged" claim is COMPUTED, not
@@ -151,8 +151,9 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         For attesters that capture UNSIGNED where no OIDC token is reachable (a
         ``--network none`` sandbox) and sign afterwards. Writes ``<lock>.sigstore``
         beside the lock; ``overall_digest`` is unchanged. Refuses (exit 2) a
-        tampered lock, a malformed coordinate, an existing sidecar, or a lock that
-        already carries a signature pointer — it never overwrites or stacks a
+        tampered lock, a stale approval, a malformed coordinate, an existing
+        sidecar (checked again atomically at placement), or a lock that already
+        carries a signature pointer — it never overwrites or stacks a
         signature. Signing failure exits 1 with no partial sidecar.
         """
         coord_text = None
@@ -163,10 +164,13 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
                 raise typer.Exit(code=2)
             coord_text = str(parsed)
 
+        # Resolve a symlinked lock so the sidecar lands beside the file that is
+        # actually written (and later verified), not beside the link.
+        lock = lock.resolve()
         lock_doc = _read_consistent_lock(lock, err_console, "re-pin instead of signing")
 
         sidecar = _sidecar_path_for(lock)
-        if sidecar.exists():
+        if os.path.lexists(sidecar):
             err_console.print(f"[red]error:[/red] {sidecar} already exists; refusing to overwrite a signature")
             raise typer.Exit(code=2)
         if any(a.method == "sigstore-keyless" for a in lock_doc.pin.attestations):
@@ -175,7 +179,7 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             )
             raise typer.Exit(code=2)
 
-        sign_after_pin(lock_doc, lock, identity_token, err_console, coordinate=coord_text)
+        sign_after_pin(lock_doc, lock, identity_token, err_console, coordinate=coord_text, exclusive=True)
         statement = "v2 (coordinate-bound)" if coord_text else "v1"
         console.print(f"[green]signed[/green] -> {sidecar}")
         console.print(f"  statement: {statement}")
