@@ -296,6 +296,23 @@ def test_f5_locators_need_two_segments_and_no_token_shaped_segment():
         assert not _auth(loc), loc
 
 
+def test_nf2_separator_joined_tokens_are_not_locators():
+    # DSE-1540 / CSO NF-2: a `-`/`_` inside the token used to make the segment read
+    # as a file name, so each of these reported nothing.
+    for lit in ("~/.aws/9f8e7d6c-5b4a-3e2d-1c0b-9a8f7e6d5c4b",   # UUID-shaped API key
+                "~/.config/9f8e-7d6c5b4a3e2d1c0b9a",
+                "pass://a.b/tok_9f8e7d6c5b4a3e2d1c0b9a8f",
+                "/etc/app/Xk9mQ2p_Lw5tR8vN4j"):                 # mixed case, separators
+        assert _is_high(lit), lit
+    # Words joined by separators stay names: no digit, one case.
+    for loc in ("~/.config/gcloud/application_default_credentials.json",
+                "~/.config/gcloud/application_default_credentials",
+                "~/.config/app/keys.json",
+                "/var/run/secrets/kubernetes-service-account/token",
+                "~/.config/my-app/service_account_key"):
+        assert not _auth(loc), loc
+
+
 def test_f6_ellipsis_is_anchored():
     # CSO F6: `...` marks a placeholder only as the whole value or the tail of a
     # stub / all-filler value — never a substring, never behind a real token.

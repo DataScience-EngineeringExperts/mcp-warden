@@ -30,6 +30,16 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+### Auth audit
+
+- `WRD-AUTH-TOKEN-IN-CONFIG` now catches tokens joined by `-` or `_` inside a path or
+  secret-manager URI (DSE-1540, CSO NF-2). `~/.aws/<uuid-shaped key>` and
+  `pass://a.b/tok_<hex>` were read as file names and reported nothing; a segment that
+  is 16+ characters at >= 3.5 bits/char with a digit or mixed case once its separators
+  are removed is now a literal. `application_default_credentials` and `my-app` stay names.
+- Reference, locator and placeholder heuristics move from `auth_audit.py` into
+  `auth_refs.py`; no other behaviour change.
+
 ### Decision receipt foundation
 
 - Add protocol-neutral V2 enforcement with independently authorized signed decision
