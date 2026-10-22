@@ -194,7 +194,8 @@ follows, each bound pinned by a test with a sub-threshold bypass string:
   **Residual:** these still read as names: a separator-joined token made only of
   digits (`1234567890-1234567890-12`) or only of letters
   (`qwkz-mrtp-lxvb-nhgf`); one where too little remains once word and digit-only
-  parts are dropped (`my-token-9f8e-7d6c`); and a plain alphanumeric token
+  parts are dropped (`my-token-9f8e-7d6c`, or 16–19 lowercase hex characters
+  split by dashes, `9f8e-7d6c-5b4a-3e2d`); and a plain alphanumeric token
   inside a dotted or `~` name (`9f8e…8f~`).
 - **Short bare words are an allowlist, not a heuristic.** Only `basic`, `bearer`,
   `token`, `apikey`/`api-key`, `digest`, `negotiate`, `oauth`, `none` are treated

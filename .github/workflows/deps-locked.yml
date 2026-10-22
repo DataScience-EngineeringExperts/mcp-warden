@@ -97,6 +97,49 @@ jobs:
           echo "requirements-dev.lock is in sync with pyproject.toml."
 
       # --------------------------------------------------------------------
+      # 2b. Action lockfile-in-sync check (DSE-1538).
+      #    action/requirements.lock is what the published composite action
+      #    installs into CUSTOMER CI (action.yml, --require-hashes). Same
+      #    preferred-baseline regeneration and body diff as step 2, with the
+      #    runtime-only command printed in the lock's own header (no dev extra).
+      # --------------------------------------------------------------------
+      - name: Verify action lockfile is in sync with pyproject.toml
+        run: |
+          cp action/requirements.lock /tmp/action-requirements.regenerated.lock
+          uv pip compile --universal --generate-hashes --python-version 3.11 \
+            pyproject.toml -o /tmp/action-requirements.regenerated.lock
+          if ! diff -u \
+               <(grep -v '^#' action/requirements.lock) \
+               <(grep -v '^#' /tmp/action-requirements.regenerated.lock); then
+            echo "::error::action/requirements.lock is out of sync with pyproject.toml."
+            echo "Regenerate it (see CONTRIBUTING.md) and commit the result:"
+            echo "  uv pip compile --universal --generate-hashes --python-version 3.11 pyproject.toml -o action/requirements.lock"
+            exit 1
+          fi
+          echo "action/requirements.lock is in sync with pyproject.toml."
+
+      # The action lock drifted behind the dev lock once and shipped advisories
+      # the dev lock had already fixed (DSE-1538). Every package both locks pin
+      # must be pinned to the same version, so customers run what CI tested.
+      - name: Verify action lock pins equal dev lock pins
+        shell: python
+        run: |
+          import re, sys
+          def pins(path):
+              out = {}
+              for name, ver in re.findall(r"^([A-Za-z0-9_.-]+)==(\S+)", open(path).read(), re.M):
+                  out.setdefault(re.sub(r"[-_.]+", "-", name).lower(), set()).add(ver)
+              return out
+          dev, action = pins("requirements-dev.lock"), pins("action/requirements.lock")
+          bad = {n: (sorted(dev[n]), sorted(action[n])) for n in action if n in dev and dev[n] != action[n]}
+          if bad:
+              print("::error::action/requirements.lock pins differ from requirements-dev.lock")
+              for n, (d, a) in sorted(bad.items()):
+                  print(f"  {n}: dev={d} action={a}")
+              sys.exit(1)
+          print(f"All {sum(n in dev for n in action)} shared pins in action/requirements.lock equal requirements-dev.lock.")
+
+      # --------------------------------------------------------------------
       # 3. The locked closure actually works — import the package + key deps.
       # --------------------------------------------------------------------
       - name: Import package + locked closure
@@ -118,3 +161,30 @@ jobs:
 
       - name: CVE audit the locked closure (fail on any advisory)
         run: /tmp/locked/bin/python -m pip_audit --skip-editable
+
+      # --------------------------------------------------------------------
+      # 5. Action lock: hash-verified install + CVE gate (DSE-1538).
+      #    Step 2b's diff keeps existing pins as the baseline, so on its own it
+      #    cannot see a tampered hash or a downgrade that still satisfies
+      #    pyproject.toml. Installing with --require-hashes rejects the former;
+      #    pip-audit over the exact pins rejects a downgrade to a version with a
+      #    known advisory. Same evidence the dev lock gets from steps 1 and 4.
+      # --------------------------------------------------------------------
+      - name: Install action closure with --require-hashes
+        run: |
+          python -m venv /tmp/action-locked
+          /tmp/action-locked/bin/python -m pip install --upgrade pip
+          /tmp/action-locked/bin/python -m pip install --require-hashes -r action/requirements.lock
+
+      # pip-audit evaluates environment markers against THIS runner and silently
+      # skips pins that do not match, so a win32- or PyPy-only pin would never be
+      # audited on ubuntu (proven, CSO review of DSE-1538). The action runs on
+      # Windows and macOS too: audit a copy with every marker stripped.
+      - name: CVE audit the action lock, all platforms (fail on any advisory)
+        run: |
+          sed -E 's/ ; [^\\]*\\$/ \\/' action/requirements.lock > /tmp/action-requirements.unmarked.txt
+          if grep -qE '^[A-Za-z0-9_.-]+==[^ ]+ ;' /tmp/action-requirements.unmarked.txt; then
+            echo "::error::a marker survived stripping; refusing a partial audit"
+            exit 1
+          fi
+          /tmp/locked/bin/python -m pip_audit --disable-pip --require-hashes -r /tmp/action-requirements.unmarked.txt

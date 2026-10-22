@@ -277,6 +277,25 @@ fuzzy/NLP description analysis to close this (§6, cut #1): it is a net-negative
 high-false-positive signal. This residual is tracked as **T-SEMANTIC** and is an
 **ACCEPTED LIMITATION**, not a defect.
 
+### 5.3.4 Capture completeness and `--url` TLS trust
+
+**Capture fails closed on a missing section (DSE-1538).** `pin` and `check` read the
+capabilities the server declares in its `initialize` result. A declared `tools`,
+`resources` or `prompts` section whose list call errors — timeout, transport reset,
+crash — aborts the capture with exit 2. A section the server did **not** declare is
+recorded as empty only when the server answers JSON-RPC `-32601` (method not found); any
+other error fails closed. Before this, every first-page error was recorded as an empty
+section, so a server that broke `prompts/list` produced a lock without prompts and a
+clean `check`.
+
+**`--url` capture trusts the OS certificate store.** With the `mcp` 2.x SDK, HTTPS
+verification for `--url` capture uses the operating system trust store (`truststore`),
+not the `certifi` bundle. On a self-hosted runner, the server's CA must be trusted by
+that runner's OS store. On Linux, where the store cannot be changed, `SSL_CERT_FILE`
+pointing at a CA bundle is honoured for the run; macOS and Windows use the platform
+verifier and need the CA installed there. Never disable verification to make a capture succeed: a lock
+pinned over an unverified connection pins whatever answered.
+
 ---
 
 ## 6. Deliberate cuts (what we will NOT build, by design)
