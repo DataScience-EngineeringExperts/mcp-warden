@@ -1,6 +1,6 @@
 # mcp-warden — System Context Diagram
 
-Last Updated: 2026-10-04
+Last Updated: 2026-10-22
 
 **CLI 2.0.0 / schema level 4** extends capture/lock/check to complete tool annotations and output
 schemas, with structural output drift and Python/TypeScript parity. The existing
@@ -86,7 +86,10 @@ logic) plus a separate informational provenance section. It never prints raw
 
 > **`pin --sign` / `check --verify` (Issue #16)** add optional **Sigstore keyless** signing of
 > the lock: `--sign` writes a `<lockname>.sigstore` bundle binding `overall_digest` (survives
-> `lock rotate`); `--verify` recomputes + verifies **fail-closed** (`docs/SIGNING.md`). The
+> `lock rotate`); `--verify` recomputes + verifies **fail-closed** (`docs/SIGNING.md`).
+> `lock sign` (DSE-1530) applies the same signing to an existing unsigned lock, for
+> attesters that capture in a network-less sandbox; it never overwrites or stacks a
+> signature (exclusive `os.link` placement). The
 > release pipeline (`.github/workflows/release.yml`) signs mcp-warden's OWN published artifacts
 > the same way ("heal thyself"). Signing is the optional `mcp-warden-cli[sigstore]` extra — the
 > core gate has no crypto dependency.
@@ -125,7 +128,7 @@ flowchart TB
 
     subgraph ci["CI pipeline (GitHub Actions / local)"]
         warden["mcp-warden CLI
-doctor · pin · check (· --against-community) · policy · lock rotate · diff
+doctor · pin · check (· --against-community) · policy · lock rotate · lock sign · diff
 deploy-gate · auth audit"]
     end
 

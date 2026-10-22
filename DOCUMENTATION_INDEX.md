@@ -1,6 +1,6 @@
 # Documentation Index — mcp-warden
 
-Last Updated: 2026-10-04
+Last Updated: 2026-10-22
 
 Master index of every document in this repository. The `docs/` files are the
 **security contract and source of truth** for all algorithms; the three core docs
@@ -12,7 +12,7 @@ describe and visualize the implementation that satisfies that contract.
 
 | # | Doc | Purpose |
 |---|-----|---------|
-| 1 | [`README.md`](README.md) | Project overview, install, the pin/check CI demo (full walkthrough archived to [`docs/PIN_CHECK_DEMO.md`](docs/PIN_CHECK_DEMO.md) to hold the 500-line core-doc limit), CLI reference (incl. v0.3 `lock rotate` + redacted offline `diff` viewer), GitHub Action usage section (Issue #18), **pre-commit hook section (Issue #22)** |
+| 1 | [`README.md`](README.md) | Project overview, install, the pin/check CI demo (full walkthrough archived to [`docs/PIN_CHECK_DEMO.md`](docs/PIN_CHECK_DEMO.md) to hold the 500-line core-doc limit), CLI reference (incl. v0.3 `lock rotate`, DSE-1530 `lock sign`, DSE-1539 `--max-pages` + redacted offline `diff` viewer), GitHub Action usage section (Issue #18), **pre-commit hook section (Issue #22)** |
 | 2 | [`SYSTEM_CONTEXT_DIAGRAM.md`](SYSTEM_CONTEXT_DIAGRAM.md) | System context + pin/check sequence (mermaid); trust boundary; `conclave` as dev-time reviewer only; composite GitHub Action + **pre-commit hook** as consumer delivery vehicles |
 | 3 | [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md) | This file |
 
@@ -172,7 +172,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 | [`docs/RESULT_INSPECTION.md`](docs/RESULT_INSPECTION.md) | **(v0.2)** The `WRD-RES-*` result-inspection catalog: deterministic/fuzzy tier partition, per-rule exact match definitions (ANSI allowlist, secret-echo via `WRD-SEC-*`, exfil seed denylist, injection seed phrase list), severities, SARIF mapping, redaction, fail-safe per-tool precision. Run identically by `guard` and `inspect` |
 | [`docs/GUARD_PROXY.md`](docs/GUARD_PROXY.md) | **(v0.2 base, updated to v0.3 defaults)** The `guard` transparent stdio proxy + `inspect` offline analyzer contract: frame-handling discipline, single-loop framing (Content-Length + newline), incremental scan, subprocess lifecycle, runtime arg-policy + `tools/list_changed` gate, the **v0.3 default-block posture** + `--no-block-*` opt-outs + `--audit-only`, reserved codes `-32001`/`-32002`, and the exact on-the-wire "block" behavior |
 | [`docs/GUARD_PROXY_V3.md`](docs/GUARD_PROXY_V3.md) | **(v0.3)** The proxy-hardening contract: `notifications/cancelled`/`progress` untouched passthrough (§1), subprocess-lifecycle edge cases — server-crash `-32002` synthesis, client-disconnect process-group teardown, truncated/oversized-frame fail-open (§2), Windows experimental degradation (§3), the full v0.3 block-flag scheme + precedence (§4), and **(#21) `--strict` fail-CLOSED mode — terminate on an inspection-layer error, `-32003` non-retriable, exit `3` (§5)** |
-| [`docs/SIGNING.md`](docs/SIGNING.md) | **(v0.3, #16)** Sigstore keyless signing + verification of `warden.lock`: the optional `[sigstore]` extra, the deterministic `mcp-warden-lock-digest/v1` statement that binds ONLY `overall_digest` (survives `lock rotate`), `pin --sign` / `check --verify` usage, the **fixed-sidecar** verify contract (pointer field never trusted), the full fail-closed matrix, the TUF-cache/offline caveat, and the two accepted trade-offs (rotate-replay + committed-fixture coverage gap + refresh steps) |
+| [`docs/SIGNING.md`](docs/SIGNING.md) | **(v0.3, #16)** Sigstore keyless signing + verification of `warden.lock`: the optional `[sigstore]` extra, the deterministic `mcp-warden-lock-digest/v1` statement that binds ONLY `overall_digest` (survives `lock rotate`), `pin --sign` / **`lock sign` (DSE-1530, exclusive placement, no overwrite/stacking)** / `check --verify` usage, the **fixed-sidecar** verify contract (pointer field never trusted), the full fail-closed matrix, the TUF-cache/offline caveat, and the two accepted trade-offs (rotate-replay + committed-fixture coverage gap + refresh steps) |
 
 ## Non-normative design and implementation plans
 
@@ -238,7 +238,7 @@ review/signature CLI. Tests are `tests/test_artifact_trust.py`,
 | `src/mcp_warden/decision_models.py` · `policy_decision.py` | **(DSE-716)** Strict V1 decision models; signed policy/runtime activation; exact lease/request binding; deterministic default-deny PDP; canonical digest-only decisions and stable recovery codes | POLICY_ENFORCEMENT.md / AGENT_TRUST_KERNEL ATK-03/05/06/07/08/09 |
 | `src/mcp_warden/policy_enforcement.py` · `handler_identity.py` · `executable_bundle.py` · `adapter_conformance.py` | **(DSE-716)** Signed adapter and executable-bundle closure; exact manifest-bound leases; closure-free mechanically code/dependency-derived frozen handlers; canonical effect binding; evidence-gated PEP; PEP-owned execution trace and multiple output-channel scans; mandatory versioned malformed-input corpus | POLICY_ENFORCEMENT.md / AGENT_TRUST_KERNEL ATK-03/04/06/08 |
 | `src/mcp_warden/tokenizer.py` | Shared tokenizer + capability derivation (single source of truth) | CHECKS §3 / WARDEN_LOCK_SCHEMA §5.4 |
-| `src/mcp_warden/capture.py` | Declared-surface capture over stdio (argv array, no shell) or Streamable HTTP (`--url`); shared list normalization, timeouts, and errors | THREAT_MODEL §3.3 / WARDEN_LOCK_SCHEMA §4.1 |
+| `src/mcp_warden/capture.py` | Declared-surface capture over stdio (argv array, no shell) or Streamable HTTP (`--url`) through one `_capture_session`; capability-aware, fail-closed list calls (DSE-1538); `--max-pages` cursor cap (default `MAX_LIST_PAGES` 256) and duplicate tool-name / resource-URI / prompt-name rejection (DSE-1539); timeouts and errors | THREAT_MODEL §3.3 / WARDEN_LOCK_SCHEMA §4.1 |
 | `src/mcp_warden/models.py` | Pydantic models for captured surface + lock (incl. `Pinner`/`Attestation` provenance) | WARDEN_LOCK_SCHEMA §2–§8 |
 | `src/mcp_warden/lockfile.py` | Lock builder + reader/writer + overall digest | WARDEN_LOCK_SCHEMA §5–§6, §9 |
 | `src/mcp_warden/check_core.py` | **(#22)** Shared check verdict core (`run_check` / `run_check_full`): read_lock→capture→checks→build_lock(in-memory)→compute_drift. Single source of truth for `cli.py:check` AND the pre-commit wrapper | WARDEN_LOCK_SCHEMA §6.2 |
@@ -269,7 +269,7 @@ review/signature CLI. Tests are `tests/test_artifact_trust.py`,
 | `src/mcp_warden/wire_block.py` | **(v0.2/v0.3)** on-wire block synthesis: `-32001` error-response + redacted-content (`_meta.warden.modified`); **v0.3** `-32002` `transport_error`; **(#21)** `-32003` `strict_abort_error` (non-retriable) | GUARD_PROXY §7 · V3 §2.6, §5 |
 | `src/mcp_warden/inspector.py` | **(v0.2)** offline JSONL analyzer over recorded sessions (same catalog) | GUARD_PROXY §3 |
 | `src/mcp_warden/emit_res.py` | **(v0.2)** SARIF 2.1.0 + JSONL emitters for `ResultFinding` (action/direction/tier) | GUARD_PROXY §10 |
-| `src/mcp_warden/cli.py` · `cli_guard.py` · `cli_lock.py` · `cli_diff.py` | `typer` CLI (`pin`/`check`/`policy`/`guard`/`inspect`/`lock rotate`/`diff`), exit codes; **`check` delegates its verdict to `check_core.run_check_full` (#22)**; `guard`/`inspect` bodies in `cli_guard`, `lock rotate` + integrity gate in `cli_lock`, **(v0.3) `diff` redacted offline lock viewer (`SAFE_PROVENANCE_FIELDS` allowlist, never reads `server.command`/`args`)** in `cli_diff` | all |
+| `src/mcp_warden/cli.py` · `cli_guard.py` · `cli_lock.py` · `cli_diff.py` | `typer` CLI (`pin`/`check`/`policy`/`guard`/`inspect`/`lock rotate`/`lock sign`/`diff`), exit codes; **`check` delegates its verdict to `check_core.run_check_full` (#22)**; `guard`/`inspect` bodies in `cli_guard`, `lock rotate` + `lock sign` (DSE-1530) + shared integrity / stale-approval gate in `cli_lock`, **(v0.3) `diff` redacted offline lock viewer (`SAFE_PROVENANCE_FIELDS` allowlist, never reads `server.command`/`args`)** in `cli_diff` | all |
 | `src/mcp_warden/precommit.py` | **(#22)** `mcp-warden-precommit` pre-commit entry point — wraps `check_core.run_check`; check-only (never imports `pin`/lock-writer, never opens the lock for write) | README pre-commit section |
 
 ## Tests
