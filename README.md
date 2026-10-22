@@ -383,8 +383,8 @@ run the gate only on push:
 
 | Command | Purpose | Exit code |
 |---------|---------|-----------|
-| `mcp-warden pin <server-cmd...> \| --url URL [--approve --approver <id>] [--sign [--identity-token T]] [--sarif F] [--json]` | Capture over stdio or Streamable HTTP + write `warden.lock` (TOFU baseline). **(#16)** `--sign` Sigstore-signs `overall_digest` (out-of-digest; needs `mcp-warden[sigstore]`) | 0 on success, 2 on capture/IO error, **1 on signing failure (fail closed, no partial sidecar)** |
-| `mcp-warden check <server-cmd...> \| --url URL [--lock F] [--sarif F] [--json]` | Re-capture over stdio or Streamable HTTP + diff vs lock | **non-zero on drift**, 2 on error |
+| `mcp-warden pin <server-cmd...> \| --url URL [--approve --approver <id>] [--sign [--identity-token T]] [--max-pages N] [--sarif F] [--json]` | Capture over stdio or Streamable HTTP + write `warden.lock` (TOFU baseline). `--max-pages` (default 256) caps `nextCursor` pages per list call; a longer chain or a repeated tool/prompt name or resource URI fails capture (exit 2), never pins a partial or ambiguous surface. **(#16)** `--sign` Sigstore-signs `overall_digest` (out-of-digest; needs `mcp-warden[sigstore]`) | 0 on success, 2 on capture/IO error, **1 on signing failure (fail closed, no partial sidecar)** |
+| `mcp-warden check <server-cmd...> \| --url URL [--lock F] [--max-pages N] [--sarif F] [--json]` | Re-capture over stdio or Streamable HTTP + diff vs lock (same `--max-pages` cap and duplicate refusal as `pin`) | **non-zero on drift**, 2 on error |
 | `mcp-warden check --verify --certificate-identity ID --certificate-oidc-issuer ISS [--lock F] [--offline-bundle P]` | **(#16)** Verify the lock's Sigstore signature against a fixed sidecar (`<lockname>.sigstore` next to the lock); no server spawn. See [`docs/SIGNING.md`](docs/SIGNING.md) | **0 only on clean verify**; non-zero on any failure (fail closed) |
 | `mcp-warden policy lint <file> [--lock F]` | Lint a policy file (fail closed) | non-zero on lint error |
 | `mcp-warden policy eval <file> <sample.json> [--lock F]` | Evaluate one sample call | **non-zero on a deny verdict** (CI assertion) |
