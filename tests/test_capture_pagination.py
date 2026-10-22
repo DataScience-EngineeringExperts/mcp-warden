@@ -182,3 +182,17 @@ def test_declared_capabilities_reads_sdk_models_dicts_and_missing():
     }
     # No capabilities object at all → unknown → treated as declared (fail closed).
     assert _declared_capabilities(SimpleNamespace()) == {"tools": True, "resources": True, "prompts": True}
+    # A falsy but present declaration is still a declaration.
+    assert _declared_capabilities(SimpleNamespace(capabilities={"prompts": False}))["prompts"] is True
+    # A capability field the SDK object lacks entirely is unknown → declared.
+    partial = SimpleNamespace(capabilities=SimpleNamespace(tools=None))
+    assert _declared_capabilities(partial) == {"tools": False, "resources": True, "prompts": True}
+
+
+def test_capture_error_is_unwrapped_from_nested_exception_groups():
+    from mcp_warden.capture import _nested_capture_error
+
+    inner = CaptureError("prompts/list failed for a declared capability: boom")
+    group = ExceptionGroup("outer", [ValueError("teardown"), ExceptionGroup("inner", [inner])])
+    assert _nested_capture_error(group) is inner
+    assert _nested_capture_error(ExceptionGroup("g", [ValueError("x")])) is None

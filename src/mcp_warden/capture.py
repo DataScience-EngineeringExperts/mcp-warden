@@ -201,7 +201,8 @@ def _declared_capabilities(init_result: Any) -> dict[str, bool]:
         return dict.fromkeys(_CAPABILITY_KEYS, True)
     if isinstance(caps, dict):
         return {key: caps.get(key) is not None for key in _CAPABILITY_KEYS}
-    return {key: getattr(caps, key, None) is not None for key in _CAPABILITY_KEYS}
+    # A field the installed SDK does not expose at all is unknown, not undeclared.
+    return {key: not hasattr(caps, key) or getattr(caps, key) is not None for key in _CAPABILITY_KEYS}
 
 
 def _is_method_not_found(exc: BaseException) -> bool:
@@ -346,7 +347,8 @@ async def capture_surface(
     except Exception as exc:
         nested = _nested_capture_error(exc)
         if nested is not None:
-            raise nested from exc
+            logger.debug("capture failed inside the SDK task group: %r", exc)
+            raise nested from (nested.__cause__ or exc)
         # Covers nonzero exit, broken pipe, protocol error, decode failure, etc.
         raise CaptureError(
             f"Failed to capture MCP server '{command}': {type(exc).__name__}: {exc}"
@@ -429,7 +431,8 @@ async def capture_surface_http(
     except Exception as exc:
         nested = _nested_capture_error(exc)
         if nested is not None:
-            raise nested from exc
+            logger.debug("capture failed inside the SDK task group: %r", exc)
+            raise nested from (nested.__cause__ or exc)
         raise CaptureError(
             f"Failed to capture MCP server at '{url}': {type(exc).__name__}: {exc}"
         ) from exc

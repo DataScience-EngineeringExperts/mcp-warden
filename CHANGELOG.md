@@ -37,8 +37,10 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
   being pinned as empty; an undeclared section is empty only on JSON-RPC `-32601`.
 - CI regenerates and diffs `action/requirements.lock`, the lock the published action
   installs, alongside `requirements-dev.lock`, then installs it with `--require-hashes`
-  and runs `pip-audit` over its exact pins. The diff alone keeps existing pins as its
-  baseline, so it cannot see a tampered hash or an in-range downgrade.
+  and runs `pip-audit` over its exact pins with platform markers stripped, so
+  Windows-, macOS- and PyPy-only pins are audited too. The diff alone keeps existing pins
+  as its baseline, so it cannot see a tampered hash or an in-range downgrade. A further
+  step fails when any action-lock pin differs from the dev-lock pin CI tests.
 - Security: the action lock had fallen behind the dev lock and shipped advisories in
   `mcp` 2.1.1, `starlette` 1.2.1, `cryptography` 48.0.0 and `anyio` 4.13.0. Both locks
   move to `mcp` 2.2.0, and every action-lock pin now equals the audited dev-lock pin.
