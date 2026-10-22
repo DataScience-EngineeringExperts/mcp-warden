@@ -47,6 +47,7 @@ is the MCP auth posture sound. Both reuse the `check` exit-code contract (0 clea
 | [`src/mcp_warden/deploy_gate.py`](src/mcp_warden/deploy_gate.py) | `WRD-GATE-*` engine: eval thresholds, guardrail presence, budget, approval receipt |
 | [`src/mcp_warden/cli_deploy_gate.py`](src/mcp_warden/cli_deploy_gate.py) | `deploy-gate` command body (register idiom) |
 | [`src/mcp_warden/auth_audit.py`](src/mcp_warden/auth_audit.py) | `WRD-AUTH-*` static config audit; reuses `checks_secret.scan_field` for vendor patterns (vendor hits are never downgraded); template fill-me-ins are `WRD-AUTH-PLACEHOLDER-SECRET` (low), matched on whole tokens |
+| [`src/mcp_warden/auth_refs.py`](src/mcp_warden/auth_refs.py) | Reference / locator / placeholder heuristics behind `WRD-AUTH-*`: `${VAR}` forms, secret-manager URIs and credential paths, token-shaped segments (incl. `-`/`_`-joined tokens, DSE-1540), placeholder bounds |
 | [`src/mcp_warden/cli_auth.py`](src/mcp_warden/cli_auth.py) | `auth audit` sub-app command body |
 | [`tests/test_deploy_gate.py`](tests/test_deploy_gate.py) | Engine per-control pass/fail + CLI exit codes + fail-closed on malformed evidence |
 | [`tests/test_auth_audit.py`](tests/test_auth_audit.py) | Every rule, the deliberate non-flags (loopback, `${VAR}` refs, stdio), redaction, CLI/JSON/SARIF |
