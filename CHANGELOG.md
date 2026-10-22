@@ -34,14 +34,15 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 - `WRD-AUTH-TOKEN-IN-CONFIG` now catches tokens joined by `-` or `_` inside a path or
   secret-manager URI (DSE-1540, CSO NF-2). `~/.aws/<uuid-shaped key>` and
-  `pass://a.b/tok_<hex>` were read as file names and reported nothing. Segments are now
-  judged piece by piece across `.`, `~`, `-` and `_`: a part that is a token-shaped run
-  with a digit, or 16+ non-word characters switching between letters and digits 3+
-  times, is a literal. The same rule covers URI fragments and `${VAR:?msg}` messages.
-  `gcp-sa-key-prod-2024`, `id_ed25519_github-work` and `application_default_credentials`
-  stay names.
+  `pass://a.b/tok_<hex>` were read as file names and reported nothing. A `-`/`_`-joined
+  piece of a segment (including the stem of a dotted name, so `<uuid>.json`) is now a
+  literal when a part is a token-shaped run with a digit, or when its non-word,
+  non-numeric parts switch between letters and digits 3+ times over 20+ characters
+  (16+ if mixed case). The same rule covers URI fragments and `${VAR:?msg}` messages.
+  `gcp-sa-key-prod-2024`, `id_ed25519_github-work`, GCP key files
+  (`<project>-123456-<hex>.json`) and `application_default_credentials` stay names.
 - Reference, locator and placeholder heuristics move from `auth_audit.py` into
-  `auth_refs.py`; no other behaviour change.
+  `auth_refs.py`; the rule above is the only behaviour change.
 
 ### Decision receipt foundation
 

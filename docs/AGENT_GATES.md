@@ -172,14 +172,18 @@ follows, each bound pinned by a test with a sub-threshold bypass string:
   wearing a reference; `${VAR:?msg}` stays a reference.
 - **Locators need >= 2 segments and no token-shaped segment.** Token-shaped is
   an alphanumeric-only segment that is 20+ characters, or 16+ at >= 3.5 bits/char,
-  or 16+ mixed-case (`Passw0rdPassw0rd`). A segment carrying `.` or `~` is
-  judged piece by piece, so `keys.json` is a name and `9f8e…4b.json` is not. A
-  `-`/`_`-joined piece is a token when one of its parts is a token-shaped run
-  with a digit (`tok_9f8e…`, `token-9f8e…`), or when, after dropping word parts
-  (4+ letters, not all hex), 16+ characters remain that switch between letters
-  and digits 3+ times (`9f8e7d6c-5b4a-…` UUID keys, `Passw0rd_Passw0rd_X`).
-  Descriptive names stay names: `application_default_credentials`,
-  `gcp-sa-key-prod-2024`, `id_ed25519_github-work`, `prod-db-2024_credentials`.
+  or 16+ mixed-case (`Passw0rdPassw0rd`). A segment with a dot is judged piece
+  by piece: its plain alphanumeric pieces are a stem and an extension
+  (`keys.json`, a hash-named cache file), but a `-`/`_`-joined piece is judged
+  as below, so `<uuid>.json` is a literal. A `-`/`_`-joined piece is a token
+  when one of its parts is a token-shaped run with a digit (`tok_9f8e…`,
+  `token-9f8e…`), or when, after dropping digit-only parts and word parts (4+
+  letters, not all hex), what remains switches between letters and digits 3+
+  times and is 20+ characters, or 16+ if mixed case (`9f8e7d6c-5b4a-…` UUID
+  keys, `Passw0rd_Passw0rd_X`). Descriptive names stay names:
+  `application_default_credentials`, `gcp-sa-key-prod-2024`,
+  `id_ed25519_github-work`, and GCP key files such as
+  `my-project-123456-a1b2c3d4e5f6.json`.
   A URI fragment or a `${VAR:?msg}` message is checked the same way: `#api-key`
   and `:?required-api-key-missing` are fine, `#9f8e7d6c-5b4a-…` and `:?9f8e…`
   are literals. `op://Private/GitHub/token`, `~/.config/app/keys.json` and
@@ -187,9 +191,11 @@ follows, each bound pinned by a test with a sub-threshold bypass string:
   `op://9f8e…`, `~/9f8e…`, `~/.config/9f8e7d6c5b4a3e2d1c0b9a8f`,
   `~/.config/GHSAT0AAAAAABCDEFGHIJ`, `/etc/Passw0rdPassw0rd`,
   `~/.aws/9f8e7d6c-5b4a-3e2d-1c0b-9a8f7e6d5c4b` and `/9j/4AAQ…` are literals.
-  **Residual:** a separator-joined token made only of digits
-  (`1234567890-1234567890-12`), or one hidden behind enough word parts that
-  fewer than 16 characters remain (`my-token-9f8e-7d6c`), still reads as a name.
+  **Residual:** these still read as names: a separator-joined token made only of
+  digits (`1234567890-1234567890-12`) or only of letters
+  (`qwkz-mrtp-lxvb-nhgf`); one where too little remains once word and digit-only
+  parts are dropped (`my-token-9f8e-7d6c`); and a plain alphanumeric token
+  inside a dotted or `~` name (`9f8e…8f~`).
 - **Short bare words are an allowlist, not a heuristic.** Only `basic`, `bearer`,
   `token`, `apikey`/`api-key`, `digest`, `negotiate`, `oauth`, `none` are treated
   as scheme/type slots. Everything else — `admin`, `password`, `letmein`,

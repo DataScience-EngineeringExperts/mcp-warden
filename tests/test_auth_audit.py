@@ -309,10 +309,9 @@ def test_nf2_separator_joined_tokens_are_not_locators():
                 "pass://a/b#9f8e7d6c-5b4a-3e2d-1c0b-9a8f7e6d5c4b",
                 "${API_KEY:?9f8e7d6c5b4a-3e2d1c0b9a8f}",
                 "~/.aws/9f8e7d6c-5b4a-3e2d-1c0b-9a8f7e6d5c4b.json",
-                "~/.aws/9f8e7d6c5b4a3e2d1c0b9a8f~",
                 "~/.cfg/token-9f8e7d6c5b4a3e2d1c0b9a8f",
-                "~/.cfg/my-token-9f8e-7d6c-5b4a-3e2d",
                 "~/.cfg/9f8e7d6c-beef-cafe-dead-9a8f7e6d5c4b",
+                "~/.cfg/9f8e1234-5678-3e2d-1c0b-9a8f7e6d5c4b",  # digit-only UUID groups
                 "/etc/Passw0rd_Passw0rd_X"):
         assert _is_high(lit), lit
     # Descriptive separator-joined names stay names, digits and versions included.
@@ -329,7 +328,11 @@ def test_nf2_separator_joined_tokens_are_not_locators():
                 "~/.kube/config-prod-us-east-1",
                 "/opt/node-v18.17.1-linux-x64/keys/token",
                 "pass://a/b#api-key",
-                "${API_KEY:?required-api-key-missing}"):
+                "${API_KEY:?required-api-key-missing}",
+                # GCP service-account key files and hash-named cache files.
+                "~/keys/my-project-123456-a1b2c3d4e5f6.json",
+                "~/keys/my-ml-proj-2024-123456-a1b2c3d4e5f6.json",
+                "~/.aws/sso/cache/" + "a1b2c3d4e5" * 4 + ".json"):
         assert not _auth(loc), loc
     # The locator rule reads these as names; the whole-value WRD-SEC-ENTROPY net
     # (24+ chars at >= 4.0 bits/char) still fires on them independently.

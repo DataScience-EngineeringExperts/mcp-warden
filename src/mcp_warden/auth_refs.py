@@ -1,7 +1,8 @@
 """Reference, locator and placeholder heuristics for the WRD-AUTH-* audit.
 
-Split out of :mod:`mcp_warden.auth_audit` (DSE-1540) with no behaviour change
-beyond the separator-token fix in :func:`_tokenish_segment`. Everything here
+Split out of :mod:`mcp_warden.auth_audit` (DSE-1540). The only behaviour change
+is the separator-token rule in :func:`_tokenish_segment` and its use on URI
+fragments and ``:?`` messages. Everything here
 answers one question about a config value: does it carry a credential, or
 only point at / stand in for one?
 """
@@ -36,14 +37,16 @@ _REF_WITH_MESSAGE = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*:?\?((?:[^{}]|\$\{[^{
 #: lowercase hex key or a GHSAT-style token is carried, not pointed at. A segment
 #: with a dot (``keys.json``) is a file name.
 #:
-#: A segment carrying ``-``/``_``/``.``/``~`` is judged piece by piece (NF-2,
-#: DSE-1540). It is a token when any ``.``/``~`` piece is, and a ``-``/``_``-joined
-#: piece is a token when either: one of its parts is a token-shaped alphanumeric
-#: run that contains a digit (``tok_9f8e…``, ``token-9f8e…``); or, after dropping
-#: word parts (4+ letters, not all hex), what remains is 16+ characters that switch
-#: between letters and digits 3+ times (``9f8e7d6c-5b4a-…`` UUID keys,
-#: ``Passw0rd_Passw0rd_X``). Descriptive names — ``gcp-sa-key-prod-2024``,
-#: ``id_ed25519_github-work``, ``prod-db-2024_credentials`` — stay names.
+#: A segment carrying ``-``/``_`` is judged piece by piece across ``.``/``~``
+#: (NF-2, DSE-1540); plain alphanumeric pieces of a dotted name stay a stem and an
+#: extension. A ``-``/``_``-joined piece is a token when either: one of its parts
+#: is a token-shaped alphanumeric run that contains a digit (``tok_9f8e…``,
+#: ``token-9f8e…``); or, after dropping digit-only parts and word parts (4+
+#: letters, not all hex), what remains switches between letters and digits 3+
+#: times and is 20+ characters (16+ if mixed case) — ``9f8e7d6c-5b4a-…`` UUID
+#: keys, ``Passw0rd_Passw0rd_X``. Descriptive names — ``gcp-sa-key-prod-2024``,
+#: ``id_ed25519_github-work``, GCP key files ``<project>-123456-a1b2c3d4e5f6.json``
+#: — stay names.
 _ALNUM_SEGMENT = re.compile(r"[A-Za-z0-9]+")
 _SEPARATED_SEGMENT = re.compile(r"[A-Za-z0-9_-]+")
 _FREE_TEXT_RUN = re.compile(r"[A-Za-z0-9_-]+")
@@ -69,19 +72,24 @@ def _separated_token(seg: str) -> bool:
     if any(_alnum_token(p) and any(ch.isdigit() for ch in p) for p in parts):
         return True
     core = "".join(
-        p for p in parts if not (_WORD_PART.fullmatch(p) and not _HEX_LETTERS.fullmatch(p))
+        p for p in parts
+        if not p.isdigit() and not (_WORD_PART.fullmatch(p) and not _HEX_LETTERS.fullmatch(p))
     )
-    return len(core) >= _TOKENISH_MIN_LEN and len(_CLASS_SWITCH.findall(core)) >= _TOKENISH_SWITCHES
+    mixed_case = core.lower() != core and core.upper() != core
+    min_len = _TOKENISH_MIN_LEN if mixed_case else _TOKENISH_LONG
+    return len(core) >= min_len and len(_CLASS_SWITCH.findall(core)) >= _TOKENISH_SWITCHES
 
 
 def _tokenish_segment(seg: str) -> bool:
-    for piece in re.split(r"[.~]+", seg):
-        if _ALNUM_SEGMENT.fullmatch(piece):
-            if _alnum_token(piece):
-                return True
-        elif _SEPARATED_SEGMENT.fullmatch(piece) and _separated_token(piece):
-            return True
-    return False
+    pieces = re.split(r"[.~]+", seg)
+    if len(pieces) == 1 and _ALNUM_SEGMENT.fullmatch(seg):
+        return _alnum_token(seg)
+    # In a dotted name the alphanumeric pieces are a stem and an extension (a
+    # hash-named cache file, ``keys.json``); only separator-joined pieces are judged.
+    return any(
+        not _ALNUM_SEGMENT.fullmatch(p) and _SEPARATED_SEGMENT.fullmatch(p) and _separated_token(p)
+        for p in pieces if p
+    )
 
 
 def _text_carries_a_token(text: str) -> bool:
