@@ -115,8 +115,10 @@ was the #53 root-cause bug, now fixed.)
 
 Sign **atomicity invariant** (Fix 3): the on-disk state is ALWAYS consistent —
 either BOTH the pointer-bearing lock AND its sidecar are present, or NEITHER. The
-bundle is staged to `warden.lock.sigstore.tmp`, the pointer-bearing lock is written,
-then the temp sidecar is `os.replace`d into `warden.lock.sigstore`. On ANY failure
+bundle is staged to a uniquely named temp file (`warden.lock.sigstore.<random>.tmp`,
+created `O_EXCL|O_NOFOLLOW` at mode 0644 under the umask, so a planted `.tmp` symlink
+is never followed), the pointer-bearing lock is written, then the temp sidecar is
+`os.replace`d into `warden.lock.sigstore`. On ANY failure
 the unsigned lock is restored if needed and no orphan `.sigstore` or `.tmp` remains,
 so a signed lock never claims a signature it cannot back with a sidecar.
 
@@ -132,6 +134,38 @@ Fail-closed semantics:
   `overall_digest` is byte-identical to an unsigned pin of the same surface.
 - The OIDC JWT is **never written to disk or logged** — only the resulting Fulcio
   public certificate is embedded in the bundle.
+
+---
+
+## `lock sign` (DSE-1530)
+
+```bash
+mcp-warden lock sign warden.lock [--coordinate npm:@org/server@1.2.3] [--identity-token T]
+```
+
+Signs an **existing, unsigned** lock, for attesters that capture inside a
+`--network none` sandbox (no OIDC token reachable) and sign on the runner afterwards.
+It produces exactly what `pin --sign` produces: the v2 statement (binds the package
+coordinate) with `--coordinate`, the v1 statement otherwise, the derived sidecar, the
+out-of-digest pointer attestation, and `provenance_version` 2. `overall_digest` is
+unchanged.
+
+It refuses with exit 2, writing nothing, when:
+
+- the lock is missing or fails the integrity gate (stored entries do not reproduce
+  `overall_digest`), or carries a stale approval (`approved_digest` no longer binds
+  the surface) — the same gate as `lock rotate`;
+- `--coordinate` is not `<npm|pypi>:<name>@<pinned-version>`;
+- a sidecar already exists (a dangling symlink included), or the lock already
+  carries a signature pointer — it never overwrites or stacks a signature;
+- the `[sigstore]` extra is absent.
+
+Unlike `pin --sign`, the sidecar is placed with `os.link` **before** the lock is
+rewritten. `os.link` fails if the name exists, so the overwrite refusal also holds at
+the moment of writing: a run that loses a race to another signer exits 2 and leaves
+the winner's lock and sidecar untouched. A filesystem without hard links fails closed
+(exit 1). A symlinked lock path is resolved, so the sidecar sits beside the file that
+is verified. Any signing error exits 1 with no partial sidecar.
 
 ---
 
@@ -217,6 +251,8 @@ Every one of these produces a **non-zero** exit; none can reach exit 0:
 | Statement / digest mismatch | exit 1 |
 | Optional extra absent | exit 2 |
 | Lock has no `overall_digest` | exit 2 |
+| `lock sign`: sidecar exists, lock already signed, lost race, tampered lock, stale approval, bad coordinate | exit 2 |
+| `lock sign` / `pin --sign`: signing error | exit 1 |
 
 ---
 
