@@ -114,10 +114,71 @@ async def test_failure_on_a_later_page_fails_closed():
         await _list_tools(_Flaky())
 
 
-@pytest.mark.anyio
-async def test_first_page_failure_stays_fail_open_for_capability_less_servers():
-    class _NoTools:
-        async def list_tools(self, *, params=None):
-            raise RuntimeError("Method not found")
+class _FirstPageError:
+    """Every list call raises ``exc`` on its first page."""
 
-    assert await _list_tools(_NoTools()) == []
+    def __init__(self, exc: BaseException):
+        self.exc = exc
+
+    async def list_tools(self, *, params=None):
+        raise self.exc
+
+    async def list_resources(self, *, params=None):
+        raise self.exc
+
+    async def list_prompts(self, *, params=None):
+        raise self.exc
+
+
+class _RpcError(Exception):
+    """Mirrors the ``.error.code`` shape of SDK 1.x ``McpError`` and 2.x ``MCPError``."""
+
+    def __init__(self, code: int, message: str):
+        super().__init__(message)
+        self.error = SimpleNamespace(code=code, message=message)
+
+
+def _method_not_found() -> Exception:
+    return _RpcError(-32601, "Method not found")
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("list_fn", [_list_tools, _list_resources, _list_prompts])
+async def test_undeclared_capability_answering_method_not_found_is_empty(list_fn):
+    assert await list_fn(_FirstPageError(_method_not_found()), declared=False) == []
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("list_fn", [_list_tools, _list_resources, _list_prompts])
+async def test_declared_capability_first_page_failure_fails_closed(list_fn):
+    # DSE-1538: a declared section that errors must not pin as empty.
+    with pytest.raises(CaptureError, match="declared capability"):
+        await list_fn(_FirstPageError(_method_not_found()), declared=True)
+    with pytest.raises(CaptureError, match="declared capability"):
+        await list_fn(_FirstPageError(RuntimeError("transport reset")))
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "exc",
+    [RuntimeError("Method not found"), _RpcError(-32603, "internal error"), TimeoutError()],
+)
+async def test_undeclared_capability_other_errors_fail_closed(exc):
+    # Only a real JSON-RPC -32601 is "no such capability"; message text is not trusted.
+    with pytest.raises(CaptureError, match="undeclared capability"):
+        await _list_prompts(_FirstPageError(exc), declared=False)
+
+
+def test_declared_capabilities_reads_sdk_models_dicts_and_missing():
+    from mcp_warden.capture import _declared_capabilities
+
+    caps = types.ServerCapabilities(tools=types.ToolsCapability())
+    init = SimpleNamespace(capabilities=caps)
+    assert _declared_capabilities(init) == {"tools": True, "resources": False, "prompts": False}
+    assert _declared_capabilities(SimpleNamespace(capabilities={"prompts": {}})) == {
+        "tools": False,
+        "resources": False,
+        "prompts": True,
+    }
+    # No capabilities object at all → unknown → treated as declared (fail closed).
+    assert _declared_capabilities(SimpleNamespace()) == {"tools": True, "resources": True, "prompts": True}

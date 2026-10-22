@@ -97,6 +97,28 @@ jobs:
           echo "requirements-dev.lock is in sync with pyproject.toml."
 
       # --------------------------------------------------------------------
+      # 2b. Action lockfile-in-sync check (DSE-1538).
+      #    action/requirements.lock is what the published composite action
+      #    installs into CUSTOMER CI (action.yml, --require-hashes). Same
+      #    preferred-baseline regeneration and body diff as step 2, with the
+      #    runtime-only command printed in the lock's own header (no dev extra).
+      # --------------------------------------------------------------------
+      - name: Verify action lockfile is in sync with pyproject.toml
+        run: |
+          cp action/requirements.lock /tmp/action-requirements.regenerated.lock
+          uv pip compile --universal --generate-hashes --python-version 3.11 \
+            pyproject.toml -o /tmp/action-requirements.regenerated.lock
+          if ! diff -u \
+               <(grep -v '^#' action/requirements.lock) \
+               <(grep -v '^#' /tmp/action-requirements.regenerated.lock); then
+            echo "::error::action/requirements.lock is out of sync with pyproject.toml."
+            echo "Regenerate it (see CONTRIBUTING.md) and commit the result:"
+            echo "  uv pip compile --universal --generate-hashes --python-version 3.11 pyproject.toml -o action/requirements.lock"
+            exit 1
+          fi
+          echo "action/requirements.lock is in sync with pyproject.toml."
+
+      # --------------------------------------------------------------------
       # 3. The locked closure actually works — import the package + key deps.
       # --------------------------------------------------------------------
       - name: Import package + locked closure
@@ -118,3 +140,20 @@ jobs:
 
       - name: CVE audit the locked closure (fail on any advisory)
         run: /tmp/locked/bin/python -m pip_audit --skip-editable
+
+      # --------------------------------------------------------------------
+      # 5. Action lock: hash-verified install + CVE gate (DSE-1538).
+      #    Step 2b's diff keeps existing pins as the baseline, so on its own it
+      #    cannot see a tampered hash or a downgrade that still satisfies
+      #    pyproject.toml. Installing with --require-hashes rejects the former;
+      #    pip-audit over the exact pins rejects a downgrade to a version with a
+      #    known advisory. Same evidence the dev lock gets from steps 1 and 4.
+      # --------------------------------------------------------------------
+      - name: Install action closure with --require-hashes
+        run: |
+          python -m venv /tmp/action-locked
+          /tmp/action-locked/bin/python -m pip install --upgrade pip
+          /tmp/action-locked/bin/python -m pip install --require-hashes -r action/requirements.lock
+
+      - name: CVE audit the action lock (fail on any advisory)
+        run: /tmp/locked/bin/python -m pip_audit --disable-pip --require-hashes -r action/requirements.lock
