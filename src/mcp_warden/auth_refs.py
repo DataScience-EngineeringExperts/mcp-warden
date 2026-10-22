@@ -36,32 +36,25 @@ _REF_WITH_MESSAGE = re.compile(r"\$\{[A-Za-z_][A-Za-z0-9_]*:?\?((?:[^{}]|\$\{[^{
 #: lowercase hex key or a GHSAT-style token is carried, not pointed at. A segment
 #: with a dot (``keys.json``) is a file name.
 #:
-#: A segment joined by ``-``/``_`` but no dot is judged with the separators
-#: stripped (NF-2, DSE-1540): 16+ characters at >= 3.5 bits/char that also carry a
-#: digit or mixed case is a token (``9f8e7d6c-5b4a-…`` UUID keys,
-#: ``tok_9f8e…``). Words joined by separators — ``application_default_credentials``,
-#: ``my-app`` — have no digit and one case, so they stay names.
+#: A segment carrying ``-``/``_``/``.``/``~`` is judged piece by piece (NF-2,
+#: DSE-1540). It is a token when any ``.``/``~`` piece is, and a ``-``/``_``-joined
+#: piece is a token when either: one of its parts is a token-shaped alphanumeric
+#: run that contains a digit (``tok_9f8e…``, ``token-9f8e…``); or, after dropping
+#: word parts (4+ letters, not all hex), what remains is 16+ characters that switch
+#: between letters and digits 3+ times (``9f8e7d6c-5b4a-…`` UUID keys,
+#: ``Passw0rd_Passw0rd_X``). Descriptive names — ``gcp-sa-key-prod-2024``,
+#: ``id_ed25519_github-work``, ``prod-db-2024_credentials`` — stay names.
 _ALNUM_SEGMENT = re.compile(r"[A-Za-z0-9]+")
 _SEPARATED_SEGMENT = re.compile(r"[A-Za-z0-9_-]+")
-_ALNUM_RUN = re.compile(r"[A-Za-z0-9]+")
+_FREE_TEXT_RUN = re.compile(r"[A-Za-z0-9_-]+")
 _PATH_SEGMENT = re.compile(r"[A-Za-z0-9._~-]+")
-_TOKENISH_MIN_LEN, _TOKENISH_LONG, _TOKENISH_ENTROPY = 16, 20, 3.5
+_WORD_PART = re.compile(r"[A-Za-z]{4,}")
+_HEX_LETTERS = re.compile(r"[A-Fa-f]+")
+_CLASS_SWITCH = re.compile(r"(?<=[A-Za-z])(?=[0-9])|(?<=[0-9])(?=[A-Za-z])")
+_TOKENISH_MIN_LEN, _TOKENISH_LONG, _TOKENISH_ENTROPY, _TOKENISH_SWITCHES = 16, 20, 3.5, 3
 
 
-def _separated_token(seg: str) -> bool:
-    """A ``-``/``_``-joined segment that is a token once its separators are removed."""
-    if not _SEPARATED_SEGMENT.fullmatch(seg):
-        return False
-    core = seg.replace("-", "").replace("_", "")
-    if len(core) < _TOKENISH_MIN_LEN or shannon_entropy(core) < _TOKENISH_ENTROPY:
-        return False
-    mixed_case = core.lower() != core and core.upper() != core
-    return mixed_case or any(ch.isdigit() for ch in core)
-
-
-def _tokenish_segment(seg: str) -> bool:
-    if not _ALNUM_SEGMENT.fullmatch(seg):
-        return _separated_token(seg)
+def _alnum_token(seg: str) -> bool:
     if len(seg) < _TOKENISH_MIN_LEN:
         return False
     if len(seg) >= _TOKENISH_LONG:
@@ -70,10 +63,31 @@ def _tokenish_segment(seg: str) -> bool:
     return mixed_case or shannon_entropy(seg) >= _TOKENISH_ENTROPY
 
 
+def _separated_token(seg: str) -> bool:
+    """A ``-``/``_``-joined piece that carries a token (see the rule above)."""
+    parts = [p for p in re.split(r"[-_]+", seg) if p]
+    if any(_alnum_token(p) and any(ch.isdigit() for ch in p) for p in parts):
+        return True
+    core = "".join(
+        p for p in parts if not (_WORD_PART.fullmatch(p) and not _HEX_LETTERS.fullmatch(p))
+    )
+    return len(core) >= _TOKENISH_MIN_LEN and len(_CLASS_SWITCH.findall(core)) >= _TOKENISH_SWITCHES
+
+
+def _tokenish_segment(seg: str) -> bool:
+    for piece in re.split(r"[.~]+", seg):
+        if _ALNUM_SEGMENT.fullmatch(piece):
+            if _alnum_token(piece):
+                return True
+        elif _SEPARATED_SEGMENT.fullmatch(piece) and _separated_token(piece):
+            return True
+    return False
+
+
 def _text_carries_a_token(text: str) -> bool:
-    """Any alphanumeric run inside free text (a URI fragment, a ``:?`` message) that
-    is token-shaped (CSO NF-3): ``#9f8e…`` / ``${K:?9f8e…}`` carry the secret."""
-    return any(_tokenish_segment(run) for run in _ALNUM_RUN.findall(text))
+    """Any run inside free text (a URI fragment, a ``:?`` message) that is
+    token-shaped (CSO NF-3): ``#9f8e…`` / ``${K:?9f8e-7d6c…}`` carry the secret."""
+    return any(_tokenish_segment(run) for run in _FREE_TEXT_RUN.findall(text))
 
 
 #: Secret-manager reference URIs — the value names where the secret lives rather

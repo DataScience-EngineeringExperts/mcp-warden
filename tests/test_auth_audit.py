@@ -12,6 +12,7 @@ import json
 from typer.testing import CliRunner
 
 from mcp_warden.auth_audit import AuthAuditError, audit_config, audit_server
+from mcp_warden.auth_refs import _looks_like_secret_ref
 from mcp_warden.cli import app
 
 runner = CliRunner()
@@ -302,15 +303,38 @@ def test_nf2_separator_joined_tokens_are_not_locators():
     for lit in ("~/.aws/9f8e7d6c-5b4a-3e2d-1c0b-9a8f7e6d5c4b",   # UUID-shaped API key
                 "~/.config/9f8e-7d6c5b4a3e2d1c0b9a",
                 "pass://a.b/tok_9f8e7d6c5b4a3e2d1c0b9a8f",
-                "/etc/app/Xk9mQ2p_Lw5tR8vN4j"):                 # mixed case, separators
+                "/etc/app/Xk9mQ2p_Lw5tR8vN4j",                  # mixed case, separators
+                # CSO re-review of #117: fragments, `:?` messages, dot/tilde suffixes,
+                # a word prefix, hex-word UUID groups, and the low-entropy residual.
+                "pass://a/b#9f8e7d6c-5b4a-3e2d-1c0b-9a8f7e6d5c4b",
+                "${API_KEY:?9f8e7d6c5b4a-3e2d1c0b9a8f}",
+                "~/.aws/9f8e7d6c-5b4a-3e2d-1c0b-9a8f7e6d5c4b.json",
+                "~/.aws/9f8e7d6c5b4a3e2d1c0b9a8f~",
+                "~/.cfg/token-9f8e7d6c5b4a3e2d1c0b9a8f",
+                "~/.cfg/my-token-9f8e-7d6c-5b4a-3e2d",
+                "~/.cfg/9f8e7d6c-beef-cafe-dead-9a8f7e6d5c4b",
+                "/etc/Passw0rd_Passw0rd_X"):
         assert _is_high(lit), lit
-    # Words joined by separators stay names: no digit, one case.
+    # Descriptive separator-joined names stay names, digits and versions included.
     for loc in ("~/.config/gcloud/application_default_credentials.json",
                 "~/.config/gcloud/application_default_credentials",
                 "~/.config/app/keys.json",
                 "/var/run/secrets/kubernetes-service-account/token",
-                "~/.config/my-app/service_account_key"):
+                "~/.config/my-app/service_account_key",
+                "~/.secrets/gcp-sa-key-prod-2024",
+                "~/.ssh/id_ed25519_github-work",
+                "C:\\Users\\me\\MyApp_ServiceAccount",
+                "~/.cfg/api-v2-key-v3-prod-2024",
+                "~/.cfg/gcp-sa-key-2024-01-15",
+                "~/.kube/config-prod-us-east-1",
+                "/opt/node-v18.17.1-linux-x64/keys/token",
+                "pass://a/b#api-key",
+                "${API_KEY:?required-api-key-missing}"):
         assert not _auth(loc), loc
+    # The locator rule reads these as names; the whole-value WRD-SEC-ENTROPY net
+    # (24+ chars at >= 4.0 bits/char) still fires on them independently.
+    for loc in ("/run/secrets/github_token_prod2", "vault://secret/prod-db-2024_credentials"):
+        assert _looks_like_secret_ref(loc), loc
 
 
 def test_f6_ellipsis_is_anchored():

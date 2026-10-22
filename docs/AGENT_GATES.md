@@ -172,21 +172,24 @@ follows, each bound pinned by a test with a sub-threshold bypass string:
   wearing a reference; `${VAR:?msg}` stays a reference.
 - **Locators need >= 2 segments and no token-shaped segment.** Token-shaped is
   an alphanumeric-only segment that is 20+ characters, or 16+ at >= 3.5 bits/char,
-  or 16+ mixed-case (`Passw0rdPassw0rd`). A segment with a dot is a file name. A
-  segment joined by `-` or `_` is judged with the separators removed: 16+
-  characters at >= 3.5 bits/char that also has a digit or mixed case is a token
-  (`9f8e7d6c-5b4a-…`, `tok_9f8e…`); separator-joined words with no digit and one
-  case (`application_default_credentials`, `my-app`) stay names. A URI fragment or a `${VAR:?msg}` message is checked
-  the same way: `#key` and `:?required` are fine, `#9f8e…` and `:?9f8e…` are
-  literals. `op://Private/GitHub/token`, `~/.config/app/keys.json` and
+  or 16+ mixed-case (`Passw0rdPassw0rd`). A segment carrying `.` or `~` is
+  judged piece by piece, so `keys.json` is a name and `9f8e…4b.json` is not. A
+  `-`/`_`-joined piece is a token when one of its parts is a token-shaped run
+  with a digit (`tok_9f8e…`, `token-9f8e…`), or when, after dropping word parts
+  (4+ letters, not all hex), 16+ characters remain that switch between letters
+  and digits 3+ times (`9f8e7d6c-5b4a-…` UUID keys, `Passw0rd_Passw0rd_X`).
+  Descriptive names stay names: `application_default_credentials`,
+  `gcp-sa-key-prod-2024`, `id_ed25519_github-work`, `prod-db-2024_credentials`.
+  A URI fragment or a `${VAR:?msg}` message is checked the same way: `#api-key`
+  and `:?required-api-key-missing` are fine, `#9f8e7d6c-5b4a-…` and `:?9f8e…`
+  are literals. `op://Private/GitHub/token`, `~/.config/app/keys.json` and
   `~/.config/gcloud/application_default_credentials.json` are references;
   `op://9f8e…`, `~/9f8e…`, `~/.config/9f8e7d6c5b4a3e2d1c0b9a8f`,
   `~/.config/GHSAT0AAAAAABCDEFGHIJ`, `/etc/Passw0rdPassw0rd`,
   `~/.aws/9f8e7d6c-5b4a-3e2d-1c0b-9a8f7e6d5c4b` and `/9j/4AAQ…` are literals.
-  **Residual:** a separator-joined token below 3.5 bits/char once stripped
-  (`Passw0rd_Passw0rd_X`) still reads as a name. Separator-joined segments must
-  clear the entropy floor; the alphanumeric-only rule's low-entropy mixed-case
-  branch does not apply to them.
+  **Residual:** a separator-joined token made only of digits
+  (`1234567890-1234567890-12`), or one hidden behind enough word parts that
+  fewer than 16 characters remain (`my-token-9f8e-7d6c`), still reads as a name.
 - **Short bare words are an allowlist, not a heuristic.** Only `basic`, `bearer`,
   `token`, `apikey`/`api-key`, `digest`, `negotiate`, `oauth`, `none` are treated
   as scheme/type slots. Everything else — `admin`, `password`, `letmein`,
