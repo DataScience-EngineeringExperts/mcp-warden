@@ -27,7 +27,7 @@ from rich.markup import escape
 from rich.table import Table
 
 from . import __version__
-from .capture import CaptureError, capture_surface_http_sync, capture_surface_sync
+from .capture import MAX_LIST_PAGES, CaptureError, capture_surface_http_sync, capture_surface_sync
 from .check_core import run_check_full
 from .checks import run_checks
 from .cli_auth import register as register_auth_commands
@@ -118,6 +118,9 @@ def pin(
     json_out: bool = typer.Option(False, "--json", help="Emit findings as JSONL to stdout"),
     sarif: Optional[Path] = typer.Option(None, "--sarif", help="Write SARIF report to this path"),
     timeout: float = typer.Option(30.0, "--timeout", help="Capture timeout (seconds)"),
+    max_pages: int = typer.Option(
+        MAX_LIST_PAGES, "--max-pages", min=1, help="Cap on nextCursor pages per list call (fail closed past it)"
+    ),
     sign: bool = typer.Option(False, "--sign", help="Sigstore-sign overall_digest (requires mcp-warden[sigstore])"),
     identity_token: Optional[str] = typer.Option(
         None, "--identity-token", help="Explicit OIDC token for signing (default: ambient/CI OIDC)"
@@ -154,12 +157,12 @@ def pin(
 
     try:
         if url:
-            surface = capture_surface_http_sync(url, timeout_s=timeout)
+            surface = capture_surface_http_sync(url, timeout_s=timeout, max_pages=max_pages)
         else:
             command, args = _split_server_cmd(server_cmd)
-            surface = capture_surface_sync(command, args, timeout_s=timeout)
+            surface = capture_surface_sync(command, args, timeout_s=timeout, max_pages=max_pages)
     except CaptureError as exc:
-        err_console.print(f"[red]capture failed:[/red] {exc}")
+        err_console.print(f"[red]capture failed:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
 
     findings = run_checks(surface)
@@ -196,6 +199,9 @@ def check(
     json_out: bool = typer.Option(False, "--json", help="Emit findings+drift as JSONL to stdout"),
     sarif: Optional[Path] = typer.Option(None, "--sarif", help="Write SARIF report to this path"),
     timeout: float = typer.Option(30.0, "--timeout", help="Capture timeout (seconds)"),
+    max_pages: int = typer.Option(
+        MAX_LIST_PAGES, "--max-pages", min=1, help="Cap on nextCursor pages per list call (fail closed past it)"
+    ),
     verify: bool = typer.Option(
         False, "--verify", help="Verify the lock's Sigstore signature (requires mcp-warden[sigstore])"
     ),
@@ -291,12 +297,12 @@ def check(
     try:
         # Single source of truth shared with the pre-commit wrapper (precommit.py)
         # so a local hook and CI can never disagree on a drift verdict.
-        result = run_check_full(command, args, lock, timeout_s=timeout, url=url)
+        result = run_check_full(command, args, lock, timeout_s=timeout, url=url, max_pages=max_pages)
     except (FileNotFoundError, ValueError) as exc:
         err_console.print(f"[red]error:[/red] {exc}")
         raise typer.Exit(code=2) from exc
     except CaptureError as exc:
-        err_console.print(f"[red]capture failed:[/red] {exc}")
+        err_console.print(f"[red]capture failed:[/red] {escape(str(exc))}")
         raise typer.Exit(code=2) from exc
 
     findings = result.findings

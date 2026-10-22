@@ -30,6 +30,18 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+### Pagination (DSE-1539)
+
+- `pin` and `check` take `--max-pages N` (default 256, `MAX_LIST_PAGES`): a list call
+  whose `nextCursor` chain runs past the cap fails capture with exit 2.
+- Capture now refuses a surface that repeats a tool name, prompt name or resource URI
+  (typically across pages). Each is the entry's identity in the name-keyed drift diff,
+  so a repeat let one entry shadow the other. **Behaviour change:** a server that lists
+  a duplicate now fails `pin`/`check` with exit 2 instead of pinning.
+- SPEC §8.2 states capture completeness and identity uniqueness normatively.
+- `pin`/`check` escape capture errors before printing, so a server-supplied name with
+  console markup (`x[/red]`) cannot crash the CLI into exit 1 or restyle the output.
+
 ### Auth audit
 
 - `WRD-AUTH-TOKEN-IN-CONFIG` now catches tokens joined by `-` or `_` inside a path or

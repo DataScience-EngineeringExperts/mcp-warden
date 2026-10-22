@@ -291,6 +291,12 @@ changes the pass/fail decision.
 | Inspection-policy modified | a tool's §11 `inspection` value changed/added/removed | **medium** |
 | No drift | every `entry_digest` matches **and** `overall_digest` matches | — |
 
+**Capture completeness (normative).** A capturer MUST drain every `nextCursor` page of
+each list call and MUST fail rather than emit a lock when a chain exceeds its page cap
+(reference: 256, `--max-pages`) or a later page errors. Tool names, prompt names and
+resource URIs are entry identities: a capturer MUST refuse a surface that repeats one,
+on any page, because a name-keyed diff would let one entry shadow the other.
+
 When `overall_digest` matches the baseline there is provably no drift, and per-entry
 diffing MAY be skipped; otherwise an implementation diffs per entry so that a report can
 point at the exact entry that changed.
