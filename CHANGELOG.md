@@ -46,6 +46,15 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
   move to `mcp` 2.2.0, and every action-lock pin now equals the audited dev-lock pin.
 - THREAT_MODEL §5.3.4 documents capture completeness and OS-trust-store TLS for `--url`.
 
+### Signing
+
+- `mcp-warden lock sign <lock> [--coordinate C] [--identity-token T]` signs an existing
+  unsigned lock (DSE-1530), for attesters that capture inside a network-less sandbox and
+  sign afterwards. Same contract as `pin --sign`: v2 statement with `--coordinate`, v1
+  without, exit 1 on signing failure with no partial sidecar. It refuses (exit 2) a lock
+  that fails the integrity gate, an invalid coordinate, an existing sidecar, and a lock
+  that already carries a signature pointer, so it never overwrites or stacks a signature.
+
 ### Decision receipt foundation
 
 - Add protocol-neutral V2 enforcement with independently authorized signed decision

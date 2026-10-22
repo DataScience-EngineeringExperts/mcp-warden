@@ -21,7 +21,10 @@ from typing import Optional
 import typer
 from rich.console import Console
 
+from .cli_sign import _sidecar_path_for, sign_after_pin
+from .corpus_coordinate import parse_explicit as parse_coordinate
 from .lockfile import compute_overall_digest, read_lock, write_lock
+from .models import WardenLock
 from .provenance import ProvenanceError, rotate_provenance
 
 
@@ -30,8 +33,32 @@ def _now_rfc3339() -> str:
     return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _read_consistent_lock(lock: Path, err_console: Console, remedy: str) -> WardenLock:
+    """Read ``lock`` and refuse (exit 2) one whose entries do not reproduce its digest.
+
+    A mismatch means the lock was hand-edited / tampered; neither rotate nor sign
+    may "launder" it by re-stamping it.
+    """
+    try:
+        lock_doc = read_lock(lock)
+    except (FileNotFoundError, ValueError) as exc:
+        err_console.print(f"[red]error:[/red] {exc}")
+        raise typer.Exit(code=2) from exc
+    recomputed = compute_overall_digest(
+        lock_doc.server, lock_doc.tools, lock_doc.resources, lock_doc.prompts,
+        schema_version=lock_doc.schema_version,
+    )
+    if recomputed != lock_doc.overall_digest:
+        err_console.print(
+            "[red]error:[/red] lock is internally inconsistent / tampered "
+            f"(stored entries do not reproduce overall_digest); {remedy}"
+        )
+        raise typer.Exit(code=2)
+    return lock_doc
+
+
 def register(app: typer.Typer, console: Console, err_console: Console) -> None:
-    """Attach the ``lock`` sub-app (with ``rotate``) to ``app``."""
+    """Attach the ``lock`` sub-app (with ``rotate`` and ``sign``) to ``app``."""
 
     lock_app = typer.Typer(add_completion=False, help="Lifecycle ops on an existing warden.lock baseline.")
     app.add_typer(lock_app, name="lock")
@@ -51,25 +78,9 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         lock whose stored entries no longer reproduce its ``overall_digest`` (or
         whose approval no longer binds the surface) is refused (exit 2, no write).
         """
-        try:
-            lock_doc = read_lock(lock)
-        except (FileNotFoundError, ValueError) as exc:
-            err_console.print(f"[red]error:[/red] {exc}")
-            raise typer.Exit(code=2) from exc
-
         # Integrity gate (fail closed): recompute overall_digest from the lock's
-        # OWN stored entries. A mismatch means the lock was hand-edited / tampered
-        # — rotate must never "launder" it by re-stamping; refuse and re-pin.
-        recomputed = compute_overall_digest(
-            lock_doc.server, lock_doc.tools, lock_doc.resources, lock_doc.prompts,
-            schema_version=lock_doc.schema_version,
-        )
-        if recomputed != lock_doc.overall_digest:
-            err_console.print(
-                "[red]error:[/red] lock is internally inconsistent / tampered "
-                "(stored entries do not reproduce overall_digest); re-pin instead of rotating"
-            )
-            raise typer.Exit(code=2)
+        # OWN stored entries; refuse and re-pin on a mismatch.
+        lock_doc = _read_consistent_lock(lock, err_console, "re-pin instead of rotating")
 
         # A stale approval (surface changed since approval) must not be silently
         # re-blessed by rotate; refuse so the operator re-pins/re-approves.
@@ -123,3 +134,49 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             console.print(f"  attester: {attester} (role={role})")
             unchanged_tag = "unchanged" if digest_unchanged else "CHANGED"
             console.print(f"  overall_digest: {rotated.overall_digest} [dim]({unchanged_tag})[/dim]")
+
+    @lock_app.command("sign")
+    def sign(
+        lock: Path = typer.Argument(..., help="Path to an existing, unsigned warden.lock"),
+        coordinate: Optional[str] = typer.Option(
+            None, "--coordinate",
+            help="Bind the package coordinate <npm|pypi>:<name>@<version> into the signature (v2 statement)",
+        ),
+        identity_token: Optional[str] = typer.Option(
+            None, "--identity-token", help="Explicit OIDC token for signing (default: ambient/CI OIDC)"
+        ),
+    ) -> None:
+        """Sigstore-sign an existing lock; same fail-closed contract as ``pin --sign``.
+
+        For attesters that capture UNSIGNED where no OIDC token is reachable (a
+        ``--network none`` sandbox) and sign afterwards. Writes ``<lock>.sigstore``
+        beside the lock; ``overall_digest`` is unchanged. Refuses (exit 2) a
+        tampered lock, a malformed coordinate, an existing sidecar, or a lock that
+        already carries a signature pointer — it never overwrites or stacks a
+        signature. Signing failure exits 1 with no partial sidecar.
+        """
+        coord_text = None
+        if coordinate is not None:
+            parsed = parse_coordinate(coordinate)
+            if parsed is None:
+                err_console.print("[red]error:[/red] --coordinate must be <npm|pypi>:<name>@<pinned-version>")
+                raise typer.Exit(code=2)
+            coord_text = str(parsed)
+
+        lock_doc = _read_consistent_lock(lock, err_console, "re-pin instead of signing")
+
+        sidecar = _sidecar_path_for(lock)
+        if sidecar.exists():
+            err_console.print(f"[red]error:[/red] {sidecar} already exists; refusing to overwrite a signature")
+            raise typer.Exit(code=2)
+        if any(a.method == "sigstore-keyless" for a in lock_doc.pin.attestations):
+            err_console.print(
+                "[red]error:[/red] lock already carries a signature pointer; re-pin to produce an unsigned lock"
+            )
+            raise typer.Exit(code=2)
+
+        sign_after_pin(lock_doc, lock, identity_token, err_console, coordinate=coord_text)
+        statement = "v2 (coordinate-bound)" if coord_text else "v1"
+        console.print(f"[green]signed[/green] -> {sidecar}")
+        console.print(f"  statement: {statement}")
+        console.print(f"  overall_digest: {lock_doc.overall_digest} [dim](unchanged)[/dim]")
