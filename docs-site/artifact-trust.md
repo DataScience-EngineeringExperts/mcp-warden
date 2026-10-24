@@ -2,8 +2,8 @@
 
 The development branch adds public-key signature verification for Agent Trust
 Kernel policy, runtime, adapter, and executable-bundle artifacts. This feature
-is not included in the published **2.0.0** package. Install a reviewed Git commit
-with the `artifact-trust` extra to use it.
+first ships in the **2.1.0** package. Install it with the `artifact-trust` extra
+(`pip install 'mcp-warden-cli[artifact-trust]'`).
 
 It prepares unsigned review artifacts and verifies external Ed25519 signatures.
 The separate [decision receipt foundation](decision-receipts.md) adds evidence

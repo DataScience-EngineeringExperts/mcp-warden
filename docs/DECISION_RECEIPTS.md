@@ -6,7 +6,7 @@ DSE-717 adds a protocol-neutral SDK foundation over the existing content-envelop
 policy, runtime, adapter and executable-bundle contracts. It records a governed
 security decision before the registered handler receives an allowed effect. The
 historical `guard` proxy keeps its existing behavior; DSE-1076 owns live integration.
-This development feature is not included in the published 2.0.0 package.
+This development feature first ships in the 2.1.0 package.
 
 The intended human checkpoint approves an exact reviewed version and its bounded
 actions until either changes. The trust boundary includes an externally governed

@@ -30,6 +30,8 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-10-23
+
 ### Pagination (DSE-1539)
 
 - `pin` and `check` take `--max-pages N` (default 256, `MAX_LIST_PAGES`): a list call
@@ -559,7 +561,8 @@ v1-strong foundation. Highlights of the 0.3.0 → 1.0.0 arc:
   declared surface, RFC 8785 (JCS) + SHA-256 canonicalization, SARIF output, and a live
   integrity-gate workflow with committed `clean.warden.lock`.
 
-[Unreleased]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v2.0.0...v2.1.0
 [1.1.0]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/DataScience-EngineeringExperts/mcp-warden/releases/tag/v1.0.0
