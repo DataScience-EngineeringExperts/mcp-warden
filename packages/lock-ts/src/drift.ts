@@ -331,6 +331,18 @@ export function computeDrift(baseline: Lock, current: BuiltLock): DriftItem[] {
     }
   }
 
+  // Backstop (DSE-2125): a digest mismatch no item explains must never verify clean.
+  if (items.length === 0) {
+    items.push(
+      item(
+        "digest-mismatch-unexplained",
+        "high",
+        "lock/overall_digest",
+        "overall_digest differs from the baseline but no per-entry change was identified (e.g. duplicate tool/resource/prompt keys in a lock); review the surface and re-pin",
+      ),
+    );
+  }
+
   items.sort((x, y) => cmpCodepoint(x.target, y.target) || cmpCodepoint(x.drift_class, y.drift_class));
   return items;
 }

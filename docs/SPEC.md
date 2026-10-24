@@ -252,6 +252,12 @@ emit low `schema-out-cosmetic-modified`; missing skeletons fall back to high
 `schema-out-modified`. SARIF prefixes these with `WRD-DRIFT-`, including
 `WRD-DRIFT-SCHEMA-OUT-TYPE-BROADENED`.
 
+A differing `overall_digest` is itself drift. If it differs and the per-entry diff produced
+no item (for example a baseline with duplicate tool/resource/prompt keys, which name-keyed
+indexing collapses), an implementation MUST emit high `digest-mismatch-unexplained` (target
+`lock/overall_digest`) so the verdict is never clean. Any other item, including the
+`schema-version-migrated` advisory, already explains the mismatch and suppresses it.
+
 
 ### 8.1 Overall digest
 
