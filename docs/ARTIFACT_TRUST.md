@@ -8,8 +8,8 @@ state, or establish whole-kernel conformance.
 
 ## Trust and key custody
 
-Install this development branch with the `artifact-trust` extra. The published
-2.0.0 package does not include this feature. No signing command, private-key
+Install 2.1.0 or later with the `artifact-trust` extra (`mcp-warden-cli[artifact-trust]`);
+the 2.0.0 package does not include this feature. No signing command, private-key
 loader, or key generator exists in the product. Use an independently governed
 external signing service or signing station; keep its private signing capability
 outside agent/tool access. The external signer must review the canonical

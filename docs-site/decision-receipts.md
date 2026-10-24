@@ -2,7 +2,7 @@
 
 The development SDK adds signed evidence for agent security decisions. A receipt
 binds the reviewed authority, exact request, effective decision, execution identity
-and evidence sequence. This feature is not included in the published **2.0.0**
+and evidence sequence. This feature first ships in the **2.1.0**
 package, and the existing `guard` command does not yet enforce these checkpoints.
 
 ## Keep approval outside untrusted inputs

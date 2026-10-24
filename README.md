@@ -28,7 +28,7 @@ The opt-in [artifact trust foundation](docs/ARTIFACT_TRUST.md) adds public-key
 verification for the existing kernel activation APIs and `trust` CLI commands
 to prepare unsigned review artifacts and verify external signatures. Keys and
 signer roles require an independently protected root pin. This development
-feature is not in the published 2.0.0 package. The development
+feature first ships in the 2.1.0 package. The development
 [decision receipt foundation](docs/DECISION_RECEIPTS.md) adds signed evidence,
 governed decisions and recovery ports. Live checkpoint enforcement still requires
 an independently protected platform provider and DSE-1076 guard integration.
@@ -455,8 +455,8 @@ V1's default evidence gate denies effects. DSE-717 adds a separate V2 PEP with i
 authorized signed receipts, strengthening rules, finite noncritical overrides, primary/fallback
 logs, protected-state/recovery ports, pure replay and a mandatory reference failure corpus.
 Reference providers prove local durability and fail-closed ordering; they cannot establish
-platform rollback resistance or whole-kernel conformance. These development APIs are absent
-from the published 2.0.0 package. See [`docs/DECISION_RECEIPTS.md`](docs/DECISION_RECEIPTS.md),
+platform rollback resistance or whole-kernel conformance. These development APIs first ship
+in the 2.1.0 package. See [`docs/DECISION_RECEIPTS.md`](docs/DECISION_RECEIPTS.md),
 [`docs/POLICY_ENFORCEMENT.md`](docs/POLICY_ENFORCEMENT.md) and
 [`docs/AGENT_TRUST_KERNEL.md`](docs/AGENT_TRUST_KERNEL.md).
 

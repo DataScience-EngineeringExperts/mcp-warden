@@ -5,7 +5,7 @@ whole-kernel conformance remains pending protected-platform and live adapter gat
 **Scope:** Deterministic reference monitor beneath agents and protocol adapters.
 **Document owner:** Security. Changes require threat-model review.
 
-> **Current-product boundary:** MCP-Warden 2.0.0 does **not** claim conformance with this
+> **Current-product boundary:** MCP-Warden 2.1.0 does **not** claim conformance with this
 > contract. Its shipped `guard` runtime intentionally has opt-outs and fail-open paths, and
 > it does not yet provide universal provenance, complete mediation, bounded authority, or
 > evidence-before-effect. Those differences remain honest product limits until downstream
@@ -475,7 +475,7 @@ probes per registered operation. It scans actual artifact bytes and safe output 
 passing report states `platform_status=unsupported` and `atk_conformant=false`: process-local
 protected state and file durability cannot resist restoration of the entire host snapshot. No
 production protected platform provider or DSE-1076 live `guard` integration ships in this wave.
-These development features remain absent from the published 2.0.0 package.
+These development foundations first ship in the 2.1.0 package; that is not ATK conformance.
 
 ## 11. Conformance gates
 
