@@ -10,8 +10,10 @@ lock can never produce.
 Layout of a corpus checkout (``docs/COMMUNITY_CORPUS.md``)::
 
     attesters.json                              discovery list, NOT the trust root
-    locks/<ecosystem>/<segment>/<version>/<attester-id>.lock
-    locks/<ecosystem>/<segment>/<version>/<attester-id>.lock.sigstore
+    locks/schema-<N>/<ecosystem>/<segment>/<version>/<attester-id>.lock
+    locks/schema-<N>/<ecosystem>/<segment>/<version>/<attester-id>.lock.sigstore
+
+``<N>`` is the lock schema this mcp-warden implements; other schemas are never read.
 
 This module owns fetching the corpus and orchestrating a run; entry verification
 lives in :mod:`corpus_verify`, trust in :mod:`corpus_trust`. Every rule fails

@@ -30,6 +30,14 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+### Community corpus layout (DSE-2143)
+
+- `check --against-community` reads entries from `locks/schema-<N>/<ecosystem>/...`,
+  where `<N>` is the implemented lock schema (4). The schema-3 corpus written by 1.x
+  stays at `locks/<ecosystem>/...` and is no longer read: 2.0.0 and 2.1.0 refused every
+  entry there with `WRD-CONSENSUS-SCHEMA-MISMATCH`; it now reads as NOVEL until a
+  schema-4 entry exists. See `docs/COMMUNITY_CORPUS.md` §4.
+
 ## [2.1.0] — 2026-10-23
 
 ### Pagination (DSE-1539)
