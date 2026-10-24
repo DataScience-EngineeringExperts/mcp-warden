@@ -281,7 +281,7 @@ sequenceDiagram
     CI->>S: initialize · tools/list · resources/list · prompts/list
     S-->>CI: declared surface → drift verdict vs warden.lock (unchanged path)
     CI->>C: https/ssh clone @ --corpus-ref (protocol.allow=never, hooks off, "--") or local path
-    C-->>CI: attesters.json (discovery only) + locks/<eco>/<pkg>/<ver>/<id>.lock + .sigstore
+    C-->>CI: attesters.json (discovery only) + locks/schema-N/<eco>/<pkg>/<ver>/<id>.lock + .sigstore
     CI->>CI: intersect with pin — unpinned id ignored (warn), divergent identity → exit 2
     CI->>CI: confine paths under corpus root · size caps · schema_version == implemented
     CI->>SG: verify each bundle over build_statement(overall_digest, DIRECTORY coordinate) for the pinned identity/issuer

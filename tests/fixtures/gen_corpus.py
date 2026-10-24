@@ -17,6 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, "src")
 
+from mcp_warden.corpus_coordinate import CORPUS_SCHEMA_DIR  # noqa: E402
 from mcp_warden.lockfile import read_lock  # noqa: E402
 from mcp_warden.signing import build_statement  # noqa: E402
 
@@ -35,7 +36,7 @@ def attester(name: str) -> dict[str, str]:
 
 
 def entry(segment: str, who: str, lock_src: Path, sidecar: str = "ok") -> None:
-    d = ROOT / "locks" / "npm" / segment / "1.0.0"
+    d = ROOT / "locks" / CORPUS_SCHEMA_DIR / "npm" / segment / "1.0.0"
     d.mkdir(parents=True, exist_ok=True)
     lock_path = d / f"{who}.lock"
     shutil.copy(lock_src, lock_path)
@@ -75,7 +76,7 @@ def main() -> None:
     entry("@example__nosig", "alice", CLEAN, sidecar="missing")  # UNVERIFIABLE
     entry("@example__corrupt", "alice", CLEAN, sidecar="corrupt")  # UNVERIFIABLE
     entry("@example__wrongsig", "alice", CLEAN, sidecar="wrong")  # UNVERIFIABLE (verify fails)
-    stranger = ROOT / "locks" / "npm" / "@example__stranger" / "1.0.0"  # undeclared attester
+    stranger = ROOT / "locks" / CORPUS_SCHEMA_DIR / "npm" / "@example__stranger" / "1.0.0"  # undeclared attester
     stranger.mkdir(parents=True)
     shutil.copy(CLEAN, stranger / "mallory.lock")
     (stranger / "mallory.lock.sigstore").write_text("{}\n")
