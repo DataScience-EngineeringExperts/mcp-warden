@@ -208,6 +208,8 @@ def compute_drift(baseline: WardenLock, current: WardenLock) -> list[DriftItem]:
     """Compute the full drift set between a baseline lock and a current lock.
 
     Fast path: if ``overall_digest`` matches, there is provably no drift (§6.2).
+    Conversely a digest mismatch is itself drift: when no per-entry item explains
+    it, a ``digest-mismatch-unexplained`` (high) item is emitted (DSE-2125).
 
     Args:
         baseline: The stored ``warden.lock`` baseline.
@@ -280,6 +282,21 @@ def compute_drift(baseline: WardenLock, current: WardenLock) -> list[DriftItem]:
                     ),
                 )
             )
+
+    # Backstop (DSE-2125): a differing overall_digest means the surface changed.
+    # If no item-level diff explained it (name-keyed indexing collapsed duplicate
+    # entries, or a digest-covered field has no item-level check), the verdict must
+    # still never be clean -- fail closed with an explicit unexplained finding.
+    if not items:
+        items.append(
+            DriftItem(
+                "digest-mismatch-unexplained",
+                "high",
+                "lock/overall_digest",
+                "overall_digest differs from the baseline but no per-entry change was identified "
+                "(e.g. duplicate tool/resource/prompt keys in a lock); review the surface and re-pin",
+            )
+        )
 
     items.sort(key=lambda d: (d.target, d.drift_class))
     return items

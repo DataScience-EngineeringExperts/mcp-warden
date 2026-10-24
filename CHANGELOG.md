@@ -30,6 +30,12 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+### Fixed
+
+- `check` no longer passes when `overall_digest` differs but no per-entry drift fires
+  (e.g. a baseline lock with duplicate tool/resource/prompt keys): it now reports
+  `digest-mismatch-unexplained` (high) and exits non-zero (DSE-2125).
+
 ## [2.2.0] — 2026-10-24
 
 ### Community corpus layout (DSE-2143)
