@@ -50,6 +50,28 @@ The workflow uses **OIDC Trusted Publishing**, without a stored GitHub upload to
 The repo variable `PYPI_TRUSTED_PUBLISHER=true` permits an attempt; it does not prove
 that a matching PyPI publisher exists. Verify the exchange before cutting a new release.
 
+### Ownership and publishing status — 2026-11-06
+
+Both `conclave-cli` and `mcp-warden-cli` now belong to the
+[TheDataExperts PyPI organization](https://pypi.org/org/TheDataExperts/),
+transferred from `z3usalmighte` direct ownership. Organization billing is Active;
+Ernest (`z3usalmighte`) remains its sole human owner. Both projects have a normal
+Trusted Publisher for their respective `DataScience-EngineeringExperts` repository,
+`release.yml`, with a blank environment matching the workflows. No pending
+publishers remain in the inspected account.
+
+The company-repository publisher was registered before the obsolete
+`ernestprovo23` publisher was removed. [Verification run 42224199909](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/runs/42224199909)
+succeeded at `42e08c505eb28f82b01d3fa81a7696c56f6e6383`: PyPI accepted the OIDC
+exchange; build, signing and upload jobs were skipped. This establishes authentication,
+not project upload permission or successful release publication.
+
+The account-wide upload token was revoked. A `mcp-warden-cli`-only manual fallback
+is retained pending the next normal release's successful OIDC upload and provenance
+verification. It is not a workflow fallback. No upload or release was performed on
+2026-11-06; the published version remains **2.2.0**. Keep the next-release proof
+outstanding until section 2 confirms the new version and attestations.
+
 ### New projects only — pending publisher
 
 1. Log in to <https://pypi.org> as the account that will own `mcp-warden-cli`.
@@ -160,17 +182,11 @@ The same exchange error occurred on the prior 1.2.0 release. The authorized manu
 [PyPI 2.0.0](https://pypi.org/project/mcp-warden-cli/2.0.0/). That recovery proves
 publication, not that OIDC automation was repaired.
 
-After the publisher is aligned and authentication succeeds, rerun only the failed
-job from the original release run, using its retained build artifacts:
-
-```bash
-gh run rerun 36960647544 --failed
-```
-
-Do not rebuild/re-sign/replace the released assets as a repair attempt. If the
-original artifacts expired, stop and plan a fix-forward release. Success means
-OIDC authentication passes and the existing immutable files are handled by
-`skip-existing`; verify the public wheel/sdist hashes remain unchanged.
+The 2026-11-06 authentication-only check above supersedes the earlier unknown
+publisher-alignment status. The old 2.0.0 run is historical evidence, not the next
+verification target. Do not rebuild, re-sign, re-upload or rerun that release as
+part of this closeout. Prove end-to-end OIDC upload on the next normal release,
+then verify its new PyPI files and provenance under section 2.
 
 ### (Optional) TestPyPI dry-run publisher
 

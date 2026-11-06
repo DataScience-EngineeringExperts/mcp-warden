@@ -1,6 +1,6 @@
 # mcp-warden
 
-Last Updated: 2026-10-22
+Last Updated: 2026-11-06
 
 [![CI](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml/badge.svg)](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -18,6 +18,11 @@ the existing runtime tools/list gate checks these fields against v4 locks too.
 Older locks stay readable, but require review and re-pinning for this coverage.
 Hints are server claims, not proof of safety, and schemas do not certify content. Release
 operators can check production OIDC without uploading via [`RELEASING.md`](RELEASING.md).
+
+`mcp-warden-cli` is owned by the [TheDataExperts PyPI organization](https://pypi.org/org/TheDataExperts/).
+The company-repository publisher passed an authentication-only check on 2026-11-06;
+no package was uploaded and PyPI remains at 2.2.0. The next normal release must
+still prove OIDC upload and provenance; see the [publishing status](RELEASING.md#ownership-and-publishing-status--2026-11-06).
 
 The proposed next direction is a protocol-neutral **Warden**: human-approved tool versions and bounded actions, with untrusted inputs kept separate from authority.
 The [upgrade plan and checkpoint proposal](docs/plans/2026-10-02-tool-integrity-upgrade.md)
