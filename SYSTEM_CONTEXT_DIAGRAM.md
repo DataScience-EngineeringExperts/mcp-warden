@@ -1,6 +1,6 @@
 # mcp-warden — System Context Diagram
 
-Last Updated: 2026-10-22
+Last Updated: 2026-11-06
 
 **CLI 2.0.0 / schema level 4** extends capture/lock/check to complete tool annotations and output
 schemas, with structural output drift and Python/TypeScript parity. The existing
@@ -101,7 +101,11 @@ logic) plus a separate informational provenance section. It never prints raw
 > Minting can change PyPI pending-publisher records; it is not universally read-only.
 > Successful exchange is not proof of project upload permission. CLI 2.0.0's
 > failed OIDC exchange was recovered with an authorized manual upload of the signed bytes;
-> publisher alignment must be verified independently. See [`RELEASING.md`](RELEASING.md).
+> the company-repository publisher subsequently passed the 2026-11-06
+> authentication-only check ([run 42224199909](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/runs/42224199909)).
+> `mcp-warden-cli` now belongs to the [TheDataExperts PyPI organization](https://pypi.org/org/TheDataExperts/).
+> No upload occurred; PyPI remains at 2.2.0. End-to-end OIDC upload and provenance
+> still need proof on the next normal release. See [`RELEASING.md`](RELEASING.md).
 
 ---
 

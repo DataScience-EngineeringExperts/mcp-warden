@@ -1,6 +1,6 @@
 # Documentation Index — mcp-warden
 
-Last Updated: 2026-10-22
+Last Updated: 2026-11-06
 
 Master index of every document in this repository. The `docs/` files are the
 **security contract and source of truth** for all algorithms; the three core docs
@@ -12,7 +12,7 @@ describe and visualize the implementation that satisfies that contract.
 
 | # | Doc | Purpose |
 |---|-----|---------|
-| 1 | [`README.md`](README.md) | Project overview, install, the pin/check CI demo (full walkthrough archived to [`docs/PIN_CHECK_DEMO.md`](docs/PIN_CHECK_DEMO.md) to hold the 500-line core-doc limit), CLI reference (incl. v0.3 `lock rotate`, DSE-1530 `lock sign`, DSE-1539 `--max-pages` + redacted offline `diff` viewer), GitHub Action usage section (Issue #18), **pre-commit hook section (Issue #22)** |
+| 1 | [`README.md`](README.md) | Project overview, install, the pin/check CI demo (full walkthrough in [`docs/PIN_CHECK_DEMO.md`](docs/PIN_CHECK_DEMO.md)), CLI reference (incl. v0.3 `lock rotate`, DSE-1530 `lock sign`, DSE-1539 `--max-pages` + redacted offline `diff` viewer), GitHub Action usage section (Issue #18), **pre-commit hook section (Issue #22)** |
 | 2 | [`SYSTEM_CONTEXT_DIAGRAM.md`](SYSTEM_CONTEXT_DIAGRAM.md) | System context + pin/check sequence (mermaid); trust boundary; `conclave` as dev-time reviewer only; composite GitHub Action + **pre-commit hook** as consumer delivery vehicles |
 | 3 | [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md) | This file |
 
@@ -306,3 +306,9 @@ review/signature CLI. Tests are `tests/test_artifact_trust.py`,
 | `tests/fixtures/poison_server.py` | **(v0.2)** result-poisoning fixture server (ANSI/secret-echo/exfil/inject/clean tools) |
 | `tests/fixtures/crash_server.py` · `listchange_server.py` · `clean_listchange.warden.lock` | **(v0.3)** raw-stdio lifecycle fixtures: crash-mid-call (`-32002`) and `tools/list_changed` rug-pull + its pinned clean lock |
 | `tests/fixtures/fault_guard_launcher.py` | **(#21)** test-only launcher that monkeypatches ONE inspection function (`inspect_result` / `evaluate_call` / `diverges_from_lock` / `_hash_live_tools`) to raise inside the spawned guard child, then runs the real CLI — drives the `--strict` terminate-site tests without any test branch in production code; `FAULT_SECRET` plants a secret for the redaction test |
+
+## Version history
+
+| Date | Change |
+|------|--------|
+| 2026-11-06 | Recorded TheDataExperts PyPI ownership, Active organization billing, normal company publisher and removal of the obsolete personal publisher; linked successful authentication-only run 42224199909. Account-wide token revoked; project-only manual fallback retained. No upload today; 2.2.0 unchanged and next normal release upload/provenance proof outstanding. |
