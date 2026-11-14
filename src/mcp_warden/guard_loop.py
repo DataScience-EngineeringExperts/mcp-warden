@@ -118,6 +118,25 @@ class GuardConfig:
     strict_frame_cap: bool = False
     max_frame_bytes: int = 8 * 1024 * 1024
     max_inflight: int = 1024
+    normalization_image: str | None = None
+
+    def __post_init__(self) -> None:
+        self.validate_normalization()
+
+    def validate_normalization(self) -> None:
+        """Universal mode cannot silently inherit legacy shadow/fail-open flags."""
+        if self.normalization_image is None:
+            return
+        from .normalization import _profile
+        from .normalization_ipc import NormalizationError
+        from .normalization_models import NormalizationProfileV1
+        _profile(NormalizationProfileV1(self.normalization_image))
+        if self.audit_only or any(getattr(self, name) for name in (
+            "no_block_ansi", "no_block_secret_echo", "no_block_exfil_domain",
+            "no_block_exfil_ip_literal", "no_block_list_changed", "no_block_policy",
+        )):
+            raise NormalizationError("NRM-PROFILE")
+        self.strict = self.strict_frame_cap = True
 
     #: Maps each default-on deterministic result rule to its opt-out field name.
     _DET_OPTOUT = {

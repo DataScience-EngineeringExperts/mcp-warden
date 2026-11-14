@@ -1,8 +1,8 @@
 # mcp-warden — System Context Diagram
 
-Last Updated: 2026-11-06
+Last Updated: 2026-11-14
 
-**CLI 2.0.0 / schema level 4** extends capture/lock/check to complete tool annotations and output
+**CLI 2.3.0 / schema level 4** includes complete tool annotations and output
 schemas, with structural output drift and Python/TypeScript parity. The existing
 tools/list gate compares those commitments for v4 locks; legacy locks retain narrower
 runtime coverage and require re-pin for the new fields. Annotations grant no authority.
@@ -60,6 +60,27 @@ logic) plus a separate informational provenance section. It never prints raw
 > enter an existing code-scanning pipeline with no new plumbing. Runtime capability
 > brokering remains out of scope (DSE-725). See [`docs/AGENT_GATES.md`](docs/AGENT_GATES.md).
 
+> **Supplied-content normalization (DSE-718)** is an opt-in Linux worker path,
+> separate from the base CLI parser dependencies. All nine input families use
+> the same engine over supplied bytes; no external connectors fetch content.
+> The coordinator creates digest-bound untrusted lineage/maps and validates
+> bounded output; PDP/PEP remains the delivery authority. The optional guard
+> wrapper inspects every complete server frame before legacy delivery, forces
+> strict refusal, and has no in-process fallback. See
+> [`docs/CONTENT_NORMALIZATION.md`](docs/CONTENT_NORMALIZATION.md).
+
+```mermaid
+flowchart LR
+    supplied[Supplied bytes: nine ingress families] --> capture[Exact-byte ingress envelope]
+    capture --> coord[normalization.py: trusted evidence coordinator]
+    coord --> sandbox[normalization_sandbox.py: Linux isolated immutable worker]
+    sandbox --> parser[components/normalizer: bounded recursive parsers]
+    parser --> validate[Bounded untrusted manifest validation]
+    validate --> evidence[Derived untrusted envelope and source-map digest]
+    evidence --> inspection[Raw and normalized shared inspection]
+    inspection --> gate[Existing policy and delivery boundary]
+```
+
 > **`doctor` (DSE-1516)** is the zero-config entry point and sits at the far left of the
 > picture: it reads the MCP client configs already on the developer's machine (Claude
 > Code, Claude Desktop, Cursor, VS Code, Windsurf, Codex — a documented, closed set with a
@@ -104,8 +125,8 @@ logic) plus a separate informational provenance section. It never prints raw
 > the company-repository publisher subsequently passed the 2026-11-06
 > authentication-only check ([run 42224199909](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/runs/42224199909)).
 > `mcp-warden-cli` now belongs to the [TheDataExperts PyPI organization](https://pypi.org/org/TheDataExperts/).
-> No upload occurred; PyPI remains at 2.2.0. End-to-end OIDC upload and provenance
-> still need proof on the next normal release. See [`RELEASING.md`](RELEASING.md).
+> That authentication-only check uploaded no package. End-to-end OIDC upload
+> and provenance require proof from the next normal release. See [`RELEASING.md`](RELEASING.md).
 
 ---
 

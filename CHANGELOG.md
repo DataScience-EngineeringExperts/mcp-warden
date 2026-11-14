@@ -30,6 +30,17 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+## [2.3.0] — 2026-11-14
+
+### Added
+
+- DSE-718 opt-in Linux supplied-content normalization: independent isolated parser
+  worker; all nine ingress kinds; bounded text/web/data, MIME, ZIP and conservative
+  text-PDF extraction; raw and normalized inspection, labeled provenance, immutable
+  worker IDs, atomic guard/offline refusal, `normalize` evidence CLI and dedicated
+  real-sandbox qualification. Office/OCR, external retrieval and non-Linux worker
+  execution are unsupported. No whole-ATK or arbitrary-format claim is made.
+
 ### Fixed
 
 - Both dependency locks pin `opentelemetry-api` 1.45.2 to address
@@ -582,7 +593,8 @@ v1-strong foundation. Highlights of the 0.3.0 → 1.0.0 arc:
   declared surface, RFC 8785 (JCS) + SHA-256 canonicalization, SARIF output, and a live
   integrity-gate workflow with committed `clean.warden.lock`.
 
-[Unreleased]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v2.0.0...v2.1.0
 [1.1.0]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v1.0.1...v1.1.0
