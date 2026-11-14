@@ -37,6 +37,7 @@ def handle_universal(state, frame, mode: str, legacy) -> bytes:
             policy_for_tool(state.lock, state.inflight_tool.get(rpc_id, "")),
             exfil_denylist=state.exfil_denylist,
             inject_phrases=state.inject_phrases,
+            raw_content=frame.body,
         )
     except Exception:
         raise StrictInspectionAbort(site="normalization-inspect", tool="?",

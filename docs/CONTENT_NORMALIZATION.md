@@ -155,6 +155,11 @@ resources refuse rather than fetching or silently passing through. A blocked
 response becomes a safe error; blocked notifications/malformed or over-cap
 frames terminate the session with the existing strict-abort machinery. Results
 are held atomically; worker or inspection failure cannot deliver a prefix.
+The live adapter captures the exact JSON body bytes (transport headers excluded)
+and rejects duplicate keys before any parsed-object reserialization can hide
+them. Offline object traces cannot reconstruct original wire formatting or
+escapes that were never recorded; their supplied frame objects are captured
+using an explicit canonical serialization, without claiming original wire bytes.
 
 Universal mode forces both strictness controls, rejects audit/deterministic
 shadow flags and raw trace recording, and cannot use a legacy exception/pass

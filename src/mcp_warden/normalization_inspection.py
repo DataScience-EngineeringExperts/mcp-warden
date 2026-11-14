@@ -94,7 +94,7 @@ def _resource(resource: dict) -> None:
 
 
 def inspect_mcp_frame(obj: dict, method: str, profile: NormalizationProfileV1,
-                      policy, *, exfil_denylist, inject_phrases):
+                      policy, *, exfil_denylist, inject_phrases, raw_content: bytes | None = None):
     """Validate supplied MCP containers then inspect all fields, including metadata.
 
     URI-only resources, unknown blocks and binary image/audio content refuse;
@@ -103,6 +103,17 @@ def inspect_mcp_frame(obj: dict, method: str, profile: NormalizationProfileV1,
     try:
         if type(obj) is not dict:
             raise NormalizationError()
+        if raw_content is not None:
+            from .normalization import _profile
+            from .normalization_trace import decode_object
+            _profile(profile)
+            if type(raw_content) is not bytes or len(raw_content) > profile.budget.input_bytes:
+                raise NormalizationError("NRM-OVER-CAP")
+            # Never erase duplicate keys/escapes by capturing a reserialized
+            # parsed object while delivering the original server body.
+            parsed = decode_object(raw_content)
+            if canonical(parsed) != canonical(obj):
+                raise NormalizationError("NRM-MANIFEST")
         result = obj.get("result")
         kind = IngressKindV1.TOOL_RESULT
         if type(result) is dict:
@@ -132,7 +143,8 @@ def inspect_mcp_frame(obj: dict, method: str, profile: NormalizationProfileV1,
                     _resource(resource)
         elif "result" in obj:
             raise NormalizationError()
-        return inspect_supplied(canonical(obj), MediaTypeV1.APPLICATION_JSON, kind, profile,
+        payload = raw_content if raw_content is not None else canonical(obj)
+        return inspect_supplied(payload, MediaTypeV1.APPLICATION_JSON, kind, profile,
                                 policy, exfil_denylist=exfil_denylist, inject_phrases=inject_phrases)
     except NormalizationError as exc:
         return [refusal(exc.code)]

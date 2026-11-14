@@ -123,6 +123,29 @@ def test_multiple_mcp_container_fields_are_all_validated(worker):
     assert "result" not in json.loads(out)
 
 
+def test_original_wire_duplicate_keys_cannot_disappear_before_capture(worker):
+    raw = b'{"id":1,"result":{"content":[{"type":"image","data":"AA=="}]},"result":{"content":[{"type":"text","text":"safe"}]}}'
+    state = GuardState(config=GuardConfig(normalization_image=IMAGE))
+    state.remember_request(1, "tools/call", "tool")
+    out = handle_s2c(state, Frame(raw=raw+b"\n", body=raw, json=json.loads(raw)), MODE_NEWLINE)
+    assert "result" not in json.loads(out)
+
+
+def test_live_inspection_passes_exact_original_body_to_worker(worker, monkeypatch):
+    original = n._run_worker
+    bodies = []
+    def capture(request, profile):
+        import base64
+        bodies.append(base64.b64decode(request["content_b64"]))
+        return original(request, profile)
+    monkeypatch.setattr(n, "_run_worker", capture)
+    raw = b'{ "id" : 1, "result" : {"content":[{"type":"text","text":"he\\u006clo"}]} }'
+    state = GuardState(config=GuardConfig(normalization_image=IMAGE))
+    state.remember_request(1, "tools/call", "tool")
+    handle_s2c(state, Frame(raw=raw+b"\n", body=raw, json=json.loads(raw)), MODE_NEWLINE)
+    assert bodies == [raw]
+
+
 def test_trace_duplicate_keys_and_flat_overflow_fail_closed(tmp_path):
     path = tmp_path / "trace"
     for data in ('{"direction":"s2c","direction":"c2s","frame":{}}', "\n" * 4097):
