@@ -65,8 +65,8 @@ class Context:
             if run > self.budget["combining_run"]:
                 fail("NRM-OVER-CAP")
         text = unicodedata.normalize("NFKC", raw_text)
-        text = "".join(c for c in text if unicodedata.category(c) != "Cf"
-                       and (ord(c) >= 32 or c in "\n\r\t"))
+        text = "".join(c for c in text if unicodedata.category(c) not in {"Cf", "Cc"}
+                       or c in "\n\r\t")
         run = 0
         for char in text:
             run = run + 1 if unicodedata.combining(char) else 0

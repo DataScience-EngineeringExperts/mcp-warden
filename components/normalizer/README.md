@@ -55,7 +55,7 @@ the canonical JSON full segment-list size, including raw and normalized text.
 Budgets never reset for members, pages or alternate views. Repeated evidence can
 therefore reach the map/output cap before the root input cap.
 
-Inspection text applies NFKC then removes Unicode Cf and C0 controls except
+Inspection text applies NFKC then removes Unicode Cf and Cc controls except
 TAB/LF/CR; original extracted text remains in `raw_text` for raw inspection.
 Only unchanged UTF-8 root plain text has exact attribution. All other segments
 use conservative root byte ranges and explicit page/member/view locators.
