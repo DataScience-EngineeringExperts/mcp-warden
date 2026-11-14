@@ -14,26 +14,45 @@ def refusal(code: str = "NRM-MALFORMED"):
                          message="normalization refused: " + code)
 
 
+def _unique(findings):
+    seen, result = set(), []
+    for finding in findings:
+        key = (finding.rule_id, finding.message, finding.snippet, finding.matched_phrases)
+        if key not in seen:
+            seen.add(key)
+            result.append(finding)
+    return result
+
+
 def inspect_supplied(content: bytes, media_type: MediaTypeV1, source_kind: IngressKindV1,
                      profile: NormalizationProfileV1, policy, *, exfil_denylist, inject_phrases):
     """Inspect both views before the caller's delivery decision; no authority is returned."""
+    from .normalization import TEXT_MEDIA, _profile
+    from .result_inspection import inspect_result
+    raw_findings = []
     try:
+        _profile(profile)
+        if type(content) is not bytes or len(content) > profile.budget.input_bytes:
+            raise NormalizationError("NRM-OVER-CAP")
+        if type(media_type) is MediaTypeV1 and media_type.value in TEXT_MEDIA:
+            raw_findings = inspect_result(
+                {"content": [{"type": "text", "text": content.decode("utf-8", "strict")}]},
+                "supplied", policy, exfil_denylist=exfil_denylist, inject_phrases=inject_phrases)
         result = normalize_supplied(content, media_type, source_kind, profile)
-        return inspect_normalized(result, policy, exfil_denylist=exfil_denylist,
-                                  inject_phrases=inject_phrases)
+        return _unique(raw_findings + inspect_normalized(result, policy, exfil_denylist=exfil_denylist,
+                                                         inject_phrases=inject_phrases))
     except NormalizationError as exc:
-        return [refusal(exc.code)]
+        return raw_findings + [refusal(exc.code)]
     except Exception:
-        return [refusal()]
+        return raw_findings + [refusal()]
 
 
 def inspect_normalized(result, policy, *, exfil_denylist, inject_phrases):
     """Inspect validated normalized evidence without rerunning the parser worker."""
-    from .normalization_models import NormalizationResultV1
+    from .normalization_validation import validate_result
     from .result_inspection import inspect_result
     try:
-        if type(result) is not NormalizationResultV1:
-            raise NormalizationError("NRM-MANIFEST")
+        validate_result(result)
         views = [view for segment in result.segments for view in (segment.raw_text, segment.text)]
         # An additional boundary-free view catches phrases split across markup
         # tokens/nodes; explicit source maps still record the real segment boundaries.

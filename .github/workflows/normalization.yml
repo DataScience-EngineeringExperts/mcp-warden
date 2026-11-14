@@ -32,6 +32,11 @@ jobs:
         run: |
           docker build --iidfile "$RUNNER_TEMP/normalizer-image" -f components/normalizer/Dockerfile .
           echo "NORMALIZER_TEST_IMAGE=$(cat "$RUNNER_TEMP/normalizer-image")" >> "$GITHUB_ENV"
+      - name: Audit independent parser closure
+        run: |
+          python -m venv "$RUNNER_TEMP/parser-audit"
+          "$RUNNER_TEMP/parser-audit/bin/pip" install "pip-audit==2.9.0"
+          "$RUNNER_TEMP/parser-audit/bin/python" -m pip_audit --disable-pip --require-hashes -r components/normalizer/requirements.lock
       - name: Qualify actual sandbox and every ingress
         run: bash scripts/qualify_normalizer.sh "$NORMALIZER_TEST_IMAGE"
       - name: Deterministic normalization property corpus

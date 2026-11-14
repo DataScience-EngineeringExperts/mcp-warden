@@ -11,7 +11,7 @@ from .result_inspection import TIER_BLOCK, TIER_MONITOR, policy_for_tool
 
 
 def handle_universal(state, frame, mode: str, legacy) -> bytes:
-    from . import wire_block
+    from . import res_rules, wire_block
     from .guard_loop import StrictInspectionAbort
     if state.record is not None:
         raise StrictInspectionAbort(site="normalization-record", tool="?",
@@ -29,6 +29,8 @@ def handle_universal(state, frame, mode: str, legacy) -> bytes:
                                     exc_type="MalformedID", rpc_id=None)
     # Read correlation without consuming it; the legacy handler owns that state.
     method = state.inflight.get(rpc_id, "")
+    if method == "tools/call" and "result" in obj:
+        state.frames_inspected += 1
     try:
         findings = inspect_mcp_frame(
             obj, method, NormalizationProfileV1(state.config.normalization_image),
@@ -39,8 +41,9 @@ def handle_universal(state, frame, mode: str, legacy) -> bytes:
     except Exception:
         raise StrictInspectionAbort(site="normalization-inspect", tool="?",
                                     exc_type="InspectionFailure", rpc_id=rpc_id) from None
-    blocked = [f for f in findings if f.tier == TIER_BLOCK
-               or (f.tier == TIER_MONITOR and state.config.block_inject_phrase)]
+    blocked = [f for f in findings if f.tier == TIER_BLOCK or (f.tier == TIER_MONITOR and (
+        state.config.block_inject_phrase or any(res_rules.normalize_phrase_text(p)
+            in state.config.block_inject_phrases_subset for p in f.matched_phrases)))]
     for finding in findings:
         state.emit(replace(finding, action="blocked" if finding in blocked else "reported",
                            direction="s2c", rpc_id=rpc_id))

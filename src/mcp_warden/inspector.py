@@ -128,6 +128,7 @@ def analyze_trace(
     findings: list[ResultFinding] = []
     frames_inspected = 0
 
+    universal_incoming = 0
     for rec in records:
         frame = rec["frame"]
         direction = _direction_of(rec)
@@ -141,13 +142,15 @@ def analyze_trace(
                 tool_by_id[rpc_id] = str(params.get("name", ""))
             continue
         if normalization_profile is not None and direction == "s2c":
+            universal_incoming += 1
             from .normalization_inspection import inspect_mcp_frame
             raw = inspect_mcp_frame(
                 frame, inflight.get(rpc_id, ""), normalization_profile,
                 policy_for_tool(lock, tool_by_id.get(rpc_id, "")),
                 exfil_denylist=exfil, inject_phrases=phrases,
             )
-            frames_inspected += 1
+            if inflight.get(rpc_id) == "tools/call" and "result" in frame:
+                frames_inspected += 1
             for finding in raw:
                 findings.append(replace(finding, action="reported", direction=direction, rpc_id=rpc_id))
             inflight.pop(rpc_id, None)
@@ -185,6 +188,8 @@ def analyze_trace(
                     matched_phrases=f.matched_phrases,
                 )
             )
+    if normalization_profile is not None and not universal_incoming:
+        raise TraceError("NRM-PARTIAL")
     if stats is not None:
         stats["frames_inspected"] = frames_inspected
     return findings

@@ -97,12 +97,13 @@ def _handle_s2c_legacy(state, frame: Frame, mode: str) -> bytes:
     # Base-rate denominator (issue #12): count every tools/call result frame the
     # catalog actually inspects, so a per-phrase FP rate has a denominator. Counted
     # here (a real result about to be inspected), NOT for pass-through/list frames.
-    state.frames_inspected += 1
+    if state.config.normalization_image is None:
+        state.frames_inspected += 1
     # Inspection-before-write invariant (binding #2): inspect_result runs BEFORE
     # this response frame is forwarded to the client, so a strict abort here
     # cannot leave a partially-forwarded (un-inspected) frame on the wire.
     try:
-        findings = inspect_result(
+        findings = [] if state.config.normalization_image is not None else inspect_result(
             result, tool, pol, exfil_denylist=state.exfil_denylist, inject_phrases=state.inject_phrases
         )
     except StrictInspectionAbort:

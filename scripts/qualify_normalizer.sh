@@ -3,12 +3,15 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 normalizer_image=${1:?supply the exact locally built sha256 image ID}
-[[ $(uname -s) == Linux && $normalizer_image =~ ^sha256:[a-f0-9]{64}$ ]]
+[[ $(uname -s) == Linux && $(uname -m) == x86_64 && $normalizer_image =~ ^sha256:[a-f0-9]{64}$ ]]
 python - <<'PY'
 import sys, unicodedata, pypdf
+from importlib.metadata import version
 assert sys.version_info[:2] == (3, 12)
 assert unicodedata.unidata_version == '15.0.0'
 assert pypdf.__version__ == '7.1.0'
+assert version('markdown-it-py') == '4.3.0'
+assert version('mdurl') == '0.1.2'
 PY
 normalizer_claim=''
 if command -v dse-artifacts >/dev/null 2>&1; then

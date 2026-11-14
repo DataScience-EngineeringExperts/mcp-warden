@@ -358,7 +358,11 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
 
 
 def _validated_normalizer(image):
-    return NormalizationProfileV1(image) if image is not None else None
+    from .normalization import _profile
+    profile = NormalizationProfileV1(image) if image is not None else None
+    if profile is not None:
+        _profile(profile)
+    return profile
 
 
 def _validate_universal_flags(image, *optouts):

@@ -128,8 +128,9 @@ class GuardConfig:
         if self.normalization_image is None:
             return
         from .normalization_ipc import NormalizationError
+        from .normalization import _profile
         from .normalization_models import NormalizationProfileV1
-        NormalizationProfileV1(self.normalization_image)
+        _profile(NormalizationProfileV1(self.normalization_image))
         if self.audit_only or any(getattr(self, name) for name in (
             "no_block_ansi", "no_block_secret_echo", "no_block_exfil_domain",
             "no_block_exfil_ip_literal", "no_block_list_changed", "no_block_policy",

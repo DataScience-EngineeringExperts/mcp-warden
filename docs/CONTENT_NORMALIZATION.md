@@ -15,7 +15,9 @@ coordinator validates the complete bounded response and creates a derived
 envelope and digest-bound source map. Original byte hashes and parent taints are
 preserved. Content and parser output never acquire authority.
 
-The reviewed standalone worker is Python 3.12 / Unicode 15.0.0 / pypdf 7.1.0.
+The coordinator and worker require Python 3.12 / Unicode 15.0.0 on qualified
+Linux amd64. The worker independently pins pypdf 7.1.0, markdown-it-py 4.3.0
+and mdurl 0.1.2. Existing commands retain their earlier Python/platform support.
 The [component](../components/normalizer/README.md) has an independent hash-locked
 parser closure outside the base CLI dependencies. Build on a Linux executor:
 
@@ -92,6 +94,12 @@ Other views carry explicitly conservative original-container byte ranges and
 page/member/object/view locators. The coordinator maps every output span and
 labels synthesized separators as having no source range. It never invents an
 exact offset through decompression or PDF extraction.
+Each real map entry also commits its raw extracted view's digest and records
+whether normalization changed it; inspection revalidates the full evidence,
+map/usage/profile and envelope bindings instead of trusting model construction.
+Root UTF-8 syntax is independently bound to original bytes, JSON strings/keys
+receive an independent bounded coverage check, and the coordinator refuses an
+unqualified Unicode implementation rather than skipping the transform check.
 
 `structurally-complete` means bounded structural coverage under this finite
 profile, **not proof of semantic extraction completeness**. Digests and valid

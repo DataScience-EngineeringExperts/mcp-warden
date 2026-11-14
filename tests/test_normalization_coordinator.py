@@ -12,6 +12,13 @@ from mcp_warden.normalization_ipc import NormalizationError
 from mcp_warden.normalization_models import NormalizationProfileV1
 
 
+@pytest.fixture(autouse=True)
+def ascii_unit_runtime(monkeypatch):
+    # These coordinator unit vectors are ASCII; actual Unicode/runtime support
+    # is separately exercised by the mandatory Python 3.12 image job.
+    monkeypatch.setattr(n.unicodedata, "unidata_version", "15.0.0")
+
+
 def ingress(raw=b"hello", media=MediaTypeV1.TEXT_PLAIN, kind=IngressKindV1.DOCUMENT):
     return create_ingress(content=raw, media_type=media, source_kind=kind,
                           source_identity=b'{}', source_claims=b'{}',
@@ -22,12 +29,12 @@ def ingress(raw=b"hello", media=MediaTypeV1.TEXT_PLAIN, kind=IngressKindV1.DOCUM
 def response(profile, raw=b"hello"):
     usage = dict.fromkeys(asdict(profile.budget), 1)
     usage.update(input_bytes=len(raw), output_bytes=len(raw), expanded_bytes=len(raw))
-    segments = [{"text": raw.decode(), "raw_text": raw.decode(), "locator": "$",
+    segments = [{"text": raw.decode(), "raw_text": raw.decode(), "locator": "root",
                  "precision": "exact", "source_start": 0, "source_end": len(raw)}]
     usage["map_bytes"] = len(n.canonical(segments))
     return {"schema_version": 1, "status": "structurally-complete", "profile_id": n.PROFILE_ID,
             "input_digest": "sha256:" + hashlib.sha256(raw).hexdigest(),
-            "runtime": {"python": "3.12", "unicode": "15.0.0", "parser": "pypdf==7.1.0"},
+            "runtime": {"python": "3.12", "unicode": "15.0.0", "parser": profile.parser_identity},
             "segments": segments,
             "usage": usage}
 
@@ -81,3 +88,33 @@ def test_worker_secret_exception_does_not_escape(monkeypatch, profile):
         n.normalize_ingress(b"hello", ingress(), profile)
     assert "PRIVATE" not in str(caught.value)
     assert caught.value.__cause__ is None
+
+
+def test_plaintext_cannot_replace_raw_evidence_with_safe_text(monkeypatch, profile):
+    raw = b"\x1b[31m malicious original"
+    result = response(profile, b"safe")
+    result["input_digest"] = "sha256:" + hashlib.sha256(raw).hexdigest()
+    result["usage"]["input_bytes"] = len(raw)
+    result["segments"][0].update(precision="container", source_end=len(raw))
+    result["usage"]["map_bytes"] = len(n.canonical(result["segments"]))
+    monkeypatch.setattr(n, "_run_worker", lambda *_: result)
+    with pytest.raises(NormalizationError, match="NRM-MANIFEST"):
+        n.normalize_ingress(raw, ingress(raw), profile)
+
+
+def test_unpinned_coordinator_unicode_refuses_before_worker(monkeypatch, profile):
+    monkeypatch.setattr(n.unicodedata, "unidata_version", "unqualified")
+    monkeypatch.setattr(n, "_run_worker", lambda *_: pytest.fail("worker reached"))
+    with pytest.raises(NormalizationError, match="NRM-RUNTIME"):
+        n.normalize_ingress(b"hello", ingress(), profile)
+
+
+def test_combining_limit_precedes_trusted_normalization(monkeypatch, profile):
+    raw = ("a" + "\u0301" * 65).encode()
+    result = response(profile, raw)
+    result["segments"][0]["precision"] = "container"
+    result["usage"]["map_bytes"] = len(n.canonical(result["segments"]))
+    monkeypatch.setattr(n, "_run_worker", lambda *_: result)
+    monkeypatch.setattr(n.unicodedata, "normalize", lambda *_: pytest.fail("unbounded transform"))
+    with pytest.raises(NormalizationError, match="NRM-OVER-CAP"):
+        n.normalize_ingress(raw, ingress(raw), profile)

@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass, fields
 
 from .content_models import ContentEnvelopeV1
 from .normalization_ipc import NormalizationError
 
 PROFILE_ID = "mcp-warden.normalizer.v1"
+PARSER_IDENTITY = "pypdf==7.1.0;markdown-it-py==4.3.0;mdurl==0.1.2"
 SUPPORTED_MEDIA = frozenset({
     "text/plain", "application/json", "application/xml", "text/xml", "text/html",
     "text/markdown", "text/csv", "message/rfc822", "application/zip", "application/pdf",
@@ -32,7 +33,7 @@ class NormalizationBudgetV1:
         ceilings = (16*1024*1024, 64*1024*1024, 16*1024*1024, 8, 4096, 256,
                     100_000, 8*1024*1024, 64, 100_000_000)
         if any(type(v) is not int or not 0 < v <= maximum
-               for v, maximum in zip(asdict(self).values(), ceilings, strict=True)):
+               for v, maximum in zip((getattr(self, f.name) for f in fields(self)), ceilings, strict=True)):
             raise NormalizationError("NRM-PROFILE")
 
 
@@ -43,15 +44,17 @@ class NormalizationProfileV1:
     profile_id: str = PROFILE_ID
     python_version: str = "3.12"
     unicode_version: str = "15.0.0"
-    parser_version: str = "7.1.0"
+    parser_identity: str = PARSER_IDENTITY
 
     def __post_init__(self) -> None:
-        if (type(self.image_digest) is not str
+        if (any(type(getattr(self, key)) is not str for key in (
+                "image_digest", "profile_id", "python_version", "unicode_version", "parser_identity"))
                 or not re.fullmatch(r"sha256:[a-f0-9]{64}", self.image_digest)
                 or type(self.budget) is not NormalizationBudgetV1
                 or self.profile_id != PROFILE_ID or self.python_version != "3.12"
-                or self.unicode_version != "15.0.0" or self.parser_version != "7.1.0"):
+                or self.unicode_version != "15.0.0" or self.parser_identity != PARSER_IDENTITY):
             raise NormalizationError("NRM-PROFILE")
+        NormalizationBudgetV1.__post_init__(self.budget)
 
 
 @dataclass(frozen=True)

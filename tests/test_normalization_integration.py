@@ -22,21 +22,40 @@ from mcp_warden.normalization_models import NormalizationProfileV1
 IMAGE = "sha256:" + "1"*64
 
 
+@pytest.fixture(autouse=True)
+def ascii_unit_runtime(monkeypatch):
+    monkeypatch.setattr(n.unicodedata, "unidata_version", "15.0.0")
+
+
 @pytest.fixture
 def worker(monkeypatch):
     def run(request, profile):
         import base64
         raw = base64.b64decode(request["content_b64"])
         text = raw.decode()
-        segments = [{"text": text, "raw_text": text, "locator": "$", "precision": "container",
+        segments = [{"text": text, "raw_text": text, "locator": "root", "precision": "container",
                      "source_start": 0, "source_end": len(raw)}]
+        if request["media_type"] == "application/json":
+            stack = [json.loads(text)]
+            while stack:
+                item = stack.pop()
+                if type(item) is dict:
+                    stack.extend(item.keys())
+                    stack.extend(item.values())
+                elif type(item) is list:
+                    stack.extend(item)
+                elif type(item) is str and item:
+                    segments.append({"text": item, "raw_text": item,
+                        "locator": "root/json-string", "precision": "container",
+                        "source_start": 0, "source_end": len(raw)})
         usage = dict.fromkeys(asdict(profile.budget), 1)
-        usage.update(input_bytes=len(raw), expanded_bytes=len(raw), output_bytes=len(raw),
+        usage.update(input_bytes=len(raw), expanded_bytes=len(raw),
+                     output_bytes=sum(len(s["text"].encode()) for s in segments), spans=len(segments),
                      map_bytes=len(n.canonical(segments)))
         return {"schema_version": 1, "profile_id": n.PROFILE_ID,
                 "status": "structurally-complete", "segments": segments, "usage": usage,
                 "input_digest": "sha256:"+hashlib.sha256(raw).hexdigest(),
-                "runtime": {"python": "3.12", "unicode": "15.0.0", "parser": "pypdf==7.1.0"}}
+                "runtime": {"python": "3.12", "unicode": "15.0.0", "parser": profile.parser_identity}}
     monkeypatch.setattr(n, "_run_worker", run)
 
 
@@ -150,22 +169,40 @@ def test_offline_requires_known_directions(worker, tmp_path):
         analyze_trace(path, normalization_profile=NormalizationProfileV1(IMAGE))
 
 
-def test_raw_controls_are_inspected_before_transformed_view(monkeypatch):
+def test_raw_controls_are_inspected_before_transformed_view(worker):
     from mcp_warden.normalization_inspection import inspect_supplied
-    from mcp_warden.normalization_models import NormalizationResultV1, NormalizedSegmentV1
     from mcp_warden.result_inspection import InspectionPolicy
-    from mcp_warden.content_envelope import create_ingress
-    from mcp_warden.content_models import TransformKindV1
-    envelope = create_ingress(
-        content=b"hello", media_type=MediaTypeV1.TEXT_PLAIN, source_kind=IngressKindV1.DOCUMENT,
-        source_identity=b'{}', source_claims=b'{}', capture_kind=TransformKindV1.INGRESS_CAPTURE,
-        capture_implementation=b'{}', capture_parameters=b'{}')
-    result = NormalizationResultV1(
-        segments=(NormalizedSegmentV1("hello", "\x1b[31mhello", "$", "container", 0, 10),),
-        envelope=envelope, manifest_digest="test", manifest=b"{}")
-    monkeypatch.setattr("mcp_warden.normalization_inspection.normalize_supplied", lambda *_: result)
-    findings = inspect_supplied(b"x", MediaTypeV1.TEXT_PLAIN, IngressKindV1.DOCUMENT,
+    findings = inspect_supplied(b"\x1b[31mhello", MediaTypeV1.TEXT_PLAIN, IngressKindV1.DOCUMENT,
                                 NormalizationProfileV1(IMAGE), InspectionPolicy(),
                                 exfil_denylist=res_rules.SEED_EXFIL_DENYLIST,
                                 inject_phrases=res_rules.SEED_INJECT_PHRASES)
     assert "WRD-RES-ANSI" in {f.rule_id for f in findings}
+
+
+def test_freely_constructed_evidence_never_returns_clean():
+    from mcp_warden.normalization_inspection import inspect_normalized
+    from mcp_warden.normalization_models import NormalizationResultV1
+    from mcp_warden.result_inspection import InspectionPolicy
+    fake = NormalizationResultV1(segments=(), envelope=None, manifest_digest="wrong",
+                                 manifest=b"not json", status="refused")
+    result = inspect_normalized(fake, InspectionPolicy(), exfil_denylist=(), inject_phrases=())
+    assert [f.rule_id for f in result] == ["WRD-RES-NORMALIZATION"]
+
+
+def test_mutated_raw_view_breaks_manifest_binding(worker):
+    from dataclasses import replace
+    from mcp_warden.normalization_inspection import inspect_normalized
+    from mcp_warden.result_inspection import InspectionPolicy
+    good = normalize_supplied(b"hello", MediaTypeV1.TEXT_PLAIN, IngressKindV1.DOCUMENT,
+                               NormalizationProfileV1(IMAGE))
+    bad = replace(good, segments=(replace(good.segments[0], raw_text="safe"),))
+    result = inspect_normalized(bad, InspectionPolicy(), exfil_denylist=(), inject_phrases=())
+    assert [f.rule_id for f in result] == ["WRD-RES-NORMALIZATION"]
+
+
+@pytest.mark.parametrize("data", ["", '{"direction":"c2s","frame":{"id":1,"method":"tools/call"}}'])
+def test_empty_and_outbound_only_universal_traces_refuse(tmp_path, data):
+    path = tmp_path / "trace"
+    path.write_text(data)
+    with pytest.raises(TraceError, match="NRM-"):
+        analyze_trace(path, normalization_profile=NormalizationProfileV1(IMAGE))
