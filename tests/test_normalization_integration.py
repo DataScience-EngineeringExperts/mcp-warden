@@ -191,6 +191,7 @@ def test_freely_constructed_evidence_never_returns_clean():
 
 def test_mutated_raw_view_breaks_manifest_binding(worker):
     from dataclasses import replace
+
     from mcp_warden.normalization_inspection import inspect_normalized
     from mcp_warden.result_inspection import InspectionPolicy
     good = normalize_supplied(b"hello", MediaTypeV1.TEXT_PLAIN, IngressKindV1.DOCUMENT,

@@ -26,8 +26,7 @@ def profile():
 
 def pdf():
     from pypdf import PdfWriter
-    from pypdf.generic import DictionaryObject, NameObject
-    from pypdf.generic import DecodedStreamObject
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
     writer = PdfWriter()
     page = writer.add_blank_page(width=200, height=200)
     font = DictionaryObject({NameObject("/Type"): NameObject("/Font"),
@@ -64,7 +63,7 @@ def test_real_nine_ingress_families(profile, kind, media, raw):
     manifest = json.loads(result.manifest)
     spans = manifest["map"]
     assert spans[0]["output_start"] == 0
-    assert all(a["output_end"] == b["output_start"] for a, b in zip(spans, spans[1:]))
+    assert all(a["output_end"] == b["output_start"] for a, b in zip(spans, spans[1:], strict=False))
 
 
 def test_real_worker_repeatability(profile):

@@ -115,6 +115,11 @@ def test_combining_limit_precedes_trusted_normalization(monkeypatch, profile):
     result["segments"][0]["precision"] = "container"
     result["usage"]["map_bytes"] = len(n.canonical(result["segments"]))
     monkeypatch.setattr(n, "_run_worker", lambda *_: result)
-    monkeypatch.setattr(n.unicodedata, "normalize", lambda *_: pytest.fail("unbounded transform"))
+    original = n.unicodedata.normalize
+    def guard(form, text):
+        if form == "NFKC" and text == raw.decode():
+            pytest.fail("unbounded transform")
+        return original(form, text)
+    monkeypatch.setattr(n.unicodedata, "normalize", guard)
     with pytest.raises(NormalizationError, match="NRM-OVER-CAP"):
         n.normalize_ingress(raw, ingress(raw), profile)

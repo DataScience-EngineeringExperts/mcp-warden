@@ -13,7 +13,7 @@ from .content_envelope import to_public_dict
 from .content_models import IngressKindV1, MediaTypeV1
 from .normalization_ingress import normalize_supplied
 from .normalization_inspection import inspect_normalized
-from .normalization_ipc import NormalizationError
+from .normalization_ipc import NormalizationError, canonical
 from .normalization_models import NormalizationProfileV1
 from .result_inspection import InspectionPolicy
 
@@ -34,7 +34,9 @@ def register(app: typer.Typer) -> None:
                 raise NormalizationError("NRM-IO")
             with path.open("rb") as stream:
                 content = stream.read(profile.budget.input_bytes + 1)
-            result = normalize_supplied(content, media, kind, profile)
+            result = normalize_supplied(content, media, kind, profile,
+                source_identity=canonical({"supplied_file": path.name}),
+                source_claims=canonical({"adapter": "local-file", "retrieved": False}))
             findings = inspect_normalized(
                 result, InspectionPolicy(expected_output_charset="extended"),
                 exfil_denylist=res_rules.SEED_EXFIL_DENYLIST,

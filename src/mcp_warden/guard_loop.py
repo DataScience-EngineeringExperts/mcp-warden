@@ -127,8 +127,8 @@ class GuardConfig:
         """Universal mode cannot silently inherit legacy shadow/fail-open flags."""
         if self.normalization_image is None:
             return
-        from .normalization_ipc import NormalizationError
         from .normalization import _profile
+        from .normalization_ipc import NormalizationError
         from .normalization_models import NormalizationProfileV1
         _profile(NormalizationProfileV1(self.normalization_image))
         if self.audit_only or any(getattr(self, name) for name in (
