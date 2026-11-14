@@ -35,6 +35,14 @@ def test_unsupported_platform_refuses(monkeypatch):
         sandbox.run_worker({}, NormalizationProfileV1("sha256:" + "a" * 64))
 
 
+def test_mutated_image_cannot_inject_docker_options(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    profile = NormalizationProfileV1("sha256:" + "a" * 64)
+    object.__setattr__(profile, "image_digest", "--privileged")
+    with pytest.raises(NormalizationError, match="NRM-SANDBOX"):
+        sandbox.run_worker({}, profile)
+
+
 @pytest.mark.parametrize("script,code", [
     ("import time; time.sleep(1)", "NRM-TIMEOUT"),
     ("import sys; sys.stdout.buffer.write(b'\\x00\\x01\\x00\\x01')", "NRM-OVER-CAP"),
@@ -70,6 +78,26 @@ def test_failed_inspection_still_removes_container(monkeypatch):
         sandbox.run_worker({}, NormalizationProfileV1("sha256:" + "a" * 64))
     assert calls[-1][3:5] == ["rm", "--force"]
     assert calls[-1][-1] == calls[0][5]
+
+
+def test_unavailable_sandbox_refuses_without_fallback(monkeypatch):
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(sandbox, "_DOCKER", ("/no/such/docker",))
+    with pytest.raises(NormalizationError, match="NRM-SANDBOX"):
+        sandbox.run_worker({}, NormalizationProfileV1("sha256:" + "a" * 64))
+
+
+def test_cleanup_failure_denies_success(monkeypatch):
+    def exchange(command, *_args, **_kwargs):
+        if "rm" in command:
+            raise NormalizationError("NRM-WORKER")
+        return encode_message({"otherwise": "successful"})
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(sandbox, "_exchange", exchange)
+    monkeypatch.setattr(sandbox, "_inspect_container", lambda *_: "a" * 64)
+    with pytest.raises(NormalizationError, match="NRM-SANDBOX"):
+        sandbox.run_worker({}, NormalizationProfileV1("sha256:" + "a" * 64))
 
 
 @pytest.fixture
@@ -148,6 +176,17 @@ b = b'{"pids_bounded":true}'
 sys.stdout.buffer.write(struct.pack('>I',len(b))+b+bytes(4))
 """
     assert _probe(monkeypatch, qualified_image, script) == {"pids_bounded": True}
+
+
+def test_real_child_cpu_is_root_cumulative(monkeypatch, qualified_image):
+    script = """
+import subprocess
+children = [subprocess.Popen(['/usr/local/bin/python3', '-I', '-c', 'while True: pass']) for _ in range(3)]
+for child in children:
+    child.wait()
+"""
+    with pytest.raises(NormalizationError, match="NRM-CPU"):
+        _probe(monkeypatch, qualified_image, script)
 
 
 def test_real_worker_protocol(qualified_image):

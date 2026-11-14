@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import selectors
 import signal
 import subprocess
 import sys
 import time
 import uuid
+from pathlib import Path
 
 from .normalization_ipc import (
     MAX_FRAME,
@@ -33,8 +35,12 @@ _MEMORY = 256 * 1024 * 1024
 _BOOTSTRAP = """
 import os, resource, runpy
 from pathlib import Path
+# CPython can synthesize LC_CTYPE while coercing its initially empty locale.
+assert set(os.environ) <= {'LC_CTYPE'}
+os.environ.clear()
 s = dict(line.split(':', 1) for line in Path('/proc/self/status').read_text().splitlines() if ':' in line)
 assert os.getuid() == os.getgid() == 10001
+assert os.getpid() == 1
 assert not os.environ
 assert int(s['CapEff'].strip(), 16) == 0
 assert s['NoNewPrivs'].strip() == '1' and s['Seccomp'].strip() == '2'
@@ -53,7 +59,7 @@ runpy.run_path('/worker/worker.py', run_name='__main__')
 
 def _create_command(name: str, image: str) -> list[str]:
     return [*_DOCKER, "create", "--name", name, "--pull=never", "--network=none",
-            "--ipc=none", "--pid=private", "--uts=private", "--cgroupns=private",
+            "--ipc=none", "--cgroupns=private",
             "--read-only", "--cap-drop=ALL", "--security-opt=no-new-privileges=true",
             "--user=10001:10001", "--pids-limit=16", "--memory=268435456",
             "--memory-swap=268435456", "--cpus=1", "--ulimit=cpu=2:2",
@@ -66,12 +72,14 @@ def _create_command(name: str, image: str) -> list[str]:
 
 
 def _exchange(command: list[str], data: bytes, deadline: float, limit: int,
-              *, framed: bool = False) -> bytes:
+              *, framed: bool = False, container_id: str | None = None) -> bytes:
     """Drain both pipes while writing; cap output before any unbounded allocation."""
     process = None
     output = bytearray()
     stderr_bytes = offset = checked = remaining = 0
     terminal = False
+    started = time.monotonic()
+    cpu_seen = False
     try:
         process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                    stderr=subprocess.PIPE, env={}, start_new_session=True)
@@ -85,6 +93,22 @@ def _exchange(command: list[str], data: bytes, deadline: float, limit: int,
             else:
                 process.stdin.close()
             while selector.get_map():
+                if container_id:
+                    # These are the two qualified Docker cgroup-v2 layouts. A
+                    # host with another layout refuses rather than losing the
+                    # root-cumulative CPU ceiling. The parser cannot write them.
+                    for directory in (f"system.slice/docker-{container_id}.scope", f"docker/{container_id}"):
+                        counter = Path("/sys/fs/cgroup", directory, "cpu.stat")
+                        try:
+                            usage = dict(line.split() for line in counter.read_text().splitlines())
+                        except FileNotFoundError:
+                            continue
+                        cpu_seen = True
+                        if int(usage["usage_usec"]) >= 2_000_000:
+                            raise NormalizationError("NRM-CPU")
+                        break
+                    if not cpu_seen and time.monotonic() - started >= 1:
+                        raise NormalizationError("NRM-SANDBOX")
                 timeout = deadline - time.monotonic()
                 if timeout <= 0:
                     raise NormalizationError("NRM-TIMEOUT")
@@ -149,7 +173,7 @@ def _exchange(command: list[str], data: bytes, deadline: float, limit: int,
                     pipe.close()
 
 
-def _inspect_container(name: str, image: str, deadline: float) -> None:
+def _inspect_container(name: str, image: str, deadline: float) -> str:
     try:
         info, = json.loads(_exchange([*_DOCKER, "inspect", name], b"", deadline, MAX_FRAME))
         host, config = info["HostConfig"], info["Config"]
@@ -164,28 +188,33 @@ def _inspect_container(name: str, image: str, deadline: float) -> None:
             host["SecurityOpt"] == ["no-new-privileges=true"],
             host["Memory"] == host["MemorySwap"] == _MEMORY,
             host["NanoCpus"] == 1_000_000_000 and host["PidsLimit"] == 16,
-            host["PidMode"] == host["UTSMode"] == host["CgroupnsMode"] == "private",
+            host["PidMode"] == host["UTSMode"] == "" and host["CgroupnsMode"] == "private",
             host["IpcMode"] == "none" and host["LogConfig"]["Type"] == "none",
             not host.get("Devices") and not host.get("DeviceRequests"),
         )
         if not all(controls):
             raise NormalizationError("NRM-SANDBOX")
+        if not re.fullmatch(r"[a-f0-9]{64}", info["Id"]):
+            raise NormalizationError("NRM-SANDBOX")
+        return info["Id"]
     except (ValueError, TypeError, KeyError):
         raise NormalizationError("NRM-SANDBOX") from None
 
 
 def run_worker(request: dict, profile: NormalizationProfileV1) -> dict:
     """Run a reviewed image with fixed controls; every failure refuses delivery."""
-    if sys.platform != "linux" or type(profile) is not NormalizationProfileV1:
+    if (sys.platform != "linux" or type(profile) is not NormalizationProfileV1
+            or type(profile.image_digest) is not str
+            or not re.fullmatch(r"sha256:[a-f0-9]{64}", profile.image_digest)):
         raise NormalizationError("NRM-SANDBOX")
     payload = encode_message(request)
     name = "mcp-warden-normalizer-" + uuid.uuid4().hex
     deadline = time.monotonic() + _WALL_SECONDS
     try:
         _exchange(_create_command(name, profile.image_digest), b"", deadline, MAX_FRAME)
-        _inspect_container(name, profile.image_digest, deadline)
+        container_id = _inspect_container(name, profile.image_digest, deadline)
         response = _exchange([*_DOCKER, "start", "--attach", "--interactive", name],
-                             payload, deadline, _WIRE_LIMIT, framed=True)
+                             payload, deadline, _WIRE_LIMIT, framed=True, container_id=container_id)
         return decode_message(response)
     finally:
         # Killing the CLI alone leaves a parser running inside the daemon. Use
