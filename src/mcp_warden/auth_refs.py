@@ -1,8 +1,8 @@
 """Reference, locator and placeholder heuristics for the WRD-AUTH-* audit.
 
-Split out of :mod:`mcp_warden.auth_audit` (DSE-1540). The only behaviour change
-is the separator-token rule in :func:`_tokenish_segment` and its use on URI
-fragments and ``:?`` messages. Everything here
+Split out of :mod:`mcp_warden.auth_audit` (DSE-1540). Includes separator-token
+checks on locators, fragments and ``:?`` messages, plus position-scoped
+1Password vault/item ID recognition (DSE-2124). Everything here
 answers one question about a config value: does it carry a credential, or
 only point at / stand in for one?
 """
@@ -104,6 +104,8 @@ def _text_carries_a_token(text: str) -> bool:
 _SECRET_URI = re.compile(
     r"^(?:op|vault|awssm|gcpsm|azkv|secretref|keyring|pass)://(\S+)$", re.IGNORECASE
 )
+#: Only vault/item positions in an exact three-part ``op://`` path may use IDs.
+_ONEPASSWORD_ID = re.compile(r"[a-z0-9]{26}")
 #: A filesystem path pointing at a credential file. Every branch (``~/``, ``./``,
 #: ``../``, ``/``, ``C:\``) needs >= 2 path-safe segments, none token-shaped, so a
 #: base64 blob that happens to start with ``/`` stays a literal.
@@ -124,9 +126,35 @@ def _is_secret_locator(v: str) -> bool:
         path, _, fragment = m.group(1).partition("#")
         if fragment and (not _PATH_SEGMENT.fullmatch(fragment) or _text_carries_a_token(fragment)):
             return False  # `#key` names a field; `#9f8e…` carries the secret
+        segments = path.split("/")
+        if v[:5].lower() == "op://" and len(segments) == 3:
+            return all(
+                _PATH_SEGMENT.fullmatch(seg)
+                and (index < 2 and _ONEPASSWORD_ID.fullmatch(seg) or not _tokenish_segment(seg))
+                for index, seg in enumerate(segments)
+            )
         return _segments_are_a_locator(path)
     m = _PATH_PREFIX.match(v)
     return bool(m) and _segments_are_a_locator(v[m.end():])
+
+
+def _mask_op_ids_for_entropy(value: str) -> str:
+    """Remove only validated op vault/item IDs from the entropy scan input.
+
+    Vendor-pattern scanning must still use the original value. The field,
+    fragment and named segments remain available to the entropy heuristic.
+    """
+    v = value.strip()
+    if v[:5].lower() != "op://" or not _is_secret_locator(v):
+        return value
+    path, marker, fragment = v[5:].partition("#")
+    segments = path.split("/")
+    if len(segments) != 3:
+        return value
+    for index in (0, 1):
+        if _ONEPASSWORD_ID.fullmatch(segments[index]):
+            segments[index] = "id"
+    return v[:5] + "/".join(segments) + marker + fragment
 
 
 #: Strong placeholder tokens — a value is a fill-me-in only if at least one of

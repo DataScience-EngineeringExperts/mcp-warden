@@ -1,6 +1,6 @@
 # Documentation Index — mcp-warden
 
-Last Updated: 2026-11-06
+Last Updated: 2026-11-14
 
 Master index of every document in this repository. The `docs/` files are the
 **security contract and source of truth** for all algorithms; the three core docs
@@ -47,10 +47,11 @@ is the MCP auth posture sound. Both reuse the `check` exit-code contract (0 clea
 | [`src/mcp_warden/deploy_gate.py`](src/mcp_warden/deploy_gate.py) | `WRD-GATE-*` engine: eval thresholds, guardrail presence, budget, approval receipt |
 | [`src/mcp_warden/cli_deploy_gate.py`](src/mcp_warden/cli_deploy_gate.py) | `deploy-gate` command body (register idiom) |
 | [`src/mcp_warden/auth_audit.py`](src/mcp_warden/auth_audit.py) | `WRD-AUTH-*` static config audit; reuses `checks_secret.scan_field` for vendor patterns (vendor hits are never downgraded); template fill-me-ins are `WRD-AUTH-PLACEHOLDER-SECRET` (low), matched on whole tokens |
-| [`src/mcp_warden/auth_refs.py`](src/mcp_warden/auth_refs.py) | Reference / locator / placeholder heuristics behind `WRD-AUTH-*`: `${VAR}` forms, secret-manager URIs and credential paths, token-shaped segments (incl. `-`/`_`-joined tokens, DSE-1540), placeholder bounds |
+| [`src/mcp_warden/auth_refs.py`](src/mcp_warden/auth_refs.py) | Reference / locator / placeholder heuristics behind `WRD-AUTH-*`: `${VAR}` forms, secret-manager URIs and credential paths, token-shaped segments (incl. `-`/`_`-joined tokens, DSE-1540), position-scoped 1Password IDs (DSE-2124), placeholder bounds |
 | [`src/mcp_warden/cli_auth.py`](src/mcp_warden/cli_auth.py) | `auth audit` sub-app command body |
 | [`tests/test_deploy_gate.py`](tests/test_deploy_gate.py) | Engine per-control pass/fail + CLI exit codes + fail-closed on malformed evidence |
 | [`tests/test_auth_audit.py`](tests/test_auth_audit.py) | Every rule, the deliberate non-flags (loopback, `${VAR}` refs, stdio), redaction, CLI/JSON/SARIF |
+| [`tests/test_auth_refs_op_ids.py`](tests/test_auth_refs_op_ids.py) | 1Password ID references and field, fragment, scheme, length, case and malformed-path regression controls (DSE-2124) |
 | [`tests/test_agent_gates_examples.py`](tests/test_agent_gates_examples.py) | Pins the shipped examples to the per-server verdicts their README claims, so a rule change cannot silently make the docs wrong; also asserts the planted fake credentials never reach a finding field |
 | [`examples/agent-gates/`](examples/agent-gates/) | Runnable demos — a 6-server config (4 flagged / 2 deliberately clean, incl. the `Bearer ${VAR}` embedded-reference shape from #94) and pass/fail deploy evidence, with expected verdicts documented and verified |
 

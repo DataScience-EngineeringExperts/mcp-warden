@@ -170,7 +170,15 @@ follows, each bound pinned by a test with a sub-threshold bypass string:
   empty, itself a reference (recursively), or itself a placeholder.**
   `${TOKEN:-9f8e7d6c5b4a}` and `${T:-${U:-hunter2!}}` are committed credentials
   wearing a reference; `${VAR:?msg}` stays a reference.
-- **Locators need >= 2 segments and no token-shaped segment.** Token-shaped is
+- **Locators need >= 2 segments and no token-shaped segment**, except that an
+  `op://vault/item/field` reference with exactly three nonempty slash-separated
+  segments may use 26-character lowercase `[a-z0-9]` IDs in its vault and item
+  positions (DSE-2124). The field and any fragment retain the token checks;
+  IDs under other URI schemes or filesystem paths receive no exemption.
+  Only those validated vault/item IDs are masked for the whole-value entropy
+  pass; vendor patterns still scan the original reference, and the field,
+  fragment and named segments still receive entropy checks.
+  Token-shaped is
   an alphanumeric-only segment that is 20+ characters, or 16+ at >= 3.5 bits/char,
   or 16+ mixed-case (`Passw0rdPassw0rd`). A segment with a dot is judged piece
   by piece: its plain alphanumeric pieces are a stem and an extension
