@@ -194,7 +194,7 @@ def _handle_s2c_over_cap(state: GuardState, frame) -> bytes:
         declared = declared_over_cap_value(frame.raw, state.config.max_frame_bytes)
     else:
         declared = None
-    if state.config.strict_frame_cap:
+    if state.config.strict_frame_cap or state.config.normalization_image is not None:
         # Forensic note BEFORE raising (binding F5): direction + sizes only, never
         # body/secret bytes. `declared` is the server-asserted Content-Length when
         # known (Case A), else None (Case B, where raw_length is the real size).
@@ -281,6 +281,10 @@ async def run_guard_async(
     Returns:
         The child's exit code (or :data:`GUARD_FATAL_EXIT` on guard fatal error).
     """
+    if state.config.normalization_image is not None:
+        state.config.validate_normalization()
+        if state.record is not None:
+            return GUARD_FATAL_EXIT  # universal mode never records uninspected raw input
     client_in = stdin if stdin is not None else wrap_recv(sys.stdin.buffer)
     client_out = stdout if stdout is not None else wrap_send(sys.stdout.buffer)
     client_err = stderr if stderr is not None else wrap_send(sys.stderr.buffer)

@@ -87,6 +87,7 @@ def analyze_trace(
     exfil_denylist: tuple[str, ...] | None = None,
     inject_phrases: tuple[str, ...] | None = None,
     stats: dict[str, Any] | None = None,
+    normalization_profile=None,
 ) -> list[ResultFinding]:
     """Analyze a recorded trace and return stamped result findings.
 
@@ -109,6 +110,14 @@ def analyze_trace(
         TraceError: On trace read/parse failure.
     """
     records = _load_records(path)
+    if normalization_profile is not None:
+        from .normalization import _profile
+        try:
+            _profile(normalization_profile)
+        except Exception:
+            raise TraceError("NRM-PROFILE") from None
+        if any(rec.get("direction") not in ("s2c", "c2s") for rec in records):
+            raise TraceError("universal inspection requires explicit trace directions")
     exfil = exfil_denylist or res_rules.SEED_EXFIL_DENYLIST
     phrases = inject_phrases or res_rules.SEED_INJECT_PHRASES
 
@@ -126,6 +135,19 @@ def analyze_trace(
             params = frame.get("params") or {}
             if isinstance(params, dict):
                 tool_by_id[rpc_id] = str(params.get("name", ""))
+            continue
+        if normalization_profile is not None and direction == "s2c":
+            from .normalization_inspection import inspect_mcp_frame
+            raw = inspect_mcp_frame(
+                frame, inflight.get(rpc_id, ""), normalization_profile, policy_for_tool(lock, ""),
+                exfil_denylist=exfil, inject_phrases=phrases,
+            )
+            frames_inspected += 1
+            for finding in raw:
+                finding.action, finding.direction, finding.rpc_id = "reported", direction, rpc_id
+                findings.append(finding)
+            inflight.pop(rpc_id, None)
+            tool_by_id.pop(rpc_id, None)
             continue
         if direction != "s2c" or rpc_id is None or "result" not in frame:
             continue

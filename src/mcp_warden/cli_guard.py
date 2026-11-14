@@ -31,6 +31,8 @@ from .guard_lifecycle import (
 from .guard_loop import GuardConfig
 from .inspector import TraceError, analyze_trace, exit_code_for
 from .lockfile import read_lock
+from .normalization_ipc import NormalizationError
+from .normalization_models import NormalizationProfileV1
 from .policy_model import PolicyError, load_policy
 from .result_inspection import severity_to_level
 
@@ -81,6 +83,7 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
     @app.command()
     def guard(
         server_cmd: list[str] = typer.Argument(..., help="MCP server launch argv (e.g. node ./server.js)"),
+        normalizer_image: Optional[str] = typer.Option(None, "--normalizer-image", help="Immutable qualified Linux worker image ID; enables fail-closed universal inspection"),
         lock: Optional[Path] = typer.Option(None, "--lock", help="Arms per-tool precision + tools/list_changed gate"),
         policy_file: Optional[Path] = typer.Option(None, "--policy", help="Arms runtime argument policy (POLICY_MODEL.md)"),
         exfil_denylist: Optional[Path] = typer.Option(None, "--exfil-denylist", help="Org never-callback domains (merged)"),
@@ -189,7 +192,20 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         )
         # --no-block-deterministic demotes the whole tier + both gates (§4.2);
         # --allow-exfil-domain is the sole affirmative alias of --no-block-exfil-domain.
+        if normalizer_image is not None and record is not None:
+            err_console.print("error: universal mode cannot record uninspected raw frames")
+            raise typer.Exit(code=2)
+        try:
+            _validated_normalizer(normalizer_image)
+            _validate_universal_flags(normalizer_image, audit_only, no_block_ansi,
+                                      no_block_secret_echo, no_block_exfil_domain,
+                                      allow_exfil_domain, no_block_exfil_ip_literal,
+                                      no_block_list_changed, no_block_policy, no_block_deterministic)
+        except NormalizationError:
+            err_console.print("error: NRM-PROFILE")
+            raise typer.Exit(code=2) from None
         cfg = GuardConfig(
+            normalization_image=normalizer_image,
             no_block_ansi=no_block_ansi or no_block_deterministic,
             no_block_secret_echo=no_block_secret_echo or no_block_deterministic,
             no_block_exfil_domain=no_block_exfil_domain or allow_exfil_domain or no_block_deterministic,
@@ -287,6 +303,7 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
     @app.command()
     def inspect(
         trace: Path = typer.Argument(..., help="Recorded JSONL trace of a JSON-RPC session"),
+        normalizer_image: Optional[str] = typer.Option(None, "--normalizer-image", help="Immutable qualified Linux worker image ID"),
         lock: Optional[Path] = typer.Option(None, "--lock", help="Per-tool precision from a warden.lock"),
         exfil_denylist: Optional[Path] = typer.Option(None, "--exfil-denylist", help="Org never-callback domains (merged)"),
         inject_phrases: Optional[Path] = typer.Option(None, "--inject-phrases", help="Org exact injection phrases (merged)"),
@@ -295,6 +312,12 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         audit_only: bool = typer.Option(False, "--audit-only", help="Force exit 0 regardless of findings"),
     ) -> None:
         """Run the WRD-RES-* catalog offline over a recorded trace; exit non-zero on BLOCK-tier."""
+        try:
+            normalization_profile = _validated_normalizer(normalizer_image)
+            _validate_universal_flags(normalizer_image, audit_only)
+        except NormalizationError:
+            err_console.print("error: NRM-PROFILE")
+            raise typer.Exit(code=2) from None
         lock_doc = None
         if lock is not None:
             try:
@@ -309,7 +332,8 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         stats: dict = {}
         try:
             findings = analyze_trace(
-                trace, lock=lock_doc, exfil_denylist=exfil, inject_phrases=phrases, stats=stats
+                trace, lock=lock_doc, exfil_denylist=exfil, inject_phrases=phrases, stats=stats,
+                normalization_profile=normalization_profile,
             )
         except TraceError as exc:
             err_console.print(f"[red]error:[/red] {exc}")
@@ -331,6 +355,15 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             _print_result_findings(console, findings)
 
         raise typer.Exit(code=exit_code_for(findings, audit_only=audit_only))
+
+
+def _validated_normalizer(image):
+    return NormalizationProfileV1(image) if image is not None else None
+
+
+def _validate_universal_flags(image, *optouts):
+    if image is not None and any(optouts):
+        raise NormalizationError("NRM-PROFILE")
 
 
 def _print_result_findings(console: Console, findings) -> None:

@@ -1,0 +1,51 @@
+"""Opt-in, atomic universal server-frame inspection before legacy delivery handling."""
+
+from __future__ import annotations
+
+from .framing import serialize_frame
+from .normalization_inspection import inspect_mcp_frame
+from .normalization_models import NormalizationProfileV1
+from .result_inspection import TIER_BLOCK, TIER_MONITOR, InspectionPolicy
+
+
+def handle_universal(state, frame, mode: str, legacy) -> bytes:
+    from . import wire_block
+    from .guard_loop import StrictInspectionAbort
+    if frame.json is None:
+        raise StrictInspectionAbort(site="normalization-frame", tool="?",
+                                    exc_type="MalformedFrame", rpc_id=None)
+    obj = frame.json
+    if type(obj) is not dict:
+        raise StrictInspectionAbort(site="normalization-frame", tool="?",
+                                    exc_type="MalformedFrame", rpc_id=None)
+    rpc_id = obj.get("id")
+    if rpc_id is not None and type(rpc_id) not in (str, int):
+        raise StrictInspectionAbort(site="normalization-frame", tool="?",
+                                    exc_type="MalformedID", rpc_id=None)
+    # Read correlation without consuming it; the legacy handler owns that state.
+    method = state.inflight.get(rpc_id, "")
+    try:
+        findings = inspect_mcp_frame(
+            obj, method, NormalizationProfileV1(state.config.normalization_image),
+            InspectionPolicy(), exfil_denylist=state.exfil_denylist,
+            inject_phrases=state.inject_phrases,
+        )
+    except Exception:
+        raise StrictInspectionAbort(site="normalization-inspect", tool="?",
+                                    exc_type="InspectionFailure", rpc_id=rpc_id) from None
+    blocked = [f for f in findings if f.tier == TIER_BLOCK
+               or (f.tier == TIER_MONITOR and state.config.block_inject_phrase)]
+    for finding in findings:
+        finding.action = "blocked" if finding in blocked else "reported"
+        finding.direction, finding.rpc_id = "s2c", rpc_id
+        state.emit(finding)
+    if blocked:
+        if rpc_id is None:
+            raise StrictInspectionAbort(site="normalization-control", tool="?",
+                                        exc_type="ContentRefused", rpc_id=None)
+        state.method_for(rpc_id)
+        state.tool_for(rpc_id)
+        return serialize_frame(wire_block.error_response(
+            rpc_id, stage="response", rule=blocked[0].rule_id, tool="supplied",
+            reason="universal content inspection refused delivery"), mode)
+    return legacy(state, frame, mode)

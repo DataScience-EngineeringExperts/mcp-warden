@@ -38,6 +38,19 @@ def _frame_error_note(direction: str, rpc_id: Any, detail: str) -> ResultFinding
 
 
 def handle_s2c(state, frame: Frame, mode: str) -> bytes:
+    if state.config.normalization_image is not None:
+        from .guard_loop import StrictInspectionAbort
+        from .normalization_guard import handle_universal
+        try:
+            state.config.validate_normalization()
+        except Exception:
+            raise StrictInspectionAbort(site="normalization-config", tool="?",
+                                        exc_type="InvalidProfile", rpc_id=None) from None
+        return handle_universal(state, frame, mode, _handle_s2c_legacy)
+    return _handle_s2c_legacy(state, frame, mode)
+
+
+def _handle_s2c_legacy(state, frame: Frame, mode: str) -> bytes:
     """Process one server->client frame; return the bytes to forward to the client.
 
     Args:

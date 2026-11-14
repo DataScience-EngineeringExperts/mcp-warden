@@ -43,13 +43,14 @@ class NormalizationProfileV1:
     profile_id: str = PROFILE_ID
     python_version: str = "3.12"
     unicode_version: str = "15.0.0"
+    parser_version: str = "7.1.0"
 
     def __post_init__(self) -> None:
         if (type(self.image_digest) is not str
                 or not re.fullmatch(r"sha256:[a-f0-9]{64}", self.image_digest)
                 or type(self.budget) is not NormalizationBudgetV1
                 or self.profile_id != PROFILE_ID or self.python_version != "3.12"
-                or self.unicode_version != "15.0.0"):
+                or self.unicode_version != "15.0.0" or self.parser_version != "7.1.0"):
             raise NormalizationError("NRM-PROFILE")
 
 
