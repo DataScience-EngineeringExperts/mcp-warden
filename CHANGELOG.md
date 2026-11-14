@@ -32,6 +32,9 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ### Fixed
 
+- `auth audit` accepts 26-character lowercase alphanumeric 1Password vault/item
+  IDs in exact `op://vault/item/field` references. Field and fragment token checks
+  and checks for other URI schemes and filesystem paths remain in force (DSE-2124).
 - `check` no longer passes when `overall_digest` differs but no per-entry drift fires
   (e.g. a baseline lock with duplicate tool/resource/prompt keys): it now reports
   `digest-mismatch-unexplained` (high) and exits non-zero (DSE-2125).

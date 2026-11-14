@@ -20,7 +20,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from .auth_refs import _looks_like_placeholder, _looks_like_secret_ref
+from .auth_refs import _looks_like_placeholder, _looks_like_secret_ref, _mask_op_ids_for_entropy
 from .checks_secret import scan_field
 from .models import Finding
 from .redact import redact_secret
@@ -104,6 +104,11 @@ def _scan_mapping_for_literals(mapping: dict[str, Any], target: str) -> list[Fin
         # credential no matter how it is dressed up, and is never downgraded to
         # a placeholder or excused as a reference.
         vendor = scan_field(value, target)
+        entropy_value = _mask_op_ids_for_entropy(value)
+        if entropy_value != value:
+            vendor = [f for f in vendor if f.rule_id != "WRD-SEC-ENTROPY"] + [
+                f for f in scan_field(entropy_value, target) if f.rule_id == "WRD-SEC-ENTROPY"
+            ]
         if _is_auth_key(key) and (vendor or not _looks_like_secret_ref(value)):
             if not vendor and _looks_like_placeholder(value):
                 # A template's fill-me-in slot is a real (low) finding — shipping
