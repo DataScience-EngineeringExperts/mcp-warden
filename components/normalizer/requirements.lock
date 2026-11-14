@@ -1,0 +1,3 @@
+# Independent parser closure; install with --require-hashes --only-binary=:all:.
+pypdf==7.1.0 \
+    --hash=sha256:47cca6b24bdcf4c4d65b5f7b8b972535c61710a061261e737688777cfd9a7bfb
