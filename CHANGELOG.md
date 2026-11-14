@@ -32,6 +32,8 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ### Fixed
 
+- Both dependency locks pin `opentelemetry-api` 1.45.2 to address
+  GHSA-mf5v-w3w3-f6cg (quadratic-time traceparent parsing).
 - `auth audit` accepts 26-character lowercase alphanumeric 1Password vault/item
   IDs in exact `op://vault/item/field` references. Field and fragment token checks
   and checks for other URI schemes and filesystem paths remain in force (DSE-2124).
