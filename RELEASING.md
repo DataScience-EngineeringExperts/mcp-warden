@@ -67,10 +67,35 @@ exchange; build, signing and upload jobs were skipped. This establishes authenti
 not project upload permission or successful release publication.
 
 The account-wide upload token was revoked. A `mcp-warden-cli`-only manual fallback
-is retained pending the next normal release's successful OIDC upload and provenance
-verification. It is not a workflow fallback. No upload or release was performed on
-2026-11-06; the published version remains **2.2.0**. Keep the next-release proof
-outstanding until section 2 confirms the new version and attestations.
+remains retained and is not a workflow fallback. No upload or release was performed
+on 2026-11-06; the published version was then **2.2.0**. The normal release below
+now supplies upload/provenance proof. Retiring the fallback remains separately gated.
+
+### Normal release proof — 2026-11-14
+
+[v2.3.0](https://github.com/DataScience-EngineeringExperts/mcp-warden/releases/tag/v2.3.0)
+was published from reviewed merge `8c8b59c58ff90402354187058f2e5e4b42fd49f0`.
+[Release run 43605647867](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/runs/43605647867)
+succeeded in build, production PyPI OIDC upload and Sigstore signing/self-verification.
+GitHub release assets and [PyPI 2.3.0](https://pypi.org/project/mcp-warden-cli/2.3.0/)
+contain identical package bytes:
+
+| Artifact | SHA-256 |
+|---|---|
+| `mcp_warden_cli-2.3.0-py3-none-any.whl` | `fc1acd2ce66fb5e1b10697473bc7693a3b745478a7ac71a3cf39d5a1e2779146` |
+| `mcp_warden_cli-2.3.0.tar.gz` | `7e1876bae5e7a936faf1c329dd85fb9d95169f1394f7040649c9ffec2c05d2ae` |
+
+The [wheel provenance](https://pypi.org/integrity/mcp-warden-cli/2.3.0/mcp_warden_cli-2.3.0-py3-none-any.whl/provenance)
+and [sdist provenance](https://pypi.org/integrity/mcp-warden-cli/2.3.0/mcp_warden_cli-2.3.0.tar.gz/provenance)
+identify GitHub repository `DataScience-EngineeringExperts/mcp-warden`, workflow
+`release.yml`, environment `null`. Release assets include their Sigstore bundles.
+A fresh Linux Python 3.12 environment installed the downloaded wheel and exercised
+the qualified worker: safe text exits 0, unknown MIME refuses with exit 2, an
+encoded injection phrase is detected at its configured monitor tier, and a
+synthetic token blocks with exit 1 while remaining redacted.
+
+This proves a normal company-publisher release upload and installed CLI use.
+It does not prove fallback-token retirement or whole-kernel conformance.
 
 ### New projects only — pending publisher
 

@@ -328,4 +328,5 @@ review/signature CLI. Tests are `tests/test_artifact_trust.py`,
 
 | Date | Change |
 |------|--------|
+| 2026-11-14 | Shipped DSE-718 in v2.3.0; normal company OIDC upload, matching GitHub/PyPI hashes, verified signatures/provenance and installed CLI smoke. See [release proof](RELEASING.md#normal-release-proof--2026-11-14). Manual fallback retained. README operator examples preserved in [archive](docs/archive/2026-11-14-readme-operations.md). |
 | 2026-11-06 | Recorded TheDataExperts PyPI ownership, Active organization billing, normal company publisher and removal of the obsolete personal publisher; linked successful authentication-only run 42224199909. Account-wide token revoked; project-only manual fallback retained. No upload today; 2.2.0 unchanged and next normal release upload/provenance proof outstanding. |

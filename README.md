@@ -20,9 +20,10 @@ Hints are server claims, not proof of safety, and schemas do not certify content
 operators can check production OIDC without uploading via [`RELEASING.md`](RELEASING.md).
 
 `mcp-warden-cli` is owned by the [TheDataExperts PyPI organization](https://pypi.org/org/TheDataExperts/).
-The company-repository publisher passed an authentication-only check on 2026-11-06;
-that check uploaded no package. The next normal release must prove OIDC upload
-and provenance; see the [publishing status](RELEASING.md#ownership-and-publishing-status--2026-11-06).
+The normal [v2.3.0 release](https://github.com/DataScience-EngineeringExperts/mcp-warden/releases/tag/v2.3.0)
+uploaded through the company Trusted Publisher, with matching GitHub/PyPI artifact
+hashes, verified signatures and PyPI provenance. See the
+[release proof](RELEASING.md#normal-release-proof--2026-11-14).
 
 The proposed next direction is a protocol-neutral **Warden**: human-approved tool versions and bounded actions, with untrusted inputs kept separate from authority.
 The [upgrade plan and checkpoint proposal](docs/plans/2026-10-02-tool-integrity-upgrade.md)
@@ -454,16 +455,8 @@ failure codes and `--require-consensus`.
 
 ## Policy (design-time only)
 
-`policy` **lints** a YAML policy and **evaluates a single provided sample call**.
-It does **not** intercept live calls — there is no runtime enforcement in v0.1
-(deferred to v0.2). Fail-closed defaults: `shell_exec.allow=false`,
-`http_request.deny_private=true` (SSRF ranges), `sql_query.allow_readonly_only=true`,
-empty `allow_paths` = deny-all. See [`docs/POLICY_MODEL.md`](docs/POLICY_MODEL.md).
-
-```bash
-.venv/bin/mcp-warden policy eval policy.yaml ssrf_sample.json
-#  -> deny: host 169.254.169.254 is in deny_private range 169.254.0.0/16  (exit 1)
-```
+`policy` lints YAML and evaluates a supplied sample call; it does not intercept live calls.
+See [the contract](docs/POLICY_MODEL.md) and [operator examples](docs/archive/2026-11-14-readme-operations.md#policy-design-time-only).
 
 ---
 
@@ -489,21 +482,9 @@ schemas in `warden.lock` and the SARIF output match them byte-for-byte.
 
 ## Tests
 
-```bash
-PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m pytest -q
-```
-
-The headline test is a real stdio round-trip: spawn the clean fixture → `pin` →
-re-run `check` against the mutated fixture → assert non-zero exit + the expected
-drift + SARIF finding.
-
-The live runtime attack surface — the stdio JSON-RPC **framer**, the ANSI/control
-**stripper**, the exfil-**domain** matcher, and the secret **redactor** — is
-additionally **property-fuzzed** with [`hypothesis`](https://hypothesis.works/)
-under `tests/fuzz/` (construction-based liveness + soundness properties: a
-known-malicious input IS detected, and the parser never invents, leaks, or
-misclassifies). The deep soak runs via `make fuzz`; see
-[`CONTRIBUTING.md`](CONTRIBUTING.md#fuzzing).
+Run `.venv/bin/python -m pytest -q`; see [test details](docs/archive/2026-11-14-readme-operations.md#tests)
+and [fuzzing](CONTRIBUTING.md#fuzzing). Normalization additionally requires the
+[actual-image qualification](docs/CONTENT_NORMALIZATION.md#qualification-and-rollback).
 
 ## Contributing & security
 
