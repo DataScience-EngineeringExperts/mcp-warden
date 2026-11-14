@@ -152,11 +152,21 @@ sys.stdout.buffer.write(struct.pack('>I', len(b)) + b + bytes(4))
     "import sys; sys.stdout.buffer.write(b'\\x00\\x00\\x00\\x10incomplete')",
 ])
 def test_real_hostile_worker_refuses_and_cleans_up(monkeypatch, qualified_image, script):
-    before = subprocess.check_output([*sandbox._DOCKER, "ps", "-aq", "--filter", "name=mcp-warden-normalizer-"])
+    names = []
+    create_command = sandbox._create_command
+
+    def capture_name(name, image):
+        names.append(name)
+        return create_command(name, image)
+
+    monkeypatch.setattr(sandbox, "_create_command", capture_name)
     with pytest.raises(NormalizationError):
         _probe(monkeypatch, qualified_image, script)
-    after = subprocess.check_output([*sandbox._DOCKER, "ps", "-aq", "--filter", "name=mcp-warden-normalizer-"])
-    assert after == before
+    assert len(names) == 1
+    remaining = subprocess.check_output([
+        *sandbox._DOCKER, "ps", "-aq", "--filter", f"name=^/{names[0]}$",
+    ])
+    assert remaining == b""
 
 
 def test_real_pid_limit(monkeypatch, qualified_image):
