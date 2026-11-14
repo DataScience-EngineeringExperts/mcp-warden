@@ -6,6 +6,7 @@ import unicodedata
 from normalization_ipc import NormalizationError, canonical
 
 PROFILE = "mcp-warden.normalizer.v1"
+PARSER_ID = "pypdf==7.1.0;markdown-it-py==4.3.0;mdurl==0.1.2"
 CEILINGS = dict(input_bytes=16*1024*1024, expanded_bytes=64*1024*1024,
                 output_bytes=16*1024*1024, depth=8, nodes=4096, members=256,
                 spans=100_000, map_bytes=8*1024*1024, combining_run=64, work=100_000_000)

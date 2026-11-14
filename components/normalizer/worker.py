@@ -6,12 +6,13 @@ import hashlib
 import logging
 import sys
 import unicodedata
+from importlib.metadata import version
 from pathlib import Path
 
 # Python -I excludes the script directory; only this immutable image directory
 # is added. No caller path, environment entry or package discovery is consulted.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from formats import CEILINGS, PROFILE, Context, fail  # noqa: E402
+from formats import CEILINGS, PARSER_ID, PROFILE, Context, fail  # noqa: E402
 from normalization_ipc import NormalizationError, encode_message, read_message  # noqa: E402
 
 
@@ -26,6 +27,9 @@ def process(request):
             fail("NRM-PROTOCOL")
         if sys.version_info[:2] != (3, 12) or unicodedata.unidata_version != "15.0.0":
             fail("NRM-RUNTIME")
+        if any(version(name) != expected for name, expected in
+               (("pypdf", "7.1.0"), ("markdown-it-py", "4.3.0"), ("mdurl", "0.1.2"))):
+            fail("NRM-RUNTIME")
         if len(request["content_b64"]) > ((CEILINGS["input_bytes"] + 2) // 3) * 4:
             fail("NRM-OVER-CAP")
         raw = base64.b64decode(request["content_b64"], validate=True)
@@ -37,7 +41,7 @@ def process(request):
             fail("NRM-EMPTY")
         return dict(schema_version=1, status="structurally-complete", profile_id=PROFILE,
                     input_digest="sha256:" + hashlib.sha256(raw).hexdigest(),
-                    runtime={"python": "3.12", "unicode": "15.0.0", "parser": "pypdf==7.1.0"},
+                    runtime={"python": "3.12", "unicode": "15.0.0", "parser": PARSER_ID},
                     segments=ctx.segments, usage=ctx.usage)
     except NormalizationError as exc:
         return {"schema_version": 1, "status": "refused", "code": exc.code}

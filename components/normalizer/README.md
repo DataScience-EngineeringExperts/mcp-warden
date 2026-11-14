@@ -6,8 +6,10 @@ in-process fallback. The trusted coordinator must validate its entire output.
 The Dockerfile and supervisor provide the separately qualified Linux isolation
 boundary; importing this worker directly is only a parser test seam.
 
-Runtime identity is Python 3.12, Unicode 15.0.0 and `pypdf==7.1.0`.
-`requirements.lock` independently hash-locks the sole third-party parser wheel.
+Runtime identity is Python 3.12, Unicode 15.0.0 and the parser closure
+`pypdf==7.1.0;markdown-it-py==4.3.0;mdurl==0.1.2`. Every request checks all
+installed package versions. `requirements.lock` independently hash-locks all
+three third-party wheels.
 Install with `pip install --require-hashes --only-binary=:all: -r requirements.lock`.
 The immutable image contains `worker.py`, `formats*.py`, and the coordinator's
 standalone `normalization_ipc.py` under `/worker`. The entrypoint adds only its
@@ -31,6 +33,14 @@ and all surrounding keys/metadata. XML rejects DTD/entities. HTML retains hidden
 content, attributes, comments and an entity-decoded syntax view; non-void tags
 require explicit balanced closing tags under this conservative profile. CSV includes all
 fields. Source syntax is retained alongside structured decoded inspection views.
+Markdown uses markdown-it-py's CommonMark preset without plugins or rendering.
+Decoded text/code tokens, link/image attributes, fence info, unused/duplicate
+reference definitions, and embedded HTML/comment/attribute evidence are all
+inspected. Code tokens retain CommonMark's literal escape semantics. A dedicated
+combined decoded token view reconstructs instructions split across emphasis,
+links or embedded HTML tags. Unknown tokens and unbalanced embedded HTML refuse;
+the parser's internal nesting cap exceeds the worker's rejecting depth limit so
+it cannot silently discard a deep tail before an ancestor triggers refusal.
 HTML and XML also concatenate decoded character data across tags into a dedicated
 inspection segment. JSON adds a depth-first, input-order string-value concatenation
 view without inserting keys between values. These additional views reconstruct
@@ -67,3 +77,14 @@ Parser corpus command (on builder):
 `PYTHONPATH=src .venv/bin/pytest -q tests/test_normalizer_formats.py`.
 Sandbox qualification, coordinator validation, guard parity and final artifact
 identity require their separate integration tests.
+
+Dependency review (2026-11-14): official PyPI JSON selected markdown-it-py 4.3.0
+and mdurl 0.1.2; the only non-extra Markdown dependency is `mdurl~=0.1`.
+Both installed wheel license files contain the MIT grant (markdown-it-py also
+includes its upstream markdown-it license). Version-specific PyPI advisory
+lists were empty and exact PyPI/version queries to OSV returned no findings at
+review time. These are point-in-time advisory checks, not proof of absence.
+Sources: https://pypi.org/pypi/markdown-it-py/4.3.0/json ,
+https://pypi.org/pypi/mdurl/0.1.2/json ,
+https://markdown-it-py.readthedocs.io/en/latest/using.html ,
+https://google.github.io/osv.dev/post-v1-query/ .

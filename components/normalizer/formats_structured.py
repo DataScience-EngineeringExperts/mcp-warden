@@ -168,7 +168,10 @@ class InspectionHTML(HTMLParser):
 
 
 def parse_structured(ctx, text, media, locator, depth):
-    if media == "application/json":
+    if media == "text/markdown":
+        from formats_markdown import parse_markdown
+        parse_markdown(ctx, text, locator, depth)
+    elif media == "application/json":
         _json(ctx, text, locator, depth)
     elif media in {"application/xml", "text/xml"}:
         _xml(ctx, text, locator, depth)
