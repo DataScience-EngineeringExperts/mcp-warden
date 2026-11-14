@@ -3,11 +3,13 @@
 mcp-warden pins and verifies the *declared* tool/resource/prompt surface of an
 MCP server (name/description/inputSchema plus v4 annotations/outputSchema from
 ``tools/list`` / ``resources/list`` / ``prompts/list``), then fails CI when that
-surface drifts from an approved baseline. It operates on **definitions**, never
-on runtime tool behavior or tool results. See ``docs/THREAT_MODEL.md``.
+surface drifts from an approved baseline. Optional stdio result inspection and
+Linux isolated supplied-content normalization add separate bounded inspection
+paths. They do not confer authority or prove arbitrary runtime behavior safe.
+See ``docs/THREAT_MODEL.md`` and ``docs/CONTENT_NORMALIZATION.md``.
 """
 
-__version__ = "2.2.0"
+__version__ = "2.3.0"
 #: Lock schema version. Bumped 3 → 4 for annotation/outputSchema commitments
 #: (DSE-1539). Missing/null metadata hashes JSON null, not an empty object.
 #: Earlier 2 → 3 migration was #29 (in-document ``$ref`` resolution in

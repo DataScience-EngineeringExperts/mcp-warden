@@ -30,6 +30,8 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+## [2.3.0] — 2026-11-14
+
 ### Added
 
 - DSE-718 opt-in Linux supplied-content normalization: independent isolated parser
