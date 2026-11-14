@@ -87,13 +87,13 @@ def inspect_mcp_frame(obj: dict, method: str, profile: NormalizationProfileV1,
         result = obj.get("result")
         kind = IngressKindV1.TOOL_RESULT
         if type(result) is dict:
-            if method == "tools/call":
+            if method == "tools/call" or "content" in result or "structuredContent" in result:
                 blocks = result.get("content", [])
                 if type(blocks) is not list or (not blocks and not result.get("structuredContent")):
                     raise NormalizationError("NRM-PARTIAL")
                 for block in blocks:
                     _block(block)
-            elif method == "prompts/get":
+            if method == "prompts/get" or "messages" in result:
                 kind = IngressKindV1.MCP_PROMPT
                 messages = result.get("messages")
                 if type(messages) is not list or not messages:
@@ -102,7 +102,7 @@ def inspect_mcp_frame(obj: dict, method: str, profile: NormalizationProfileV1,
                     if type(message) is not dict:
                         raise NormalizationError()
                     _block(message.get("content"))
-            elif method == "resources/read":
+            if method == "resources/read" or "contents" in result:
                 kind = IngressKindV1.MCP_RESOURCE
                 contents = result.get("contents")
                 if type(contents) is not list or not contents:

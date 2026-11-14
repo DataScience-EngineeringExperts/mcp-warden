@@ -26,7 +26,7 @@ def profile():
 
 def pdf():
     from pypdf import PdfWriter
-    from pypdf.generic import DictionaryObject, NameObject, NumberObject, TextStringObject
+    from pypdf.generic import DictionaryObject, NameObject
     from pypdf.generic import DecodedStreamObject
     writer = PdfWriter()
     page = writer.add_blank_page(width=200, height=200)

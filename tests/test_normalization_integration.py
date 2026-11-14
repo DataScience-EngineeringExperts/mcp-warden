@@ -88,6 +88,30 @@ def test_bad_frame_cannot_enter_legacy_pass_through():
         handle_s2c(state, Frame(raw=b"secret", body=b"secret", json=None), MODE_NEWLINE)
 
 
+def test_unknown_request_id_cannot_bypass_binary_block_validation(worker):
+    state = GuardState(config=GuardConfig(normalization_image=IMAGE))
+    out = handle_s2c(state, frame({"id": 999, "result": {"content": [
+        {"type": "image", "data": "AA=="}]}}), MODE_NEWLINE)
+    assert "result" not in json.loads(out)
+
+
+def test_multiple_mcp_container_fields_are_all_validated(worker):
+    state = GuardState(config=GuardConfig(normalization_image=IMAGE))
+    state.remember_request(1, "tools/call", "tool")
+    out = handle_s2c(state, frame({"id": 1, "result": {
+        "content": [{"type": "text", "text": "safe"}],
+        "messages": [{"content": {"type": "audio", "data": "AA=="}}]}}), MODE_NEWLINE)
+    assert "result" not in json.loads(out)
+
+
+def test_trace_duplicate_keys_and_flat_overflow_fail_closed(tmp_path):
+    path = tmp_path / "trace"
+    for data in ('{"direction":"s2c","direction":"c2s","frame":{}}', "\n" * 4097):
+        path.write_text(data)
+        with pytest.raises(TraceError):
+            analyze_trace(path, normalization_profile=NormalizationProfileV1(IMAGE))
+
+
 def test_sandbox_failure_blocks_before_sink_and_matches_offline(monkeypatch, tmp_path):
     def fail(*_):
         raise RuntimeError("SYNTHETIC_SECRET")

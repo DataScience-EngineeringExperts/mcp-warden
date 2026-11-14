@@ -3,10 +3,17 @@ import base64
 import importlib.util
 import io
 import sys
+import unicodedata
 import zipfile
 from pathlib import Path
 
 import pytest
+
+pytestmark = pytest.mark.skipif(
+    sys.version_info[:2] != (3, 12) or unicodedata.unidata_version != "15.0.0",
+    reason="standalone parser profile qualified in dedicated Python 3.12 job",
+)
+pytest.importorskip("pypdf", reason="standalone parser closure installed in qualification job")
 
 COMPONENT = Path(__file__).resolve().parents[1] / "components" / "normalizer"
 sys.path.insert(0, str(COMPONENT))

@@ -104,6 +104,9 @@ def render_posture_banner(cfg: GuardConfig) -> str:
     lines.extend(_monitor_lines(cfg))
     lines.extend(_inactive_lines(cfg))
     lines.extend(_strictness_lines(cfg))
+    lines.append("NORMALIZATION: Linux isolated supplied-content profile; refusals block delivery"
+                 if cfg.normalization_image else
+                 "NORMALIZATION: not enabled; legacy, narrower content coverage only")
     lines.append(_RULE)
     return "\n".join(lines)
 
@@ -176,10 +179,11 @@ def _monitor_lines(cfg: GuardConfig) -> list[str]:
                 "  - injection-phrase tier (WRD-RES-INJECT-PHRASE) — fuzzy; "
                 "logs matches, does NOT block (enable: --block-inject-phrase)"
             )
-    lines.append(
-        "  - uninspectable / non-tools/call / uncorrelated-id frames pass through "
-        "uninspected (GUARD_PROXY.md §4.4)"
-    )
+    if cfg.normalization_image is None:
+        lines.append(
+            "  - uninspectable / non-tools/call / uncorrelated-id frames pass through "
+            "uninspected (GUARD_PROXY.md §4.4)"
+        )
     return lines
 
 

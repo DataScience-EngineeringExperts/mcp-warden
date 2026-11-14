@@ -1,6 +1,6 @@
 # mcp-warden — System Context Diagram
 
-Last Updated: 2026-11-06
+Last Updated: 2026-11-14
 
 **CLI 2.0.0 / schema level 4** extends capture/lock/check to complete tool annotations and output
 schemas, with structural output drift and Python/TypeScript parity. The existing
@@ -59,6 +59,27 @@ logic) plus a separate informational provenance section. It never prints raw
 > exit-code contract (0/1/2, fail closed) and the shared SARIF + JSONL emitters, so they
 > enter an existing code-scanning pipeline with no new plumbing. Runtime capability
 > brokering remains out of scope (DSE-725). See [`docs/AGENT_GATES.md`](docs/AGENT_GATES.md).
+
+> **Supplied-content normalization (DSE-718)** is an opt-in Linux worker path,
+> separate from the base CLI parser dependencies. All nine input families use
+> the same engine over supplied bytes; no external connectors fetch content.
+> The coordinator creates digest-bound untrusted lineage/maps and validates
+> bounded output; PDP/PEP remains the delivery authority. The optional guard
+> wrapper inspects every complete server frame before legacy delivery, forces
+> strict refusal, and has no in-process fallback. See
+> [`docs/CONTENT_NORMALIZATION.md`](docs/CONTENT_NORMALIZATION.md).
+
+```mermaid
+flowchart LR
+    supplied[Supplied bytes: nine ingress families] --> capture[Exact-byte ingress envelope]
+    capture --> coord[normalization.py: trusted evidence coordinator]
+    coord --> sandbox[normalization_sandbox.py: Linux isolated immutable worker]
+    sandbox --> parser[components/normalizer: bounded recursive parsers]
+    parser --> validate[Bounded untrusted manifest validation]
+    validate --> evidence[Derived untrusted envelope and source-map digest]
+    evidence --> inspection[Raw and normalized shared inspection]
+    inspection --> gate[Existing policy and delivery boundary]
+```
 
 > **`doctor` (DSE-1516)** is the zero-config entry point and sits at the far left of the
 > picture: it reads the MCP client configs already on the developer's machine (Claude

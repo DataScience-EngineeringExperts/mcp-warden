@@ -347,6 +347,12 @@ artifact. There is no way to relax a check at runtime without a lock edit.
 
 ## 7. Out of scope for v0.2 (do NOT build)
 
+This table describes the legacy v0.2/v0.3 catalog path. The separately opt-in
+[DSE-718 supplied-content profile](CONTENT_NORMALIZATION.md) adds bounded Linux
+document/archive extraction and atomic server-frame inspection with explicit
+unsupported/refusal outcomes. It does not silently expand the legacy defaults
+or provide OCR/arbitrary binary decoding.
+
 | Item | Why |
 |------|-----|
 | Decoding/scanning image/audio/blob/base64 content | Unbounded cost + new parsers = new attack surface. Surface coverage gap via `WRD-RES-UNINSPECTABLE` instead. |

@@ -13,6 +13,9 @@ from .result_inspection import TIER_BLOCK, TIER_MONITOR, policy_for_tool
 def handle_universal(state, frame, mode: str, legacy) -> bytes:
     from . import wire_block
     from .guard_loop import StrictInspectionAbort
+    if state.record is not None:
+        raise StrictInspectionAbort(site="normalization-record", tool="?",
+                                    exc_type="RawRecordingUnsupported", rpc_id=None)
     if frame.json is None:
         raise StrictInspectionAbort(site="normalization-frame", tool="?",
                                     exc_type="MalformedFrame", rpc_id=None)

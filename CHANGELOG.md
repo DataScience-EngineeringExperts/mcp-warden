@@ -30,6 +30,15 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+### Added
+
+- DSE-718 opt-in Linux supplied-content normalization: independent isolated parser
+  worker; all nine ingress kinds; bounded text/web/data, MIME, ZIP and conservative
+  text-PDF extraction; raw and normalized inspection, labeled provenance, immutable
+  worker IDs, atomic guard/offline refusal, `normalize` evidence CLI and dedicated
+  real-sandbox qualification. Office/OCR, external retrieval and non-Linux worker
+  execution are unsupported. No whole-ATK or arbitrary-format claim is made.
+
 ### Fixed
 
 - Both dependency locks pin `opentelemetry-api` 1.45.2 to address

@@ -183,6 +183,21 @@ automatically — so the use cases are sequenced by leverage:
 - **Agent-framework integrator** *(post-launch).* Enforce that only warden-locked servers
   register in a LangGraph-style orchestrator — one integration locks an entire downstream ecosystem.
 
+### Isolated supplied-content inspection (DSE-718)
+
+The opt-in Linux normalizer processes supplied text/web/data, email, ZIP and a
+conservative text-PDF subset through one engine across all nine declared ingress
+families. A separately hash-locked parser image runs without network, credentials
+or host-data mounts. The coordinator preserves raw-byte evidence and creates
+untrusted derived envelopes with labeled source precision; it grants no delivery
+authority. Office/OCR, external retrieval and non-Linux worker execution refuse.
+
+`normalize <file> --media-type <MIME> --source-kind <kind> --normalizer-image <sha256:id>`
+emits evidence and redacted findings. `guard` and `inspect` accept the same
+`--normalizer-image` option for atomic, fail-closed inspection using a qualified
+immutable local image. Without it, their narrower legacy contracts remain.
+See [the supported profiles, sandbox qualification and limits](docs/CONTENT_NORMALIZATION.md).
+
 ---
 
 ## What it does
@@ -395,6 +410,7 @@ run the gate only on push:
 | `mcp-warden policy eval <file> <sample.json> [--lock F]` | Evaluate one sample call | **non-zero on a deny verdict** (CI assertion) |
 | `mcp-warden guard <server-cmd...> [--lock F] [--policy F] [--no-block-* / --allow-exfil-domain] [--block-inject-phrase] [--audit-only] [--strict] [--sarif F] [--record T]` | **(v0.3)** Transparent stdio proxy: inspects `tools/call` results + arguments at runtime. **Deterministic tier blocks by default**; opt out per-category with `--no-block-<category>` or fully with `--audit-only`. `--strict` fails CLOSED on an internal inspection error (exit `3`) | child's exit code; `3` on a `--strict` abort; otherwise never breaks the session |
 | `mcp-warden inspect <trace.jsonl> [--lock F] [--sarif F]` | **(v0.2)** Offline analyzer over a recorded JSON-RPC session — same `WRD-RES-*` catalog as `guard` (always report-only) | non-zero on any BLOCK-tier finding; 2 on read error |
+| `mcp-warden normalize <file> --media-type MIME --source-kind KIND --normalizer-image sha256:ID` | Linux supplied-content normalization/inspection through an independently qualified isolated worker; emits evidence, not extracted content. `guard`/`inspect` also accept `--normalizer-image`; see [`docs/CONTENT_NORMALIZATION.md`](docs/CONTENT_NORMALIZATION.md) | 0 no blocking finding; 1 blocking finding; 2 refusal/error |
 | `mcp-warden lock rotate <lock> [--approver ID] [--actor ID] [--note T] [--json]` | **(v0.3)** Re-attest provenance on an existing baseline without re-capturing the surface; `overall_digest` stays **byte-identical** (WARDEN_LOCK_SCHEMA §8.2). Fails closed on a tampered/inconsistent lock | 0 on success, 2 on missing/invalid/tampered lock |
 | `mcp-warden lock sign <lock> [--coordinate C] [--identity-token T]` | **(DSE-1530)** Sigstore-sign an existing **unsigned** lock and write `<lockname>.sigstore` beside it — for attesters that capture offline and sign afterwards. v2 statement (binds the coordinate) with `--coordinate`, v1 otherwise; `overall_digest` unchanged. Refuses an existing sidecar or an already-signed lock | 0 on success; **1 on signing failure (fail closed, no partial sidecar)**; 2 on missing/tampered lock, bad coordinate, existing signature, or missing `mcp-warden[sigstore]` |
 | `mcp-warden diff <lock-a> <lock-b> [--json] [--sarif F] [--no-provenance] [--exit-code]` | **(v0.3)** Offline, **redacted** viewer over the drift engine: renders integrity drift between two existing locks (A=baseline, B=current) + a separate informational provenance section. Never re-captures and never prints raw `server.command`/`args` (secret-safe) | 0 (viewer); with `--exit-code`, 1 on **integrity** drift only; 2 on missing/invalid lock |

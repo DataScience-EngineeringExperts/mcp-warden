@@ -59,7 +59,7 @@ def _segment(value: object, raw: bytes, media: str, profile: NormalizationProfil
         raise NormalizationError("NRM-MANIFEST")
     if unicodedata.unidata_version == profile.unicode_version:
         expected = "".join(c for c in unicodedata.normalize("NFKC", value["raw_text"])
-                           if unicodedata.category(c) != "Cf" and (ord(c) >= 32 or c in "\n\r\t"))
+                           if unicodedata.category(c) not in {"Cf", "Cc"} or c in "\n\r\t")
         if value["text"] != expected:
             raise NormalizationError("NRM-MANIFEST")
     return NormalizedSegmentV1(**value)

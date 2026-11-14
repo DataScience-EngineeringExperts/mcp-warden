@@ -34,6 +34,22 @@ implementations (Python reference, zero-dependency TypeScript) prove it in CI.
 | [`packages/lock-ts/`](packages/lock-ts/README.md) | `@mcp-warden/lock` — verify-only TypeScript: hand-written JCS, SHA-256, capability + skeleton derivation, drift classifier; `npm test` runs the same corpus |
 | [`.github/workflows/integrity-gate.yml`](.github/workflows/integrity-gate.yml) `conformance` job | Runs both harnesses; mutation proof flips one hex char and requires BOTH to fail |
 
+## Supplied-content normalization (DSE-718)
+
+| Artifact | Purpose |
+|---|---|
+| [`docs/CONTENT_NORMALIZATION.md`](docs/CONTENT_NORMALIZATION.md) | Finite nine-ingress supplied-content contract, format/provenance limits, Linux sandbox, budgets, refusal/migration and qualification |
+| [`components/normalizer/README.md`](components/normalizer/README.md) | Standalone parser component, independent hash lock, pinned runtime and conservative format profiles |
+| [`src/mcp_warden/normalization_models.py`](src/mcp_warden/normalization_models.py) | Frozen finite profiles and evidence types |
+| [`src/mcp_warden/normalization.py`](src/mcp_warden/normalization.py) | Trusted coordinator validates worker evidence and derives untrusted envelopes |
+| [`src/mcp_warden/normalization_sandbox.py`](src/mcp_warden/normalization_sandbox.py) | Fixed immutable-image Linux Docker supervisor; bounded IPC and fail-closed cleanup |
+| [`src/mcp_warden/normalization_ingress.py`](src/mcp_warden/normalization_ingress.py) | All nine supplied-payload adapters; no external retrieval |
+| [`src/mcp_warden/normalization_inspection.py`](src/mcp_warden/normalization_inspection.py) | Raw/normalized shared catalog and supplied MCP container checks |
+| [`src/mcp_warden/normalization_guard.py`](src/mcp_warden/normalization_guard.py) | Atomic opt-in live frame mediation before legacy handling |
+| [`src/mcp_warden/normalization_trace.py`](src/mcp_warden/normalization_trace.py) | Bounded, explicit-direction offline trace loading |
+| [`scripts/qualify_normalizer.sh`](scripts/qualify_normalizer.sh) | Actual-image qualification with independent builder QA claims |
+| [`.github/workflows/normalization.yml`](.github/workflows/normalization.yml) | Dedicated Python 3.12 Linux parser/sandbox/every-ingress/fuzz qualification |
+
 ## Agent gates (`deploy-gate` + `auth audit` — DSE-1257 / DSE-1258)
 
 Two fail-closed gates extending warden past MCP-surface integrity into the adjacent
