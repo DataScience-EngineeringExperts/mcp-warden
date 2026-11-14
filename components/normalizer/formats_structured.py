@@ -41,6 +41,7 @@ def _json(ctx, text, locator, depth):
 
     obj = json.loads(text, object_pairs_hook=pairs,
                      parse_constant=lambda _: fail())
+    string_values = []
 
     def visit(value, nesting):
         ctx.node(nesting)
@@ -73,8 +74,12 @@ def _json(ctx, text, locator, depth):
             for item in value:
                 visit(item, nesting + 1)
         elif isinstance(value, str):
+            string_values.append(value)
             ctx.emit(value, locator + "/json-string")
     visit(obj, depth)
+    # Keep keys/metadata in their original evidence views without inserting
+    # them between adjacent decoded string values in this additional view.
+    ctx.emit("".join(string_values), locator + "/json-combined-values")
 
 
 def _xml(ctx, text, locator, depth):
@@ -84,6 +89,7 @@ def _xml(ctx, text, locator, depth):
         def __init__(self):
             self.nesting = depth
             self.pending = []
+            self.combined = []
 
         def flush(self):
             ctx.emit("".join(self.pending), locator + "/xml-text")
@@ -105,9 +111,11 @@ def _xml(ctx, text, locator, depth):
 
         def data(self, value):
             self.pending.append(value)
+            self.combined.append(value)
 
         def close(self):
             self.flush()
+            ctx.emit("".join(self.combined), locator + "/xml-combined-text")
             return None
 
     parser = ElementTree.XMLParser(target=Target())
@@ -121,6 +129,7 @@ class InspectionHTML(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.ctx, self.locator, self.depth = ctx, locator, depth
         self.stack = []
+        self.combined = []
 
     def handle_starttag(self, tag, attrs):
         self.ctx.node(self.depth + len(self.stack) + 1)
@@ -146,8 +155,10 @@ class InspectionHTML(HTMLParser):
         super().close()
         if self.stack:
             fail("NRM-AMBIGUOUS")
+        self.ctx.emit("".join(self.combined), self.locator + "/html-combined-text")
 
     def handle_data(self, data):
+        self.combined.append(data)
         self.ctx.node(self.depth + 1)
         self.ctx.emit(data, self.locator + "/html-data")
 

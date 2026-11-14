@@ -31,6 +31,11 @@ and all surrounding keys/metadata. XML rejects DTD/entities. HTML retains hidden
 content, attributes, comments and an entity-decoded syntax view; non-void tags
 require explicit balanced closing tags under this conservative profile. CSV includes all
 fields. Source syntax is retained alongside structured decoded inspection views.
+HTML and XML also concatenate decoded character data across tags into a dedicated
+inspection segment. JSON adds a depth-first, input-order string-value concatenation
+view without inserting keys between values. These additional views reconstruct
+split text within one supplied root and consume the same output/map/work budgets;
+they do not replace syntax, attribute, comment, key or individual-value evidence.
 
 PDF uses strict pypdf parsing and checks every referenced cross-reference object,
 including unreachable objects. It retains textual metadata and UTF-8 decoded
