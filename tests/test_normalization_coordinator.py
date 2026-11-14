@@ -22,11 +22,13 @@ def ingress(raw=b"hello", media=MediaTypeV1.TEXT_PLAIN, kind=IngressKindV1.DOCUM
 def response(profile, raw=b"hello"):
     usage = dict.fromkeys(asdict(profile.budget), 1)
     usage.update(input_bytes=len(raw), output_bytes=len(raw), expanded_bytes=len(raw))
+    segments = [{"text": raw.decode(), "raw_text": raw.decode(), "locator": "$",
+                 "precision": "exact", "source_start": 0, "source_end": len(raw)}]
+    usage["map_bytes"] = len(n.canonical(segments))
     return {"schema_version": 1, "status": "structurally-complete", "profile_id": n.PROFILE_ID,
             "input_digest": "sha256:" + hashlib.sha256(raw).hexdigest(),
-            "runtime": {"python": "3.12", "unicode": "15.0.0", "parser": "7.1.0"},
-            "segments": [{"text": raw.decode(), "raw_text": raw.decode(), "locator": "$",
-                          "precision": "exact", "source_start": 0, "source_end": len(raw)}],
+            "runtime": {"python": "3.12", "unicode": "15.0.0", "parser": "pypdf==7.1.0"},
+            "segments": segments,
             "usage": usage}
 
 

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -109,15 +110,16 @@ def analyze_trace(
     Raises:
         TraceError: On trace read/parse failure.
     """
-    records = _load_records(path)
     if normalization_profile is not None:
         from .normalization import _profile
+        from .normalization_trace import load_universal_records
         try:
             _profile(normalization_profile)
+            records = load_universal_records(path)
         except Exception:
-            raise TraceError("NRM-PROFILE") from None
-        if any(rec.get("direction") not in ("s2c", "c2s") for rec in records):
-            raise TraceError("universal inspection requires explicit trace directions")
+            raise TraceError("NRM-PROTOCOL") from None
+    else:
+        records = _load_records(path)
     exfil = exfil_denylist or res_rules.SEED_EXFIL_DENYLIST
     phrases = inject_phrases or res_rules.SEED_INJECT_PHRASES
 
@@ -130,6 +132,8 @@ def analyze_trace(
         frame = rec["frame"]
         direction = _direction_of(rec)
         rpc_id = frame.get("id")
+        if normalization_profile is not None and rpc_id is not None and type(rpc_id) not in (str, int):
+            raise TraceError("NRM-PROTOCOL")
         if direction == "c2s" and frame.get("method") is not None and rpc_id is not None:
             inflight[rpc_id] = str(frame["method"])
             params = frame.get("params") or {}
@@ -139,13 +143,13 @@ def analyze_trace(
         if normalization_profile is not None and direction == "s2c":
             from .normalization_inspection import inspect_mcp_frame
             raw = inspect_mcp_frame(
-                frame, inflight.get(rpc_id, ""), normalization_profile, policy_for_tool(lock, ""),
+                frame, inflight.get(rpc_id, ""), normalization_profile,
+                policy_for_tool(lock, tool_by_id.get(rpc_id, "")),
                 exfil_denylist=exfil, inject_phrases=phrases,
             )
             frames_inspected += 1
             for finding in raw:
-                finding.action, finding.direction, finding.rpc_id = "reported", direction, rpc_id
-                findings.append(finding)
+                findings.append(replace(finding, action="reported", direction=direction, rpc_id=rpc_id))
             inflight.pop(rpc_id, None)
             tool_by_id.pop(rpc_id, None)
             continue

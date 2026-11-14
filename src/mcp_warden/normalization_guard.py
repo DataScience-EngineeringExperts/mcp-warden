@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from .framing import serialize_frame
 from .normalization_inspection import inspect_mcp_frame
 from .normalization_models import NormalizationProfileV1
-from .result_inspection import TIER_BLOCK, TIER_MONITOR, InspectionPolicy
+from .result_inspection import TIER_BLOCK, TIER_MONITOR, policy_for_tool
 
 
 def handle_universal(state, frame, mode: str, legacy) -> bytes:
@@ -27,7 +29,8 @@ def handle_universal(state, frame, mode: str, legacy) -> bytes:
     try:
         findings = inspect_mcp_frame(
             obj, method, NormalizationProfileV1(state.config.normalization_image),
-            InspectionPolicy(), exfil_denylist=state.exfil_denylist,
+            policy_for_tool(state.lock, state.inflight_tool.get(rpc_id, "")),
+            exfil_denylist=state.exfil_denylist,
             inject_phrases=state.inject_phrases,
         )
     except Exception:
@@ -36,9 +39,8 @@ def handle_universal(state, frame, mode: str, legacy) -> bytes:
     blocked = [f for f in findings if f.tier == TIER_BLOCK
                or (f.tier == TIER_MONITOR and state.config.block_inject_phrase)]
     for finding in findings:
-        finding.action = "blocked" if finding in blocked else "reported"
-        finding.direction, finding.rpc_id = "s2c", rpc_id
-        state.emit(finding)
+        state.emit(replace(finding, action="blocked" if finding in blocked else "reported",
+                           direction="s2c", rpc_id=rpc_id))
     if blocked:
         if rpc_id is None:
             raise StrictInspectionAbort(site="normalization-control", tool="?",

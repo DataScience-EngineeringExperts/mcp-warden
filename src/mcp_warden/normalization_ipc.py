@@ -10,6 +10,7 @@ from typing import BinaryIO
 MAX_FRAME = 64 * 1024
 MAX_MESSAGE = 64 * 1024 * 1024
 MAX_DEPTH = 32
+MAX_STRUCTURAL_TOKENS = 200_000
 
 
 class NormalizationError(Exception):
@@ -69,7 +70,7 @@ def read_message(stream: BinaryIO) -> dict:
         data.extend(_exact(stream, size))
     if stream.read(1):
         raise NormalizationError("NRM-PROTOCOL")
-    depth = 0
+    depth = tokens = 0
     quoted = escaped = False
     for char in data:
         if quoted:
@@ -79,16 +80,21 @@ def read_message(stream: BinaryIO) -> dict:
                 escaped = True
             elif char == 34:
                 quoted = False
-        elif char == 34:
-            quoted = True
-        elif char in (91, 123):
-            depth += 1
-            if depth > MAX_DEPTH:
-                raise NormalizationError("NRM-OVER-CAP")
-        elif char in (93, 125):
-            depth -= 1
-            if depth < 0:
-                raise NormalizationError()
+        else:
+            if char in (34, 91, 123, 44, 58):
+                tokens += 1
+                if tokens > MAX_STRUCTURAL_TOKENS:
+                    raise NormalizationError("NRM-OVER-CAP")
+            if char == 34:
+                quoted = True
+            elif char in (91, 123):
+                depth += 1
+                if depth > MAX_DEPTH:
+                    raise NormalizationError("NRM-OVER-CAP")
+            elif char in (93, 125):
+                depth -= 1
+                if depth < 0:
+                    raise NormalizationError()
     if depth or quoted or escaped:
         raise NormalizationError()
     try:

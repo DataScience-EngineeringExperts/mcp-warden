@@ -40,3 +40,8 @@ def test_framing_rejects_truncation_trailing_and_oversize(data):
 def test_wire_rejects_non_object_duplicates_constants_utf8_and_depth(raw):
     with pytest.raises(NormalizationError):
         decode_message(struct.pack(">I", len(raw)) + raw + b"\0\0\0\0")
+
+
+def test_flat_json_structure_capped_before_decoder_allocation():
+    with pytest.raises(NormalizationError, match="NRM-OVER-CAP"):
+        decode_message(encode_message({"values": [0] * 200_001}))

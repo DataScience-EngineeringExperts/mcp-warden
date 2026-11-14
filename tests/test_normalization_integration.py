@@ -36,7 +36,7 @@ def worker(monkeypatch):
         return {"schema_version": 1, "profile_id": n.PROFILE_ID,
                 "status": "structurally-complete", "segments": segments, "usage": usage,
                 "input_digest": "sha256:"+hashlib.sha256(raw).hexdigest(),
-                "runtime": {"python": "3.12", "unicode": "15.0.0", "parser": "7.1.0"}}
+                "runtime": {"python": "3.12", "unicode": "15.0.0", "parser": "pypdf==7.1.0"}}
     monkeypatch.setattr(n, "_run_worker", run)
 
 
@@ -130,10 +130,15 @@ def test_raw_controls_are_inspected_before_transformed_view(monkeypatch):
     from mcp_warden.normalization_inspection import inspect_supplied
     from mcp_warden.normalization_models import NormalizationResultV1, NormalizedSegmentV1
     from mcp_warden.result_inspection import InspectionPolicy
-    from test_normalization_coordinator import ingress
+    from mcp_warden.content_envelope import create_ingress
+    from mcp_warden.content_models import TransformKindV1
+    envelope = create_ingress(
+        content=b"hello", media_type=MediaTypeV1.TEXT_PLAIN, source_kind=IngressKindV1.DOCUMENT,
+        source_identity=b'{}', source_claims=b'{}', capture_kind=TransformKindV1.INGRESS_CAPTURE,
+        capture_implementation=b'{}', capture_parameters=b'{}')
     result = NormalizationResultV1(
         segments=(NormalizedSegmentV1("hello", "\x1b[31mhello", "$", "container", 0, 10),),
-        envelope=ingress(), manifest_digest="test", manifest=b"{}")
+        envelope=envelope, manifest_digest="test", manifest=b"{}")
     monkeypatch.setattr("mcp_warden.normalization_inspection.normalize_supplied", lambda *_: result)
     findings = inspect_supplied(b"x", MediaTypeV1.TEXT_PLAIN, IngressKindV1.DOCUMENT,
                                 NormalizationProfileV1(IMAGE), InspectionPolicy(),

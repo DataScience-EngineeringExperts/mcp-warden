@@ -66,7 +66,8 @@ def _segment(value: object, raw: bytes, media: str, profile: NormalizationProfil
 
 
 def _validate_response(response: object, raw: bytes, media: str, profile: NormalizationProfileV1) -> tuple:
-    if type(response) is not dict or response.get("schema_version") != 1:
+    if (type(response) is not dict or type(response.get("schema_version")) is not int
+            or response.get("schema_version") != 1):
         raise NormalizationError("NRM-MANIFEST")
     if response.get("status") == "refused":
         code = response.get("code")
@@ -79,20 +80,22 @@ def _validate_response(response: object, raw: bytes, media: str, profile: Normal
             or response["profile_id"] != PROFILE_ID or response["input_digest"] != _digest(raw)
             or response["runtime"] != {"python": profile.python_version,
                                       "unicode": profile.unicode_version,
-                                      "parser": profile.parser_version}):
+                                      "parser": "pypdf==" + profile.parser_version}):
         raise NormalizationError("NRM-MANIFEST")
     values, usage, caps = response["segments"], response["usage"], asdict(profile.budget)
     if (type(values) is not list or not values or len(values) > min(caps["spans"], caps["nodes"])
             or type(usage) is not dict or usage.keys() != caps.keys()
             or any(type(v) is not int or not 0 <= v <= caps[k] for k, v in usage.items())):
         raise NormalizationError("NRM-OVER-CAP")
-    if usage["input_bytes"] != len(raw) or len(canonical(values)) > caps["map_bytes"]:
+    map_size = len(canonical(values))
+    if (usage["input_bytes"] != len(raw) or map_size > caps["map_bytes"]
+            or usage["map_bytes"] != map_size):
         raise NormalizationError("NRM-MANIFEST")
     segments = tuple(_segment(v, raw, media, profile) for v in values)
     size = sum(len(s.text.encode("utf-8")) for s in segments)
     raw_size = sum(len(s.raw_text.encode("utf-8")) for s in segments)
     if (size > caps["output_bytes"] or raw_size > caps["expanded_bytes"]
-            or usage["output_bytes"] < size or usage["spans"] < len(segments)):
+            or usage["output_bytes"] != size or usage["spans"] != len(segments)):
         raise NormalizationError("NRM-OVER-CAP")
     if not any(s.text.strip() for s in segments):
         raise NormalizationError("NRM-PARTIAL")
