@@ -5,6 +5,7 @@ import io
 import quopri
 import re
 import stat
+import struct
 import zipfile
 from email import policy
 from email.header import decode_header
@@ -38,8 +39,22 @@ def parse_zip(ctx, data, locator, depth):
         if not entries:
             fail("NRM-EMPTY")
         seen = set()
+        if data[-22-len(archive.comment):][:4] != b"PK\x05\x06":
+            fail("NRM-UNSUPPORTED")
+        cursor = 0
         ctx.emit(decode(archive.comment), locator + "/zip-comment")
         for entry in entries:
+            if entry.header_offset != cursor or len(data) < cursor + 30:
+                fail("NRM-AMBIGUOUS")
+            local = struct.unpack("<4s5H3I2H", data[cursor:cursor + 30])
+            signature, _, flags, compression, _, _, crc, size, expanded, name_len, extra_len = local
+            if (signature != b"PK\x03\x04" or flags & 8 or extra_len or entry.extra
+                    or crc != entry.CRC or size != entry.compress_size or expanded != entry.file_size
+                    or compression != entry.compress_type):
+                fail("NRM-UNSUPPORTED")
+            cursor += 30 + name_len + size
+            if cursor > archive.start_dir:
+                fail()
             name = entry.filename
             parts = name.split("/")
             if (not name or name.startswith("/") or "\\" in name or ":" in name
@@ -67,6 +82,8 @@ def parse_zip(ctx, data, locator, depth):
                 fail()
             payload = b"".join(chunks)
             ctx.parse(payload, select_media(payload, name), locator + "/zip:" + name, depth + 1)
+        if cursor != archive.start_dir:
+            fail("NRM-AMBIGUOUS")
 
 
 def _header(value):
@@ -121,6 +138,9 @@ def parse_email(ctx, data, locator, depth):
                 fail()
         media = part.get_content_type()
         if part.is_multipart():
+            transfer = str(part.get("Content-Transfer-Encoding", "7bit")).lower().strip()
+            if transfer not in {"7bit", "8bit", "binary"}:
+                fail("NRM-UNSUPPORTED")
             if media == "message/rfc822" or part.get_content_maintype() == "multipart":
                 ctx.emit(part.preamble or "", path + "/mime-preamble")
                 ctx.emit(part.epilogue or "", path + "/mime-epilogue")

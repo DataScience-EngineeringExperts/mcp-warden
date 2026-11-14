@@ -67,6 +67,12 @@ class Context:
         text = unicodedata.normalize("NFKC", raw_text)
         text = "".join(c for c in text if unicodedata.category(c) != "Cf"
                        and (ord(c) >= 32 or c in "\n\r\t"))
+        run = 0
+        for char in text:
+            run = run + 1 if unicodedata.combining(char) else 0
+            self.usage["combining_run"] = max(self.usage["combining_run"], run)
+            if run > self.budget["combining_run"]:
+                fail("NRM-OVER-CAP")
         if not text:
             fail("NRM-EMPTY")
         self.charge("work", len(raw_text.encode("utf-8")) + len(text.encode("utf-8")))
