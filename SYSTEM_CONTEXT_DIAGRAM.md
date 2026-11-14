@@ -125,8 +125,8 @@ flowchart LR
 > the company-repository publisher subsequently passed the 2026-11-06
 > authentication-only check ([run 42224199909](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/runs/42224199909)).
 > `mcp-warden-cli` now belongs to the [TheDataExperts PyPI organization](https://pypi.org/org/TheDataExperts/).
-> No upload occurred; PyPI remains at 2.2.0. End-to-end OIDC upload and provenance
-> still need proof on the next normal release. See [`RELEASING.md`](RELEASING.md).
+> That authentication-only check uploaded no package. End-to-end OIDC upload
+> and provenance require proof from the next normal release. See [`RELEASING.md`](RELEASING.md).
 
 ---
 

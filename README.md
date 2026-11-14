@@ -1,6 +1,6 @@
 # mcp-warden
 
-Last Updated: 2026-11-06
+Last Updated: 2026-11-14
 
 [![CI](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml/badge.svg)](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -21,8 +21,8 @@ operators can check production OIDC without uploading via [`RELEASING.md`](RELEA
 
 `mcp-warden-cli` is owned by the [TheDataExperts PyPI organization](https://pypi.org/org/TheDataExperts/).
 The company-repository publisher passed an authentication-only check on 2026-11-06;
-no package was uploaded and PyPI remains at 2.2.0. The next normal release must
-still prove OIDC upload and provenance; see the [publishing status](RELEASING.md#ownership-and-publishing-status--2026-11-06).
+that check uploaded no package. The next normal release must prove OIDC upload
+and provenance; see the [publishing status](RELEASING.md#ownership-and-publishing-status--2026-11-06).
 
 The proposed next direction is a protocol-neutral **Warden**: human-approved tool versions and bounded actions, with untrusted inputs kept separate from authority.
 The [upgrade plan and checkpoint proposal](docs/plans/2026-10-02-tool-integrity-upgrade.md)
