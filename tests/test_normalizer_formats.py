@@ -377,3 +377,27 @@ def test_commonmark_metadata_budgets_and_unsupported_html_refuse():
     assert run(data, "text/markdown", spans=result["usage"]["spans"] - 1)["status"] == "refused"
     assert run(b"> " * 20 + b"secret", "text/markdown")["status"] == "refused"
     assert run(b"<div>unclosed", "text/markdown")["status"] == "refused"
+
+
+@pytest.mark.parametrize(("header", "first", "second"), [
+    ("Content-Type", "text/plain", "application/json"),
+    ("Content-Transfer-Encoding", "7bit", "base64"),
+    ("Content-Disposition", "inline", "attachment; filename=hidden.txt"),
+    ("MIME-Version", "1.0", "1.1"),
+])
+@pytest.mark.parametrize("nested", [False, True])
+def test_duplicate_critical_mime_headers_refuse_at_every_part(header, first, second, nested):
+    headers = {"Content-Type": "text/plain", "Content-Transfer-Encoding": "7bit",
+               "Content-Disposition": "inline", "MIME-Version": "1.0"}
+    headers[header] = first
+    part = ("\r\n".join(key + ": " + value for key, value in headers.items())
+            + "\r\n" + header.lower() + ": " + second + "\r\n\r\naGlkZGVu").encode()
+    data = (b'Content-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\n' + part
+            + b'\r\n--x--\r\n') if nested else part
+    assert run(data, "message/rfc822") == {"schema_version": 1, "status": "refused", "code": "NRM-AMBIGUOUS"}
+
+
+def test_duplicate_noncritical_mime_headers_remain_inspected():
+    data = b'Content-Type: text/plain\r\nX-Note: first-note\r\nX-Note: second-note\r\n\r\nbody'
+    result = run(data, "message/rfc822")
+    assert "first-note" in texts(result) and "second-note" in texts(result)

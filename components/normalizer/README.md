@@ -27,6 +27,9 @@ encryption, unsupported compression/extra fields/descriptors, unknown members an
 entries refuse.
 Only stored/DEFLATE ZIP compression is supported; all traversal remains in memory.
 MIME decodes strict base64/quoted-printable and traverses supported attachments.
+Every MIME part rejects duplicate Content-Type, Content-Transfer-Encoding,
+Content-Disposition or MIME-Version headers, including case variants; no
+first-header interpretation of those ambiguous inputs is accepted.
 JSON rejects duplicate keys/nonfinite constants and recursively inspects supplied
 MCP `{mimeType, blob|data|text}` carriers, while retaining their encoded source
 and all surrounding keys/metadata. XML rejects DTD/entities. HTML retains hidden

@@ -127,6 +127,11 @@ def parse_email(ctx, data, locator, depth):
 
     def visit(part, path, nesting):
         ctx.node(nesting)
+        # The stdlib accepts duplicates and selects a first value without
+        # reporting defects; that leaves transfer/type interpretation ambiguous.
+        if any(len(part.get_all(header, [])) > 1 for header in (
+                "Content-Type", "Content-Transfer-Encoding", "Content-Disposition", "MIME-Version")):
+            fail("NRM-AMBIGUOUS")
         if part.defects:
             fail()
         for key, value in part.raw_items():
