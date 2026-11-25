@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 
 import pytest
 
@@ -160,6 +162,40 @@ def test_roundtrip_write_read(tmp_path):
     loaded = read_lock(path)
     assert loaded.overall_digest == lock.overall_digest
     assert loaded.tools == lock.tools
+
+
+def test_failed_partial_write_preserves_original_lock(tmp_path, monkeypatch):
+    path = tmp_path / "warden.lock"
+    lock = build_lock(_surface(), [])
+    write_lock(lock, path)
+    original = path.read_bytes()
+    fdopen = os.fdopen
+
+    def fail_after_partial_write(fd, *args, **kwargs):
+        stream = fdopen(fd, *args, **kwargs)
+        write = stream.write
+
+        def partial_write(text):
+            write(text[:10])
+            stream.flush()
+            raise OSError("partial write")
+
+        stream.write = partial_write
+        return stream
+
+    monkeypatch.setattr(os, "fdopen", fail_after_partial_write)
+    with pytest.raises(OSError, match="partial write"):
+        write_lock(lock, path)
+    assert path.read_bytes() == original
+    assert list(tmp_path.iterdir()) == [path]
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX file modes")
+def test_private_lock_stays_private_when_replaced(tmp_path):
+    path = tmp_path / "warden.lock"
+    path.touch(mode=0o600)
+    write_lock(build_lock(_surface(), []), path)
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
 def test_pretty_json_trailing_newline_and_indent():
