@@ -7,7 +7,7 @@ fires here fires identically in both — non-negotiable #1.
 Tier partition (fixed, §2):
   * BLOCK-deterministic: ``WRD-RES-ANSI``, ``WRD-RES-SECRET-ECHO``,
     ``WRD-RES-EXFIL-DOMAIN``, ``WRD-RES-EXFIL-IP-LITERAL``.
-  * MONITOR-fuzzy: ``WRD-RES-INJECT-PHRASE`` (narrow curated exact-phrase).
+  * MONITOR-fuzzy: ``WRD-RES-INJECT-PHRASE`` (exact phrases and versioned indicators).
   * Notes (never block): ``WRD-RES-URL``, ``WRD-RES-UNINSPECTABLE``,
     ``WRD-RES-FRAME-ERROR``, ``WRD-RES-LOCK-INVALID``.
 
@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from . import res_catalog
+from .injection_catalog import InjectionMatch
 from .models import WardenLock
 
 logger = logging.getLogger("mcp_warden.result_inspection")
@@ -74,6 +75,8 @@ class ResultFinding:
             from raw result content, so they are safe to emit into telemetry. They
             make per-phrase FP aggregation possible without parsing the free-text
             ``message`` (issue #12 FP-instrumentation).
+        injection_matches: Versioned catalog metadata for matching categories.
+            Carries stable evidence identifiers and no inspected text.
     """
 
     rule_id: str
@@ -88,6 +91,7 @@ class ResultFinding:
     rpc_id: Any = None
     tool: str = ""
     matched_phrases: tuple[str, ...] = ()
+    injection_matches: tuple[InjectionMatch, ...] = ()
 
     @property
     def level(self) -> str:
