@@ -8,7 +8,7 @@ import unicodedata
 from dataclasses import asdict
 
 from .content_envelope import derive_envelope, verify_envelope
-from .content_models import ContentEnvelopeV1, MediaTypeV1, TransformKindV1
+from .content_models import ContentEnvelopeError, ContentEnvelopeV1, MediaTypeV1, TransformKindV1
 from .normalization_ipc import NormalizationError, canonical
 from .normalization_models import (
     PROFILE_ID,
@@ -18,6 +18,7 @@ from .normalization_models import (
     NormalizationResultV1,
     NormalizedSegmentV1,
 )
+from .taint_lineage import verify_lineage_graph
 
 
 def _digest(data: bytes) -> str:
@@ -127,33 +128,39 @@ def _check_text_root(segments, raw: bytes, media: str) -> None:
     if media == "application/json":
         from .normalization_trace import decode_object
         value = decode_object(b'{"value":' + raw + b'}')["value"]
-        required, stack = set(), [value]
-        nodes = 0
-        while stack:
-            item = stack.pop()
-            nodes += 1
-            if nodes > 4096:
-                raise NormalizationError("NRM-OVER-CAP")
-            if type(item) is str and item:
-                required.add(item)
-            elif type(item) is dict:
-                required.update(k for k in item if k)
-                stack.extend(item.values())
-            elif type(item) is list:
-                stack.extend(item)
-        if not required.issubset({s.raw_text for s in segments}):
+        if not _json_texts(value).issubset({s.raw_text for s in segments}):
             raise NormalizationError("NRM-MANIFEST")
 
 
+def _json_texts(value: object) -> set[str]:
+    """Extract bounded decoded JSON keys and strings from a validated structure."""
+    texts, stack = set(), [value]
+    nodes = 0
+    while stack:
+        item = stack.pop()
+        nodes += 1
+        if nodes > 4096:
+            raise NormalizationError("NRM-OVER-CAP")
+        if type(item) is str and item:
+            texts.add(item)
+        elif type(item) is dict:
+            texts.update(key for key in item if key)
+            stack.extend(item.values())
+        elif type(item) is list:
+            stack.extend(item)
+    return texts
+
+
 def normalize_ingress(content: bytes, envelope: ContentEnvelopeV1,
-                      profile: NormalizationProfileV1) -> NormalizationResultV1:
+                      profile: NormalizationProfileV1, *,
+                      ancestors: tuple[ContentEnvelopeV1, ...] = ()) -> NormalizationResultV1:
     """Normalize supplied bytes under an immutable profile, preserving untrusted lineage.
 
     Structural checks do not prove semantic parser completeness. Unsupported,
     partial or unavailable execution raises a stable non-clean refusal.
     """
     try:
-        return _normalize(content, envelope, profile)
+        return _normalize(content, envelope, profile, ancestors)
     except NormalizationError:
         raise
     except Exception:
@@ -161,13 +168,18 @@ def normalize_ingress(content: bytes, envelope: ContentEnvelopeV1,
 
 
 def _normalize(content: bytes, envelope: ContentEnvelopeV1,
-               profile: NormalizationProfileV1) -> NormalizationResultV1:
+               profile: NormalizationProfileV1,
+               ancestors: tuple[ContentEnvelopeV1, ...]) -> NormalizationResultV1:
     if type(content) is not bytes or type(envelope) is not ContentEnvelopeV1:
         raise NormalizationError()
     _profile(profile)
     if not content or len(content) > profile.budget.input_bytes:
         raise NormalizationError("NRM-OVER-CAP")
     verify_envelope(envelope, content=content)
+    try:
+        verify_lineage_graph(envelope, ancestors, add_child=True)
+    except ContentEnvelopeError:
+        raise NormalizationError("NRM-LINEAGE") from None
     media = envelope.content.media_type
     if media not in SUPPORTED_MEDIA:
         raise NormalizationError("NRM-UNSUPPORTED")
@@ -184,7 +196,8 @@ def _normalize(content: bytes, envelope: ContentEnvelopeV1,
         transform_parameters=canonical({"manifest_digest": digest, "budget": asdict(profile.budget)}),
     )
     return NormalizationResultV1(segments=segments, envelope=derived,
-                                 manifest_digest=digest, manifest=manifest)
+                                 manifest_digest=digest, manifest=manifest,
+                                 source_envelopes=(envelope, *ancestors))
 
 
 def make_manifest(segments, usage, input_digest, input_length, media, parent_digest, profile):

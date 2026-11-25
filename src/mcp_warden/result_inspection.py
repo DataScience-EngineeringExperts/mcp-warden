@@ -20,11 +20,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from . import res_catalog
 from .injection_catalog import InjectionMatch
 from .models import WardenLock
+
+if TYPE_CHECKING:
+    from .correlation import CorrelationMatch
 
 logger = logging.getLogger("mcp_warden.result_inspection")
 
@@ -77,6 +80,7 @@ class ResultFinding:
             ``message`` (issue #12 FP-instrumentation).
         injection_matches: Versioned catalog metadata for matching categories.
             Carries stable evidence identifiers and no inspected text.
+        correlation: Ordered finite evidence for a session-level observation.
     """
 
     rule_id: str
@@ -92,6 +96,7 @@ class ResultFinding:
     tool: str = ""
     matched_phrases: tuple[str, ...] = ()
     injection_matches: tuple[InjectionMatch, ...] = ()
+    correlation: CorrelationMatch | None = None
 
     @property
     def level(self) -> str:

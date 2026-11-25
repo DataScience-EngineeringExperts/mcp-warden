@@ -44,7 +44,8 @@ What changes, honestly stated:
   default-block, fuzzy tier opt-in.** Every default-block category is opt-OUT-able and
   `--audit-only` restores full shadow (§8, `GUARD_PROXY.md` §5).
 - It still does **not** defend `T-BEHAVE` (a tool that does harm while honoring its schema and
-  returning clean-looking content), and does not correlate behavior across calls.
+  returning clean-looking content). The session correlator reports sequences of registered
+  signals as possible boundary attempts.
 
 The credibility discipline from v0.1 stands: we make a **narrow, verifiable** claim and name
 the residual gaps plainly. Adding runtime inspection does not turn this into a behavioral
@@ -107,7 +108,7 @@ This table is the v0.2 contract addition. It sits alongside `THREAT_MODEL.md` §
 | **T-BEHAVE** | A clean-pinned tool returns clean-looking content while taking hostile action, or exfiltrates via a *novel* (non-denylisted) channel | Definition ≠ behavior, and result inspection only sees *content*, not the tool's side effects. A semantically-malicious-but-pattern-clean result passes. | **Still out of scope.** v0.2 inspects content surface, not behavior. |
 | **T-RESULT (novel vectors)** | Injection phrased outside the curated list; exfil to a host not on the denylist; a secret in a custom format | Deterministic rules are finite by design (that is what makes them deterministic). Broadening them reintroduces the v0.1 false-positive problem. | Accepted limitation. Org-extensible denylists/phrase-lists narrow it; full coverage is not claimed. |
 | **T-RESULT (binary content)** | Malicious payload inside image/audio/blob/base64 result content | Not decoded in v0.2 (cost + new parser attack surface). | Out of scope; `WRD-RES-UNINSPECTABLE` records the coverage gap. |
-| **T-BEHAVE-CHAIN** | A multi-call exfil chain (benign-looking result now, used by a later call) | v0.2 inspects each frame independently; no cross-call/stateful correlation. | Out of scope (stateful behavioral reasoning). |
+| **T-BEHAVE-CHAIN** | A multi-call exfil chain (benign-looking result now, used by a later call) | Current correlation requires registered signals within a bounded window. | Out of scope (stateful behavioral reasoning). |
 | **T-FINGERPRINT** | Adaptive server serves clean results to `inspect`/recording and dirty to the live agent | `guard` is in-band on the live session, which **mitigates** this vs v0.1 — but a server that fingerprints within the live session can still vary per call. | Reduced (guard is in-band) but not eliminated. |
 | **T-TRANSPORT** | HTTP/SSE-transported servers | `guard` is **stdio only** (same as v0.1). | Deferred. |
 | **T-LOCK** | Attacker rewrites `warden.lock` (incl. the new §11 per-tool relax flags) to disable a check | Same boundary as v0.1: the lock is protected by host controls (PR review, branch protection). A `secret_echo_applies: false` slipped into the lock unreviewed disables that check for a tool. | Boundary delegated to host controls (`THREAT_MODEL.md` §2.3). The §11 flags are *relaxations* and MUST be reviewed like any lock change. |
@@ -158,8 +159,9 @@ The v0.1 cuts (`THREAT_MODEL.md` §6) **all stand.** v0.2 adds these:
    results.)
 2. **Decoding binary result content** (image/audio/blob/base64). Cost + parser attack
    surface; coverage gap recorded via `WRD-RES-UNINSPECTABLE`.
-3. **Cross-call / conversational correlation.** Stateful behavioral reasoning is `T-BEHAVE`
-   territory; not built.
+3. **Conversational intent and causal attribution.** The directed-trace and guard
+   correlator reports ordered indicators. Determining the intent or effect of an
+   unobserved action remains outside its scope.
 4. **DNS resolution from the proxy.** No network from `guard`/`inspect`. Exfil-domain + SSRF
    match on literal host strings; raw **IP literals** in results ARE now matched against the
    SSRF deny ranges (DR3 / `WRD-RES-EXFIL-IP-LITERAL`), with no resolution. Resolving a

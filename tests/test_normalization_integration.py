@@ -12,7 +12,7 @@ from mcp_warden import res_rules
 from mcp_warden.cli import app
 from mcp_warden.content_models import IngressKindV1, MediaTypeV1
 from mcp_warden.framing import MODE_NEWLINE, Frame
-from mcp_warden.guard_loop import GuardConfig, GuardState, StrictInspectionAbort
+from mcp_warden.guard_loop import GuardConfig, GuardState, StrictInspectionAbort, handle_c2s
 from mcp_warden.guard_result import handle_s2c
 from mcp_warden.inspector import TraceError, analyze_trace
 from mcp_warden.normalization_ingress import normalize_supplied
@@ -314,3 +314,58 @@ def test_supplied_and_normalized_evidence_is_deduplicated(worker, monkeypatch):
     finding, = findings
     match, = finding.injection_matches
     assert match.evidence_ids == ("tool-coercion.invoke-immediately", "tool-coercion.must-call")
+
+
+@pytest.mark.parametrize("result_contains_marker", [False, True])
+def test_universal_correlation_scopes_normalized_evidence_to_result(worker, monkeypatch, tmp_path, result_contains_marker):
+    from mcp_warden import normalization_inspection
+
+    # Match an inert marker only after the worker's Unicode normalization.
+    run_worker = n._run_worker
+
+    def normalize_marker(request, profile):
+        receipt = run_worker(request, profile)
+        segments = receipt["segments"]
+        for segment in segments:
+            segment["text"] = n.unicodedata.normalize("NFKC", segment["raw_text"])
+        receipt["usage"]["output_bytes"] = sum(len(s["text"].encode()) for s in segments)
+        receipt["usage"]["map_bytes"] = len(n.canonical(segments))
+        return receipt
+
+    monkeypatch.setattr(n, "_run_worker", normalize_marker)
+    monkeypatch.setattr(
+        normalization_inspection, "boundary_attempts_in_text",
+        lambda text: ("DSE720-SELECT-TOOL",) if text == "Alder" else (),
+    )
+
+    marker = "Ａlder"
+    rpc_id = 1 if result_contains_marker else marker
+    req = {"jsonrpc": "2.0", "id": rpc_id, "method": "prompts/get", "params": {"name": "fixture"}}
+    obj = {
+        "jsonrpc": "2.0", "id": rpc_id,
+        "transportNote": marker,
+        "result": {"messages": [{
+            "role": "user",
+            "content": {"type": "text", "text": marker if result_contains_marker else "Oak"},
+        }]},
+    }
+    followup = {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "fixture"}}
+    live = []
+    state = GuardState(config=GuardConfig(normalization_image=IMAGE), on_finding=live.append)
+    assert handle_c2s(state, frame(req), MODE_NEWLINE) == frame(req).raw
+    assert handle_s2c(state, frame(obj), MODE_NEWLINE) == frame(obj).raw
+    assert handle_c2s(state, frame(followup), MODE_NEWLINE) == frame(followup).raw
+
+    trace = tmp_path / "universal-trace.jsonl"
+    trace.write_text("".join(json.dumps({"direction": direction, "frame": value}) + "\n"
+                             for direction, value in (("c2s", req), ("s2c", obj), ("c2s", followup))))
+    offline = analyze_trace(trace, normalization_profile=NormalizationProfileV1(IMAGE))
+    actual = [finding for finding in live if finding.correlation]
+    assert actual == [finding for finding in offline if finding.correlation]
+    assert len(actual) == int(result_contains_marker)
+    if actual:
+        previous, next_call = actual[0].correlation.evidence
+        assert previous.ingress is IngressKindV1.MCP_PROMPT
+        assert previous.signal_ids == ("DSE720-SELECT-TOOL",)
+        assert next_call.signal_ids == ("DSE720-TOOL-CALL-OBSERVED",)
+        assert "core:untrusted" in previous.taints
