@@ -45,6 +45,11 @@ jobs:
         with:
           python-version: "3.11"
 
+      # Check every allowed artifact hash, including wheels this runner cannot
+      # install. Run before pip so a bad lock fails before dependency installation.
+      - name: Verify every lock hash against PyPI
+        run: python scripts/verify_lock_hashes.py requirements-dev.lock action/requirements.lock
+
       # --------------------------------------------------------------------
       # 1. Hash-verified install in a clean venv.
       #    --require-hashes makes pip reject ANY package whose artifact hash is
