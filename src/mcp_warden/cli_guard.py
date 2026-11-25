@@ -34,7 +34,7 @@ from .lockfile import read_lock
 from .normalization_ipc import NormalizationError
 from .normalization_models import NormalizationProfileV1
 from .policy_model import PolicyError, load_policy
-from .result_inspection import severity_to_level
+from .result_inspection import ResultFinding, severity_to_level
 
 
 def register(app: typer.Typer, console: Console, err_console: Console) -> None:
@@ -258,10 +258,9 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
 
         def _on_finding(f) -> None:
             findings_sink.append(f)
-            err_console.print(
-                f"[{severity_to_level(f.severity)}] {f.rule_id} {f.action} {f.tool} (id={f.rpc_id})",
-                highlight=False,
-            )
+            message = f"[{severity_to_level(f.severity)}] {f.rule_id} {f.action} {f.tool} (id={f.rpc_id})"
+            evidence = _catalog_evidence(f)
+            err_console.print(f"{message} {evidence}" if evidence else message, highlight=False)
 
         def _record(direction: str, frame: dict) -> None:
             record_lines.append(json.dumps({"direction": direction, "frame": frame}, ensure_ascii=False))
@@ -370,6 +369,13 @@ def _validate_universal_flags(image, *optouts):
         raise NormalizationError("NRM-PROFILE")
 
 
+def _catalog_evidence(finding: ResultFinding) -> str:
+    return " | ".join(
+        f"{match.rule_id} ({', '.join(match.evidence_ids)})"
+        for match in finding.injection_matches
+    )
+
+
 def _print_result_findings(console: Console, findings) -> None:
     """Print result-inspection findings as a rich table."""
     if not findings:
@@ -379,5 +385,7 @@ def _print_result_findings(console: Console, findings) -> None:
     for col in ("severity", "tier", "rule", "tool", "message"):
         table.add_column(col)
     for f in findings:
-        table.add_row(f.severity, f.tier, f.rule_id, f.tool, f.message)
+        evidence = _catalog_evidence(f)
+        message = f"{f.message}\n{evidence}" if evidence else f.message
+        table.add_row(f.severity, f.tier, f.rule_id, f.tool, message)
     console.print(table)

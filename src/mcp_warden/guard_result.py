@@ -8,6 +8,7 @@ Split from ``guard_loop.py`` to keep each module under the LOC budget.
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from typing import Any
 
 from . import res_rules, wire_block
@@ -318,19 +319,4 @@ def _apply_result_findings(
 
 def _stamp(state, f: ResultFinding, rpc_id: Any, tool: str, action: str) -> None:
     """Stamp direction/id/tool/action onto a finding and emit it."""
-    state.emit(
-        ResultFinding(
-            rule_id=f.rule_id,
-            severity=f.severity,
-            tier=f.tier,
-            message=f.message,
-            snippet=f.snippet,
-            block_index=f.block_index,
-            sub_rule=f.sub_rule,
-            action=action,
-            direction="s2c",
-            rpc_id=rpc_id,
-            tool=tool or f.tool,
-            matched_phrases=f.matched_phrases,
-        )
-    )
+    state.emit(replace(f, action=action, direction="s2c", rpc_id=rpc_id, tool=tool or f.tool))

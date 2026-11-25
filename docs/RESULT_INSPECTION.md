@@ -293,6 +293,30 @@ send the following to
   make it default-block).
 - **SARIF:** `ruleId: WRD-RES-INJECT-PHRASE`, `level: warning`.
 
+#### Versioned catalog evidence
+
+For an injection finding, the outer rule ID remains `WRD-RES-INJECT-PHRASE`.
+Catalog version 1 distinguishes authority impersonation,
+instruction override, secret extraction, tool coercion, data exfiltration,
+and policy evasion. A single content block can match several catalog rules.
+JSONL records expose these matches in `injection_matches`. Each entry includes
+`rule_id`, `catalog_version`, `category`, `severity`, `rationale`, and `evidence_ids`.
+The [catalog definitions](../src/mcp_warden/injection_catalog.py) map each
+evidence ID to its literal indicator. SARIF exposes the same entries under
+`properties.injectionMatches`. Reviewers can look up a match without storing
+the surrounding tool output in catalog evidence.
+
+Category severity describes the indicator. The outer finding retains its medium
+severity and monitor tier. Promoting the entire tier also promotes catalog hits.
+When an operator selects individual phrases, promotion still requires a match
+in the operator's phrase subset.
+
+The [public corpus](../tests/fixtures/rule_catalog_quality.json) exercises positive examples, benign controls and formatting
+variants through the offline inspector. To reproduce the corpus check, run
+`python -m pytest -q tests/test_rule_catalog_quality.py`. A failure identifies
+a missing or unexpected match. Corpus results describe this labeled sample;
+field false-positive rates require separate observation.
+
 ---
 
 ## 5. Robustness / monitor-only auxiliary rules

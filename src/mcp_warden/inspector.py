@@ -171,23 +171,7 @@ def analyze_trace(
         except Exception as exc:  # mirror guard's fail-open posture (§9)
             logger.error("inspect: catalog raised on id=%s: %s", rpc_id, exc)
             continue
-        for f in raw:
-            findings.append(
-                ResultFinding(
-                    rule_id=f.rule_id,
-                    severity=f.severity,
-                    tier=f.tier,
-                    message=f.message,
-                    snippet=f.snippet,
-                    block_index=f.block_index,
-                    sub_rule=f.sub_rule,
-                    action="reported",
-                    direction="s2c",
-                    rpc_id=rpc_id,
-                    tool=tool,
-                    matched_phrases=f.matched_phrases,
-                )
-            )
+        findings.extend(replace(f, action="reported", direction="s2c", rpc_id=rpc_id, tool=tool) for f in raw)
     if normalization_profile is not None and not universal_incoming:
         raise TraceError("NRM-PARTIAL")
     if stats is not None:

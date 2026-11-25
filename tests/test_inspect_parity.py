@@ -109,3 +109,63 @@ def test_inspect_trace_read_error_exits_two(tmp_path):
         timeout=30,
     )
     assert proc.returncode == 2
+
+
+
+def test_catalog_evidence_agrees_across_guard_and_offline_cli(tmp_path):
+    trace = tmp_path / "trace.jsonl"
+    guard_json = tmp_path / "guard.jsonl"
+    guard_sarif = tmp_path / "guard.sarif"
+    inspect_sarif = tmp_path / "inspect.sarif"
+    client = GuardClient("--record", str(trace), "--json", str(guard_json), "--sarif", str(guard_sarif),
+                         env_extra={"COLUMNS": "200"})
+    try:
+        client.initialize()
+        response = client.call_and_get(2, "catalog_tool")
+        assert "Fixture marker: terracotta." in response["result"]["content"][0]["text"]
+    finally:
+        guard_code = client.close()
+    assert guard_code == 0
+    guard_stderr = client.proc.stderr.read().decode()
+
+    code, offline = _run_inspect(trace, tmp_path, "--sarif", str(inspect_sarif))
+    assert code == 0
+    guard = [json.loads(line) for line in guard_json.read_text().splitlines()]
+    live_match, = [f for f in guard if f.get("rule_id") == "WRD-RES-INJECT-PHRASE"]
+    offline_match, = [f for f in offline if f.get("rule_id") == "WRD-RES-INJECT-PHRASE"]
+    assert live_match["action"] == "shadowed"
+    assert offline_match["action"] == "reported"
+    assert live_match["tier"] == offline_match["tier"] == "monitor"
+    assert live_match["matched_phrases"] == offline_match["matched_phrases"] == []
+    assert live_match["snippet"] == offline_match["snippet"] == ""
+    assert live_match["injection_matches"] == offline_match["injection_matches"]
+    match, = live_match["injection_matches"]
+    assert match["rule_id"] == "WRD-RES-INJECT-TOOL-COERCION"
+    assert match["catalog_version"] == 1
+    assert match["evidence_ids"] == ["tool-coercion.must-call"]
+
+    env = {**os.environ, "PYTHONPATH": str(REPO / "src"), "COLUMNS": "200"}
+    table = subprocess.run(
+        [PY, "-m", "mcp_warden.cli", "inspect", str(trace)],
+        cwd=str(REPO), env=env, capture_output=True, text=True, timeout=30,
+    )
+    assert table.returncode == 0
+    for output in (guard_stderr, table.stdout):
+        assert match["rule_id"] in output
+        assert match["evidence_ids"][0] in output
+        assert "terracotta" not in output.lower()
+
+    for report in (guard_sarif, inspect_sarif):
+        findings = json.loads(report.read_text())["runs"][0]["results"]
+        finding, = [f for f in findings if f["ruleId"] == "WRD-RES-INJECT-PHRASE"]
+        evidence, = finding["properties"]["injectionMatches"]
+        assert evidence == {
+            "ruleId": match["rule_id"],
+            "catalogVersion": match["catalog_version"],
+            "category": match["category"],
+            "severity": match["severity"],
+            "rationale": match["rationale"],
+            "evidenceIds": match["evidence_ids"],
+        }
+    for report in (guard_json, guard_sarif, tmp_path / "inspect.jsonl", inspect_sarif):
+        assert "terracotta" not in report.read_text().lower()

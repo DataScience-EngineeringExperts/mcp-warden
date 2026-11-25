@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+from dataclasses import replace
+from typing import TYPE_CHECKING
+
 from .content_models import IngressKindV1, MediaTypeV1
 from .normalization_ingress import normalize_supplied
 from .normalization_ipc import NormalizationError, canonical
 from .normalization_models import NormalizationProfileV1
+
+if TYPE_CHECKING:
+    from .result_inspection import ResultFinding
 
 
 def refusal(code: str = "NRM-MALFORMED"):
@@ -14,14 +21,23 @@ def refusal(code: str = "NRM-MALFORMED"):
                          message="normalization refused: " + code)
 
 
-def _unique(findings):
-    seen, result = set(), []
+def _unique(findings: Iterable[ResultFinding]) -> list[ResultFinding]:
+    """Keep one finding per equivalent view, combining its catalog evidence."""
+    unique = {}
     for finding in findings:
         key = (finding.rule_id, finding.message, finding.snippet, finding.matched_phrases)
-        if key not in seen:
-            seen.add(key)
-            result.append(finding)
-    return result
+        first = unique.setdefault(key, finding)
+        if not finding.injection_matches or first.injection_matches == finding.injection_matches:
+            continue
+        matches = {(m.rule_id, m.catalog_version): m for m in first.injection_matches}
+        for match in finding.injection_matches:
+            match_key = (match.rule_id, match.catalog_version)
+            previous = matches.setdefault(match_key, match)
+            if previous.evidence_ids != match.evidence_ids:
+                evidence_ids = tuple(sorted(set(previous.evidence_ids).union(match.evidence_ids)))
+                matches[match_key] = replace(previous, evidence_ids=evidence_ids)
+        unique[key] = replace(first, injection_matches=tuple(matches[k] for k in sorted(matches)))
+    return list(unique.values())
 
 
 def inspect_supplied(content: bytes, media_type: MediaTypeV1, source_kind: IngressKindV1,
@@ -58,16 +74,14 @@ def inspect_normalized(result, policy, *, exfil_denylist, inject_phrases):
         # tokens/nodes; explicit source maps still record the real segment boundaries.
         views += ["".join(s.text for s in result.segments),
                   "\n".join(s.text for s in result.segments)]
-        findings, seen = [], set()
-        for text in views:
-            for finding in inspect_result({"content": [{"type": "text", "text": text}]},
-                                          "supplied", policy, exfil_denylist=exfil_denylist,
-                                          inject_phrases=inject_phrases):
-                key = (finding.rule_id, finding.message, finding.snippet, finding.matched_phrases)
-                if key not in seen:
-                    seen.add(key)
-                    findings.append(finding)
-        return findings
+        return _unique(
+            finding
+            for text in dict.fromkeys(views)
+            for finding in inspect_result(
+                {"content": [{"type": "text", "text": text}]},
+                "supplied", policy, exfil_denylist=exfil_denylist, inject_phrases=inject_phrases,
+            )
+        )
     except NormalizationError as exc:
         return [refusal(exc.code)]
     except Exception:
