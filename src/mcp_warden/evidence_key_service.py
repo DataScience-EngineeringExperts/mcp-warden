@@ -29,6 +29,8 @@ _LABEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}")
 _CATEGORIES = frozenset({"tool-arguments", "tool-result"})
 _ROLES = {
     "capture": "recorder",
+    "incident": "recorder",
+    "incident-summary": "reviewer",
     "read": "reviewer",
     "export": "reviewer",
     "audit": "reviewer",
@@ -77,7 +79,7 @@ def _purpose(action: str, role: object, value: object) -> str:
     if _ROLES.get(action) != _label(role):
         raise EvidenceKeyServiceError("invalid evidence action or role")
     purpose = _label(value)
-    if action == "capture" and purpose != _CAPTURE_PURPOSE:
+    if action in {"capture", "incident"} and purpose != _CAPTURE_PURPOSE:
         raise EvidenceKeyServiceError("invalid evidence capture purpose")
     return purpose
 
@@ -232,6 +234,20 @@ def _load_policy(path: Path) -> frozenset[_Grant]:
         if grant in grants:
             raise EvidenceKeyServiceError("duplicate evidence grant")
         grants.add(grant)
+    recorders = {(grant.uid, grant.tenant) for grant in grants if grant.action in {"capture", "incident"}}
+    protected_tenants = {grant.tenant for grant in grants if grant.action == "incident"}
+    for grant in grants:
+        identity = (grant.uid, grant.tenant)
+        if grant.action == "incident" and (
+            grant.category != "tool-result" or _Grant(
+                *identity, "tool-result", "capture", "recorder", _CAPTURE_PURPOSE,
+            ) not in grants
+        ):
+            raise EvidenceKeyServiceError("incident grant requires an enrolled tool-result recorder")
+        if grant.action == "incident-summary" and grant.category != "tool-result":
+            raise EvidenceKeyServiceError("invalid incident summary category")
+        if grant.role == "reviewer" and grant.tenant in protected_tenants and identity in recorders:
+            raise EvidenceKeyServiceError("incident review requires a distinct reviewer")
     return frozenset(grants)
 
 

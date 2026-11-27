@@ -291,9 +291,13 @@ async def run_guard_async(
         state.config.validate_normalization()
         if state.record is not None:
             return GUARD_FATAL_EXIT  # universal mode never records uninspected raw input
+    contained = state.local_evidence is not None and state.local_evidence.containment
     if state.local_evidence is not None:
         from .evidence_key_service import EvidenceKeyServiceError
 
+        if contained and (state.on_finding is not None or not state.config.valid_containment()):
+            logger.error("guard: EVD-REFUSED")
+            return GUARD_FATAL_EXIT
         if state.record is not None or state.config.normalization_image is not None:
             return GUARD_FATAL_EXIT
         try:
@@ -304,8 +308,8 @@ async def run_guard_async(
     client_in = stdin if stdin is not None else wrap_recv(
         sys.stdin.buffer, cancellable_fd=state.local_evidence is not None,
     )
-    client_out = stdout if stdout is not None else wrap_send(sys.stdout.buffer)
-    client_err = stderr if stderr is not None else wrap_send(sys.stderr.buffer)
+    client_out = stdout if stdout is not None else wrap_send(sys.stdout.buffer, cancellable_fd=contained)
+    client_err = stderr if stderr is not None else wrap_send(sys.stderr.buffer, cancellable_fd=contained)
 
     posix_kwargs: dict[str, Any] = {}
     if os.name == "posix":

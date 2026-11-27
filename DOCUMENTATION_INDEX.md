@@ -1,6 +1,6 @@
 # Documentation Index — mcp-warden
 
-Last Updated: 2026-11-26
+Last Updated: 2026-11-27
 
 Master index of every document in this repository. The `docs/` files are the
 **security contract and source of truth** for all algorithms; the three core docs
@@ -10,7 +10,7 @@ describe and visualize the implementation that satisfies that contract.
 
 ## Privacy operations
 
-[Control mappings and local fixture report](docs/PRIVACY_EVIDENCE.md) · [Deployment record template](docs/PRIVACY_OPERATOR_TEMPLATE.md) · [Local encrypted evidence](docs/LOCAL_EVIDENCE.md)
+[Control mappings and local fixture report](docs/PRIVACY_EVIDENCE.md) · [Deployment record template](docs/PRIVACY_OPERATOR_TEMPLATE.md) · [Local encrypted evidence](docs/LOCAL_EVIDENCE.md) · [Linux stdio session containment](docs/LOCAL_EVIDENCE.md#contain-a-linux-stdio-session)
 
 ## Core docs (3-core rule)
 

@@ -446,7 +446,7 @@ Prompt-injection phrase matching remains monitor-only by default.
 See [runtime examples](docs/archive/2026-10-02-runtime-cli-examples.md) and the
 [guard contract](docs/GUARD_PROXY_V3.md) for flags, reserved errors, and limitations.
 
-On Linux, the stdio guard can opt in to [local encrypted evidence custody](docs/LOCAL_EVIDENCE.md).
+On Linux, the stdio guard can opt in to [local encrypted evidence custody](docs/LOCAL_EVIDENCE.md) and [session containment for covered text tool results](docs/LOCAL_EVIDENCE.md#contain-a-linux-stdio-session).
 
 ---
 

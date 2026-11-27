@@ -65,6 +65,26 @@ def _policy_config(private: Path) -> Path:
     return _write_config(private / "policy.json", {"grants": grants})
 
 
+def test_incident_policy_requires_result_capture_and_a_separate_reviewer(tmp_path: Path) -> None:
+    private = tmp_path / "private"
+    private.mkdir(mode=0o700)
+    policy = _policy_config(private)
+    capture, reviewer = json.loads(policy.read_text())["grants"]
+    incident = {**capture, "action": "incident"}
+    report = {**reviewer, "action": "incident-summary"}
+    for rows in (
+        [incident],
+        [incident, {**capture, "category": "tool-arguments"}],
+        [capture, incident, {**report, "uid": _RECORDER_UID}],
+        [capture, incident, {**reviewer, "uid": _RECORDER_UID}],
+    ):
+        _write_config(policy, {"grants": rows})
+        with pytest.raises(EvidenceKeyServiceError):
+            _load_policy(policy)
+    _write_config(policy, {"grants": [capture, incident, reviewer, report]})
+    assert len(_load_policy(policy)) == 4
+
+
 def test_key_rotation_and_context_authentication(tmp_path: Path) -> None:
     private = tmp_path / "private"
     private.mkdir(mode=0o700)

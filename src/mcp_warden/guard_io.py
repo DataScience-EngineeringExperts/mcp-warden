@@ -53,7 +53,7 @@ def wrap_recv(binary_io, *, cancellable_fd: bool = False):
     return _Recv()
 
 
-def wrap_send(binary_io):
+def wrap_send(binary_io, *, cancellable_fd: bool = False):
     """Adapt a blocking binary stdout/stderr to an async ``send()``.
 
     Args:
@@ -62,6 +62,30 @@ def wrap_send(binary_io):
     Returns:
         An object exposing ``async send(data: bytes)`` + ``async aclose()``.
     """
+
+    if cancellable_fd:
+        fileno = binary_io.fileno()
+        lock = anyio.Lock()
+
+        class _FdSend:
+            async def send(self, data: bytes) -> None:
+                remaining = memoryview(data)
+                async with lock:
+                    while remaining:
+                        previous = os.get_blocking(fileno)
+                        os.set_blocking(fileno, False)
+                        try:
+                            written = os.write(fileno, remaining)
+                        except BlockingIOError:
+                            written = 0
+                        finally:
+                            os.set_blocking(fileno, previous)
+                        if written:
+                            remaining = remaining[written:]
+                        else:
+                            await anyio.wait_writable(fileno)
+
+        return _FdSend()
 
     class _Send:
         async def send(self, data: bytes) -> None:

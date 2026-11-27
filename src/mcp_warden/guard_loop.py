@@ -149,6 +149,12 @@ class GuardConfig:
         "WRD-RES-EXFIL-DNS-SSRF": "no_block_exfil_dns_ssrf",
     }
 
+    def valid_containment(self) -> bool:
+        return self.strict and not any((
+            self.audit_only, self.redact_secret_echo, self.no_block_list_changed,
+            self.no_block_policy, *(getattr(self, flag) for flag in self._DET_OPTOUT.values()),
+        ))
+
     def category_enabled(self, rule_id: str) -> bool:
         """Whether blocking is active for a result rule under the v0.3 posture.
 

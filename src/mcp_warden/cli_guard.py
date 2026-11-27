@@ -153,6 +153,7 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         evidence_socket: Optional[Path] = typer.Option(None, "--evidence-socket", help="Opt in to local encrypted tool evidence on a custodian Unix socket"),
         evidence_service_uid: Optional[int] = typer.Option(None, "--evidence-service-uid", help="Expected evidence custodian UID"),
         evidence_tenant: Optional[str] = typer.Option(None, "--evidence-tenant", help="Exact tenant in the evidence grant manifest"),
+        contain_incidents: bool = typer.Option(False, "--contain-incidents", help="Terminate this Linux stdio session on a covered block and preserve encrypted incident evidence"),
         record: Optional[Path] = typer.Option(None, "--record", help="Record observed frames for later inspect"),
         max_frame_bytes: int = typer.Option(8 * 1024 * 1024, "--max-frame-bytes", help="Per-frame memory cap"),
         max_inflight: int = typer.Option(1024, "--max-inflight", help="Request-correlation map bound"),
@@ -175,7 +176,9 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
     ) -> None:
         """Mediate MCP over stdio or a Streamable HTTP upstream."""
         local_evidence = None
-        if any(option is not None for option in (evidence_socket, evidence_service_uid, evidence_tenant)):
+        if contain_incidents or any(option is not None for option in (
+            evidence_socket, evidence_service_uid, evidence_tenant,
+        )):
             if (
                 any(option is None for option in (evidence_socket, evidence_service_uid, evidence_tenant))
                 or any(option is not None for option in (url, record, sarif, json_out, normalizer_image))
@@ -187,7 +190,8 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
 
             try:
                 local_evidence = LocalEvidenceCapture(
-                    evidence_socket, service_uid=evidence_service_uid, tenant=evidence_tenant
+                    evidence_socket, service_uid=evidence_service_uid, tenant=evidence_tenant,
+                    containment=contain_incidents,
                 )
             except (OSError, ValueError, EvidenceKeyServiceError):
                 err_console.print("error: EVD-REFUSED")
@@ -332,7 +336,7 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             )
 
         # Startup posture banner (§4): last stderr before the child's first frame; from resolved `cfg`, names NO server.
-        if not quiet:
+        if not quiet and not contain_incidents:
             err_console.print(render_posture_banner(cfg), highlight=False)
 
         if url is None:

@@ -82,10 +82,17 @@ def register(app: typer.Typer, err_console) -> None:
     def verify_summary(
         artifact: Path = typer.Option(..., help="Local signed summary JSON"),
         verification_key: str = typer.Option(..., help="Previously enrolled customer vault public key in hex"),
+        incident: bool = typer.Option(False, "--incident", help="Verify a minimized incident summary"),
     ) -> None:
         """Verify a summary offline with the enrolled customer verification key."""
-        from .evidence_summary import MAX_SUMMARY_BYTES, parse_summary
-        from .evidence_summary import verify_summary as check
+        from .evidence_summary import (
+            MAX_SUMMARY_BYTES,
+            parse_summary,
+            verify_incident_summary,
+            verify_summary,
+        )
+
+        check = verify_incident_summary if incident else verify_summary
 
         try:
             with artifact.open("rb") as stream:
@@ -97,7 +104,7 @@ def register(app: typer.Typer, err_console) -> None:
 
     @evidence_app.command()
     def act(
-        action: str = typer.Argument(..., help="read, export, audit, summary, hold, release or delete"),
+        action: str = typer.Argument(..., help="read, export, audit, summary, incident-summary, hold, release or delete"),
         socket: Path = typer.Option(...),
         service_uid: int = typer.Option(...),
         tenant: str = typer.Option(...),
@@ -155,6 +162,11 @@ def register(app: typer.Typer, err_console) -> None:
 
                 checked_summary(result)
                 typer.echo(json.dumps(result, separators=(",", ":")))
+            elif action == "incident-summary":
+                from .evidence_summary import checked_incident_summary
+
+                checked_incident_summary(result)
+                typer.echo(json.dumps(result, separators=(",", ":")))
             elif action == "audit":
                 _validate_audit(result, tenant=tenant, category=category)
                 typer.echo(json.dumps(result, separators=(",", ":")))
@@ -187,7 +199,7 @@ def _validate_audit(result: dict, *, tenant: str, category: str) -> None:
         if set(receipt) != {"event", "signature"}:
             raise EvidenceVaultError("EVD-AUDIT")
         event = receipt["event"]
-        if set(event) != fields or event["action"] not in (*CUSTODIAN_ACTIONS, "capture", "read", "export") or (
+        if set(event) != fields or event["action"] not in (*CUSTODIAN_ACTIONS, "capture", "incident", "read", "export") or (
             (event["tenant"], event["category"]) != (tenant, category)
         ):
             raise EvidenceVaultError("EVD-AUDIT")
