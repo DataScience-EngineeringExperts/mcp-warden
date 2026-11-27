@@ -476,3 +476,18 @@ async def test_completed_request_ids_cannot_be_reused():
         assert await asyncio.wait_for(adapter, 2) == 2
     assert sum(obj is not None and obj.get("method") == "tools/call"
                for _, obj in upstream.requests) == 1
+
+
+async def test_unsolicited_resume_cannot_wait_past_the_deadline():
+    class Delayed(Upstream):
+        async def __call__(self, request):
+            if request.method == "GET":
+                assert "last-event-id" not in request.headers
+                return sse(b"id: cursor\nretry: 10000000\ndata:\n\n")
+            return await super().__call__(request)
+
+    async def handle(request, obj):
+        raise AssertionError("unexpected POST")
+
+    async with harness(Delayed(handle), timeout=0.1) as (_, adapter):
+        assert await asyncio.wait_for(adapter, 2) == 2

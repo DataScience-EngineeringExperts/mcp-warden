@@ -198,6 +198,8 @@ class HTTPTransport:
                 if unsolicited:
                     raise TransportFailure("upstream notification stream ended")
                 return
+            if cursor.retry >= self.timeout:
+                raise TransportFailure("upstream resume delay exceeds the guard deadline")
             await anyio.sleep(cursor.retry)
             method, body = "GET", None
 

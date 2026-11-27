@@ -52,6 +52,8 @@ async def bounded_lines(
     skip_lf = False
     endings = _SSE_END if sse else _STDIO_END
     async for chunk in chunks:
+        if not chunk:
+            continue
         start = int(skip_lf and chunk.startswith(b"\n"))
         skip_lf = False
         for end in endings.finditer(chunk, start):
