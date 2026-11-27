@@ -14,6 +14,7 @@ from typing import Any
 from . import res_rules, wire_block
 from .correlation_runtime import ResponseEvidence
 from .framing import Frame, serialize_frame
+from .guard_evidence import capture_result
 from .result_inspection import (
     TIER_BLOCK,
     TIER_MONITOR,
@@ -40,6 +41,8 @@ def _frame_error_note(direction: str, rpc_id: Any, detail: str) -> ResultFinding
 
 
 def handle_s2c(state, frame: Frame, mode: str, *, dns_findings=None) -> bytes:
+    if state.local_evidence is not None:
+        capture_result(state, frame)
     obj = frame.json
     evidence = state.correlation.response(obj) if obj is not None else ResponseEvidence(None)
     if state.config.normalization_image is not None:
@@ -191,6 +194,8 @@ def _handle_list_response(state, frame: Frame, mode: str, rpc_id: Any, obj: dict
     _stamp_list_finding(state, rpc_id, reason, "blocked" if enabled else "shadowed")
     if not enabled:
         return frame.raw  # shadow: log the drift, forward the rug-pulled list
+    if state.local_evidence is not None:
+        reason = "tool metadata differed from the lock"
     err = wire_block.error_response(rpc_id, stage="list_changed", rule="MCP-DRIFT", tool="", reason=reason)
     return serialize_frame(err, mode)
 
@@ -311,6 +316,8 @@ def _apply_result_findings(
         for f in findings:
             _stamp(state, f, rpc_id, tool, "blocked" if f in block_findings else "shadowed")
         reason = f"{chosen.message} [{chosen.snippet}]" if chosen.snippet else chosen.message
+        if state.local_evidence is not None:
+            tool, reason = "", "result policy refused delivery"
         err = wire_block.error_response(rpc_id, stage="response", rule=chosen.rule_id, tool=tool, reason=reason)
         return serialize_frame(err, mode)
 

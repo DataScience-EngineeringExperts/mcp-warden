@@ -141,9 +141,9 @@ async def _handle_strict_abort(
         {
             "event": "strict_abort",
             "site": abort.site,
-            "tool": abort.tool,
+            "tool": abort.tool if state.local_evidence is None else "?",
             "exc_type": exc_type,
-            "rpc_id": rpc_id,
+            "rpc_id": rpc_id if state.local_evidence is None else None,
         },
         ensure_ascii=False,
     )

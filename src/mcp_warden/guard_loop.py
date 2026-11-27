@@ -22,6 +22,7 @@ from typing import Any, Callable
 from . import res_rules
 from .correlation_runtime import CorrelationSession
 from .framing import Frame, serialize_frame
+from .guard_evidence import LocalEvidenceCapture, capture_request
 from .guard_result import _frame_error_note, handle_s2c  # noqa: F401  (re-exported)
 from .policy_eval import evaluate_call, overall_denied
 from .policy_model import SHAPE_TO_FLAG, Policy
@@ -214,6 +215,7 @@ class GuardState:
     strict_abort_fired: bool = False
     correlation: CorrelationSession = field(init=False, default_factory=CorrelationSession, repr=False)
     record_withheld: Callable[[dict[str, Any]], None] | None = None
+    local_evidence: LocalEvidenceCapture | None = None
 
     def remember_request(self, rpc_id: Any, method: str, tool: str = "") -> None:
         """Record an in-flight request id->method (+tool), bounded LRU (§4.4)."""
@@ -245,6 +247,8 @@ class GuardState:
 
 def handle_c2s(state: GuardState, frame: Frame, mode: str) -> bytes:
     """Handle a client frame, then observe its local forwarding disposition."""
+    if state.local_evidence is not None:
+        capture_request(state, frame)
     obj = frame.json
     if state.record is not None and obj is not None:
         state.record("c2s", obj)
@@ -331,7 +335,12 @@ def _handle_c2s(state: GuardState, frame: Frame, mode: str) -> bytes:
     )
     if not enabled:
         return frame.raw
-    err = _error_response(rpc_id, deny.constraint, tool, deny.reason)
+    if state.local_evidence is not None:
+        state.method_for(rpc_id)
+        state.tool_for(rpc_id)
+        err = _error_response(rpc_id, "WARDEN-POLICY", "", "request policy refused delivery")
+    else:
+        err = _error_response(rpc_id, deny.constraint, tool, deny.reason)
     state.pending_client_error = serialize_frame(err, mode)
     return b""  # withhold the request from the server
 

@@ -26,6 +26,7 @@ from .emit_res import (
 )
 from .guard import run_guard
 from .guard_banner import render_posture_banner
+from .guard_evidence import LocalEvidenceCapture
 from .guard_lifecycle import (
     GUARD_PLATFORM_REFUSE_EXIT,
     is_degraded_platform,
@@ -149,6 +150,9 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         ),
         sarif: Optional[Path] = typer.Option(None, "--sarif", help="Write a SARIF report on shutdown"),
         json_out: Optional[Path] = typer.Option(None, "--json", help="Write JSONL findings on shutdown"),
+        evidence_socket: Optional[Path] = typer.Option(None, "--evidence-socket", help="Opt in to local encrypted tool evidence on a custodian Unix socket"),
+        evidence_service_uid: Optional[int] = typer.Option(None, "--evidence-service-uid", help="Expected evidence custodian UID"),
+        evidence_tenant: Optional[str] = typer.Option(None, "--evidence-tenant", help="Exact tenant in the evidence grant manifest"),
         record: Optional[Path] = typer.Option(None, "--record", help="Record observed frames for later inspect"),
         max_frame_bytes: int = typer.Option(8 * 1024 * 1024, "--max-frame-bytes", help="Per-frame memory cap"),
         max_inflight: int = typer.Option(1024, "--max-inflight", help="Request-correlation map bound"),
@@ -170,6 +174,24 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         ),
     ) -> None:
         """Mediate MCP over stdio or a Streamable HTTP upstream."""
+        local_evidence = None
+        if any(option is not None for option in (evidence_socket, evidence_service_uid, evidence_tenant)):
+            if (
+                any(option is None for option in (evidence_socket, evidence_service_uid, evidence_tenant))
+                or any(option is not None for option in (url, record, sarif, json_out, normalizer_image))
+                or not 1 <= max_inflight <= 1024 or not 1 <= max_frame_bytes <= 8 * 1024 * 1024
+            ):
+                err_console.print("error: EVD-OPTIONS")
+                raise typer.Exit(code=2)
+            from .evidence_key_service import EvidenceKeyServiceError
+
+            try:
+                local_evidence = LocalEvidenceCapture(
+                    evidence_socket, service_uid=evidence_service_uid, tenant=evidence_tenant
+                )
+            except (OSError, ValueError, EvidenceKeyServiceError):
+                err_console.print("error: EVD-REFUSED")
+                raise typer.Exit(code=2) from None
         token = None
         if url is None:
             if http_token_env is not None or http_timeout != 30.0 or http_concurrency != 8:
@@ -246,7 +268,7 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             armed_policy=policy_file is not None,
             redact_secret_echo=redact_secret_echo,
             audit_only=audit_only,
-            strict=strict or url is not None,
+            strict=strict or url is not None or local_evidence is not None,
             strict_frame_cap=strict_frame_cap or url is not None,
             max_frame_bytes=max_frame_bytes,
             max_inflight=max_inflight,
@@ -322,7 +344,8 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
                 policy=policy,
                 exfil_denylist=exfil,
                 inject_phrases=phrases,
-                on_finding=_on_finding,
+                on_finding=_on_finding if local_evidence is None else None,
+                local_evidence=local_evidence,
                 record=_record if record is not None else None,
                 record_withheld=_record_withheld if record is not None else None,
                 on_summary=_on_summary,

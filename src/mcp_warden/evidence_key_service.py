@@ -32,6 +32,7 @@ _ROLES = {
     "read": "reviewer",
     "export": "reviewer",
     "audit": "reviewer",
+    "summary": "reviewer",
     "hold": "custodian",
     "release": "custodian",
     "delete": "custodian",
