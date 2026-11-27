@@ -1,6 +1,6 @@
 # mcp-warden
 
-Last Updated: 2026-11-14
+Last Updated: 2026-11-26
 
 [![CI](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml/badge.svg)](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -10,7 +10,7 @@ Last Updated: 2026-11-14
 
 **mcp-warden is the lockfile and CI gate for MCP servers: it pins a server's declared
 tool/resource/prompt surface into a signed `warden.lock`, then fails CI when that surface
-drifts.** `pin` and `check` support stdio and Streamable HTTP; `guard` is stdio-only.
+drifts.** `pin`, `check`, and `guard` support stdio and Streamable HTTP. To route an HTTP endpoint through a laptop harness, see the [Streamable HTTP guard guide](docs/STREAMABLE_HTTP_GUARD.md).
 
 **CLI 2.0.0 / schema level 4** locks complete tool annotations and output schemas. Changing
 destructiveHint, removing a result schema, or widening its types now triggers drift;
@@ -410,6 +410,7 @@ run the gate only on push:
 | `mcp-warden policy lint <file> [--lock F]` | Lint a policy file (fail closed) | non-zero on lint error |
 | `mcp-warden policy eval <file> <sample.json> [--lock F]` | Evaluate one sample call | **non-zero on a deny verdict** (CI assertion) |
 | `mcp-warden guard <server-cmd...> [--lock F] [--policy F] [--no-block-* / --allow-exfil-domain] [--block-inject-phrase] [--audit-only] [--strict] [--sarif F] [--record T]` | **(v0.3)** Transparent stdio proxy: inspects `tools/call` results + arguments at runtime. **Deterministic tier blocks by default**; opt out per-category with `--no-block-<category>` or fully with `--audit-only`. `--strict` fails CLOSED on an internal inspection error (exit `3`) | child's exit code; `3` on a `--strict` abort; otherwise never breaks the session |
+| `mcp-warden guard --url URL [--http-token-env NAME] [--lock F] [--policy F]` | Mediate a Streamable HTTP session over a harness stdio command | `0` on disconnect, `2` on transport failure, `3` on strict refusal |
 | `mcp-warden inspect <trace.jsonl> [--lock F] [--sarif F]` | **(v0.2)** Offline analyzer over a recorded JSON-RPC session — same `WRD-RES-*` catalog as `guard` (always report-only) | non-zero on any BLOCK-tier finding; 2 on read error |
 | `mcp-warden normalize <file> --media-type MIME --source-kind KIND --normalizer-image sha256:ID` | Linux supplied-content normalization/inspection through an independently qualified isolated worker; emits evidence, not extracted content. `guard`/`inspect` also accept `--normalizer-image`; see [`docs/CONTENT_NORMALIZATION.md`](docs/CONTENT_NORMALIZATION.md) | 0 no blocking finding; 1 blocking finding; 2 refusal/error |
 | `mcp-warden lock rotate <lock> [--approver ID] [--actor ID] [--note T] [--json]` | **(v0.3)** Re-attest provenance on an existing baseline without re-capturing the surface; `overall_digest` stays **byte-identical** (WARDEN_LOCK_SCHEMA §8.2). Fails closed on a tampered/inconsistent lock | 0 on success, 2 on missing/invalid/tampered lock |
@@ -427,7 +428,7 @@ is mutually exclusive with a server command. Set `WARDEN_LOG_LEVEL=INFO` for dia
 
 ### Runtime result inspection
 
-`guard` inspects stdio tool results and blocks deterministic hazards by default.
+`guard` inspects tool results from either runtime transport and blocks deterministic hazards by default.
 `--audit-only` restores observation; `--strict` terminates on inspection errors.
 Framing errors still fail open. Prompt-injection phrase matching remains monitor-only.
 See [runtime examples](docs/archive/2026-10-02-runtime-cli-examples.md) and the

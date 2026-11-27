@@ -7,6 +7,9 @@ console, err_console)`` attaches the two commands to the given typer app.
 from __future__ import annotations
 
 import json
+import os
+import re
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
@@ -28,7 +31,7 @@ from .guard_lifecycle import (
     is_degraded_platform,
     platform_refusal_message,
 )
-from .guard_loop import GuardConfig
+from .guard_loop import GuardConfig, GuardState
 from .inspector import TraceError, analyze_trace, exit_code_for
 from .lockfile import read_lock
 from .normalization_ipc import NormalizationError
@@ -82,7 +85,11 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
 
     @app.command()
     def guard(
-        server_cmd: list[str] = typer.Argument(..., help="MCP server launch argv (e.g. node ./server.js)"),
+        server_cmd: list[str] = typer.Argument(None, help="MCP server launch argv (e.g. node ./server.js)"),
+        url: Optional[str] = typer.Option(None, "--url", help="Upstream Streamable HTTP MCP endpoint"),
+        http_token_env: Optional[str] = typer.Option(None, "--http-token-env", help="Environment variable containing the upstream bearer token"),
+        http_timeout: float = typer.Option(30.0, "--http-timeout", help="HTTP call deadline in seconds"),
+        http_concurrency: int = typer.Option(8, "--http-concurrency", help="Maximum concurrent HTTP calls (1–32)"),
         normalizer_image: Optional[str] = typer.Option(None, "--normalizer-image", help="Immutable qualified Linux worker image ID; enables fail-closed universal inspection"),
         lock: Optional[Path] = typer.Option(None, "--lock", help="Arms per-tool precision + tools/list_changed gate"),
         policy_file: Optional[Path] = typer.Option(None, "--policy", help="Arms runtime argument policy (POLICY_MODEL.md)"),
@@ -162,8 +169,26 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             ),
         ),
     ) -> None:
-        """Run the transparent stdio guard proxy (v0.3: deterministic tier blocks by default)."""
-        command, args = _split(server_cmd)
+        """Mediate MCP over stdio or a Streamable HTTP upstream."""
+        token = None
+        if url is None:
+            if http_token_env is not None or http_timeout != 30.0 or http_concurrency != 8:
+                err_console.print("error: HTTP options require --url")
+                raise typer.Exit(code=2)
+            command, args = _split(server_cmd)
+        else:
+            if normalizer_image is not None:
+                err_console.print("error: universal normalization is unsupported over Streamable HTTP")
+                raise typer.Exit(code=2)
+            if server_cmd or is_degraded_platform():
+                err_console.print("error: --url requires POSIX stdio and cannot be combined with a server command")
+                raise typer.Exit(code=2)
+            if http_token_env is not None:
+                if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", http_token_env):
+                    token = os.environ.get(http_token_env)
+                if not token:
+                    err_console.print("error: upstream bearer environment variable is invalid or empty")
+                    raise typer.Exit(code=2)
         # Non-POSIX platform gate (GUARD_PROXY_V3.md §3.3): runtime lifecycle
         # guarantees are reduced off-POSIX, so guard must NOT silently run with a
         # false sense of full protection. Emit a LOUD, redacted, structured warning
@@ -221,8 +246,8 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             armed_policy=policy_file is not None,
             redact_secret_echo=redact_secret_echo,
             audit_only=audit_only,
-            strict=strict,
-            strict_frame_cap=strict_frame_cap,
+            strict=strict or url is not None,
+            strict_frame_cap=strict_frame_cap or url is not None,
             max_frame_bytes=max_frame_bytes,
             max_inflight=max_inflight,
         )
@@ -252,12 +277,23 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         findings_sink: list = []
         record_lines: list[str] = []
         summary_box = {"frames_inspected": 0}
+        inject_findings = 0
+        report_truncated = False
 
         def _on_summary(n: int) -> None:
             summary_box["frames_inspected"] = n
 
         def _on_finding(f) -> None:
-            if f.correlation is None or sarif is not None or json_out is not None:
+            nonlocal inject_findings, report_truncated
+            inject_findings += f.rule_id == "WRD-RES-INJECT-PHRASE"
+            if url is not None:
+                f = replace(f, message=f.message[:1024], snippet=f.snippet[:1024])
+                if sarif is not None or json_out is not None:
+                    if len(findings_sink) < 1024:
+                        findings_sink.append(f)
+                    else:
+                        report_truncated = True
+            elif f.correlation is None or sarif is not None or json_out is not None:
                 findings_sink.append(f)
             message = f"[{severity_to_level(f.severity)}] {f.rule_id} {f.action}"
             if f.correlation is None:
@@ -277,26 +313,45 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         if not quiet:
             err_console.print(render_posture_banner(cfg), highlight=False)
 
-        code = run_guard(
-            command,
-            args,
-            cfg,
-            lock=lock_doc,
-            policy=policy,
-            exfil_denylist=exfil,
-            inject_phrases=phrases,
-            on_finding=_on_finding,
-            record=_record if record is not None else None,
-            record_withheld=_record_withheld if record is not None else None,
-            on_summary=_on_summary,
-        )
+        if url is None:
+            code = run_guard(
+                command,
+                args,
+                cfg,
+                lock=lock_doc,
+                policy=policy,
+                exfil_denylist=exfil,
+                inject_phrases=phrases,
+                on_finding=_on_finding,
+                record=_record if record is not None else None,
+                record_withheld=_record_withheld if record is not None else None,
+                on_summary=_on_summary,
+            )
+        else:
+            from .guard_http import run_http_guard
+            from .guard_http_trace import HTTPTrace
 
+            state = GuardState(config=cfg, lock=lock_doc, policy=policy,
+                               exfil_denylist=exfil, inject_phrases=phrases,
+                               on_finding=_on_finding)
+            try:
+                with HTTPTrace(record) as trace:
+                    if record is not None:
+                        state.record = trace.frame
+                        state.record_withheld = trace.withheld
+                    code = run_http_guard(url, token, state,
+                                          timeout=http_timeout, concurrency=http_concurrency)
+            except OSError:
+                err_console.print("error: could not write HTTP guard trace")
+                raise typer.Exit(code=2) from None
+            _on_summary(state.frames_inspected)
+        if report_truncated:
+            err_console.print("HTTP guard findings report capped at 1024 entries", highlight=False)
         frames_inspected = summary_box["frames_inspected"]
-        inject_findings = sum(1 for f in findings_sink if f.rule_id == "WRD-RES-INJECT-PHRASE")
         summary = run_summary_to_dict(
             frames_inspected=frames_inspected, inject_phrase_findings=inject_findings
         )
-        if record is not None:
+        if record is not None and url is None:
             record.write_text("\n".join(record_lines) + ("\n" if record_lines else ""), encoding="utf-8")
         if sarif is not None:
             sarif.write_text(

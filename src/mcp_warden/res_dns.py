@@ -97,12 +97,18 @@ def resolve_ssrf_hits(
                 ips = fut.result()
             except Exception:  # pragma: no cover — _resolve_ips already swallows
                 continue
-            for ip_str in ips:
-                ip = parse_ip(ip_str)
-                if ip is None:
-                    continue
-                for net, label in SSRF_NETWORKS:
-                    if ip in net:
-                        hits.append((host, ip_str, label))
-                        break  # first matching range wins per resolved IP
+            hits.extend(classify_resolved(host, ips))
     return sorted(hits)
+
+
+def classify_resolved(host: str, ips: Sequence[str]) -> list[tuple[str, str, str]]:
+    """Classify IP addresses from either the synchronous or async resolver."""
+    hits = []
+    for ip_str in ips:
+        ip = parse_ip(ip_str)
+        if ip is not None:
+            for net, label in SSRF_NETWORKS:
+                if ip in net:
+                    hits.append((host, ip_str, label))
+                    break
+    return hits
