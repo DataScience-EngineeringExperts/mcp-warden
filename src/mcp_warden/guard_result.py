@@ -14,7 +14,7 @@ from typing import Any
 from . import res_rules, wire_block
 from .correlation_runtime import ResponseEvidence
 from .framing import Frame, serialize_frame
-from .guard_evidence import capture_result
+from .guard_evidence import capture_result, preserve_contained_result
 from .result_inspection import (
     TIER_BLOCK,
     TIER_MONITOR,
@@ -104,7 +104,8 @@ def _handle_s2c_legacy(state, frame: Frame, mode: str, *, dns_findings=None) -> 
 
     if not tool:
         tool = _tool_name_from_result(obj)
-    pol = policy_for_tool(state.lock, tool)
+    contained = state.local_evidence is not None and state.local_evidence.containment
+    pol = InspectionPolicy() if contained else policy_for_tool(state.lock, tool)
     result = obj.get("result")
     if not isinstance(result, dict):
         return frame.raw
@@ -133,7 +134,7 @@ def _handle_s2c_legacy(state, frame: Frame, mode: str, *, dns_findings=None) -> 
 
     # WRD-RES-EXFIL-DNS-SSRF: resolve URL hostnames to catch SSRF bypasses
     # (fail-open — any DNS error produces no hits, never aborts).
-    if state.config.category_enabled("WRD-RES-EXFIL-DNS-SSRF"):
+    if not contained and state.config.category_enabled("WRD-RES-EXFIL-DNS-SSRF"):
         try:
             if dns_findings is None:
                 dns_findings = _dns_ssrf_findings(result, tool)
@@ -277,9 +278,6 @@ def _apply_result_findings(
     pol: InspectionPolicy,
 ) -> bytes:
     """Decide pass-through / redact / error-replace from findings + flags (§7.2)."""
-    if not findings:
-        return frame.raw
-
     block_findings = [f for f in findings if f.tier == TIER_BLOCK and state.config.category_enabled(f.rule_id)]
     if not state.config.audit_only:
         if state.config.block_inject_phrase:
@@ -299,6 +297,11 @@ def _apply_result_findings(
                 and f.rule_id == "WRD-RES-INJECT-PHRASE"
                 and any(res_rules.normalize_phrase_text(p) in subset for p in f.matched_phrases)
             ]
+
+    if state.local_evidence is not None and state.local_evidence.containment:
+        preserve_contained_result(state, result, block_findings, rpc_id)
+    if not findings:
+        return frame.raw
 
     error_rules = {"WRD-RES-EXFIL-DOMAIN", "WRD-RES-INJECT-PHRASE", "WRD-RES-EXFIL-DNS-SSRF",
                    "WRD-RES-EXFIL-IP-LITERAL"}

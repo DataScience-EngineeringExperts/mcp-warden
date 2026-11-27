@@ -287,6 +287,7 @@ sequenceDiagram
 ## C3 — `guard` runtime proxy + `inspect` offline analyzer (v0.2)
 
 The optional Linux stdio [evidence profile](docs/LOCAL_EVIDENCE.md) commits encrypted tool evidence via an authenticated Unix socket before the guarded handoff.
+[Session containment](docs/LOCAL_EVIDENCE.md#contain-a-linux-stdio-session) withholds a covered text result, records the incident in the local vault and terminates the affected guard session.
 
 ```mermaid
 flowchart LR

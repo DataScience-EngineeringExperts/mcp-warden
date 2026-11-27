@@ -36,6 +36,7 @@ class _Access:
             for category in ("tool-arguments", "tool-result")
             for action, role, purpose in (
                 ("capture", "recorder", "evidence-capture"), ("read", "reviewer", "test-review"),
+                ("incident", "recorder", "evidence-capture"),
                 ("audit", "reviewer", "test-review"), ("export", "reviewer", "test-review"),
                 ("hold", "custodian", "test-hold"), ("release", "custodian", "test-hold"),
                 ("delete", "custodian", "test-delete"),
@@ -108,7 +109,8 @@ def test_scope_retention_hold_and_minimized_audit(store):
 
 
 @pytest.mark.parametrize("after_db_commit", [False, True])
-def test_floor_recovers_interrupted_commit_without_acknowledgement(store, monkeypatch, after_db_commit):
+@pytest.mark.parametrize("action", ["capture", "incident"])
+def test_floor_recovers_interrupted_commit_without_acknowledgement(store, monkeypatch, after_db_commit, action):
     access = _Access()
     original = evidence_vault.write_floor
 
@@ -126,13 +128,14 @@ def test_floor_recovers_interrupted_commit_without_acknowledgement(store, monkey
     with LocalEvidenceVault(store, retention_seconds=10) as vault:
         monkeypatch.setattr(evidence_vault, "write_floor", interrupt if after_db_commit else fail_after_prepare)
         with pytest.raises(EvidenceKeyServiceError):
-            _dispatch(vault, access, "capture", content=encode_payload(b'{"text":"synthetic"}'))
+            _dispatch(vault, access, action, content=encode_payload(b'{"text":"synthetic"}'))
         with pytest.raises(EvidenceKeyServiceError):
             _dispatch(vault, access, "ready")
     monkeypatch.setattr(evidence_vault, "write_floor", original)
     with LocalEvidenceVault(store, retention_seconds=10) as vault:
         output = _dispatch(vault, access, "audit", purpose="test-review", after=0)
-        assert len(output["receipts"]) == int(after_db_commit)
+        assert [receipt["event"]["action"] for receipt in output["receipts"]] == [action] * after_db_commit
+        assert vault._db.execute("SELECT count(*) FROM evidence").fetchone() == (int(after_db_commit),)
 
 
 def test_floor_refuses_rollback_and_unsafe_database_modes(store):
@@ -215,3 +218,33 @@ def test_summary_verifier_rejects_replacement_key_and_duplicate_fields():
     artifact["summary"]["capture_count_band"] = "10-99"
     with pytest.raises(evidence_vault.EvidenceVaultError):
         verify_summary(artifact, enrolled)
+
+
+@pytest.mark.asyncio
+async def test_containment_pipe_writes_are_cancellable_without_client_drain():
+    import errno
+    import os
+
+    import anyio
+
+    from mcp_warden.guard_io import wrap_send
+
+    read_fd, write_fd = os.pipe()
+    try:
+        with os.fdopen(write_fd, "wb", buffering=0) as stream:
+            os.set_blocking(write_fd, False)
+            while True:
+                try:
+                    stream.write(b"x" * 4096)
+                    os.write(write_fd, b"x" * 4096)
+                except BlockingIOError as error:
+                    assert error.errno == errno.EAGAIN
+                    break
+            os.set_blocking(write_fd, True)
+            output = wrap_send(stream, cancellable_fd=True)
+            with anyio.move_on_after(0.05) as deadline:
+                await output.send(b"generic diagnostic")
+            assert deadline.cancel_called
+            assert os.get_blocking(write_fd)
+    finally:
+        os.close(read_fd)

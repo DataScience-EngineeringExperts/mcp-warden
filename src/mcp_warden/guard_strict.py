@@ -18,6 +18,7 @@ import json
 import logging
 from typing import Any
 
+import anyio
 from anyio.abc import Process
 
 from .guard_lifecycle import synthesize_strict_abort, teardown_child
@@ -118,6 +119,23 @@ async def _handle_strict_abort(
         if rid not in seen:
             pending_ids.append(rid)
             seen.add(rid)
+
+    if state.local_evidence is not None and state.local_evidence.containment:
+        # End the invocation before a stalled client can delay teardown. Apply
+        # the same bounded response to every protected abort.
+        with anyio.move_on_after(8, shield=True):
+            await teardown_child(proc)
+        with anyio.move_on_after(1):
+            await synthesize_strict_abort(
+                state, client_out, client_mode, "local-containment",
+                "protected session terminated; operator review required", pending_ids,
+            )
+        with anyio.move_on_after(1):
+            try:
+                await client_err.send(b'{"event":"protected_session_terminated"}\n')
+            except (OSError, anyio.BrokenResourceError, anyio.ClosedResourceError):
+                pass
+        return GUARD_STRICT_EXIT
 
     # `exc_type` is already a Python class name (identifier), but cap it as
     # defense-in-depth so neither the reason string nor the structured stderr can

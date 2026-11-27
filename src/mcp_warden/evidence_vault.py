@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .evidence_key_service import EvidenceKeyServiceError, decode_payload, encode_payload
-from .evidence_summary import signed_summary
+from .evidence_summary import signed_incident_summary, signed_summary
 from .evidence_vault_files import (
     CATEGORIES,
     INITIAL_HEAD,
@@ -27,7 +27,7 @@ from .evidence_vault_files import (
     write_floor,
 )
 
-REVIEW_ACTIONS = ("read", "export", "audit", "summary")
+REVIEW_ACTIONS = ("read", "export", "audit", "summary", "incident-summary")
 CUSTODIAN_ACTIONS = ("hold", "release", "delete")
 _SCOPE_ID = "0" * 32
 _MAX_RETENTION_SECONDS = 3660 * 86400
@@ -153,7 +153,7 @@ class LocalEvidenceVault:
                 ):
                     raise EvidenceVaultError("EVD-AUDIT")
                 identity = (tenant, entry["object_id"], category)
-                if action == "capture":
+                if action in ("capture", "incident"):
                     if identity in expected:
                         raise EvidenceVaultError("EVD-AUDIT")
                     expected[identity] = (entry["expires"], 0)
@@ -188,6 +188,16 @@ class LocalEvidenceVault:
         tenant, category = request.get("tenant"), request.get("category")
         if type(action) is not str or type(tenant) is not str or category not in CATEGORIES:
             raise EvidenceVaultError("EVD-POLICY")
+        if action == "incident-ready" and set(request) == {"action", "tenant", "category"}:
+            if category != "tool-result":
+                raise EvidenceVaultError("EVD-POLICY")
+            access.authorize(tenant=tenant, object_id=_SCOPE_ID, category=category, action="incident",
+                             role="recorder", purpose="evidence-capture")
+            return {"ready": True}
+        if action == "incident" and set(request) == {"action", "tenant", "category", "content"}:
+            if category != "tool-result":
+                raise EvidenceVaultError("EVD-POLICY")
+            return self._capture(access, tenant, category, decode_payload(request["content"]), action="incident")
         if action == "ready" and set(request) == {"action", "tenant", "category"}:
             access.authorize(tenant=tenant, object_id=_SCOPE_ID, category=category, action="capture",
                              role="recorder", purpose="evidence-capture")
@@ -215,6 +225,8 @@ class LocalEvidenceVault:
             return self._audit(tenant, category, request["after"])
         if action == "summary":
             return self._summary(tenant, category)
+        if action == "incident-summary":
+            return self._incident_summary(tenant, category, object_id)
         return self._apply(access, scope, now)
 
     def _timestamp(self, value: datetime) -> int:
@@ -225,10 +237,10 @@ class LocalEvidenceVault:
             raise EvidenceVaultError("EVD-CLOCK")
         return timestamp
 
-    def _capture(self, access, tenant, category, content: bytes) -> dict[str, object]:
+    def _capture(self, access, tenant, category, content: bytes, *, action: str = "capture") -> dict[str, object]:
         object_id = secrets.token_hex(16)
         scope = dict(tenant=tenant, object_id=object_id, category=category)
-        now = self._timestamp(access.authorize(**scope, action="capture", role="recorder",
+        now = self._timestamp(access.authorize(**scope, action=action, role="recorder",
                                                purpose="evidence-capture"))
         ciphertext = access.encrypt(**scope, plaintext=content)
         expires = now + self.retention_seconds
@@ -238,7 +250,7 @@ class LocalEvidenceVault:
                 "INSERT INTO evidence VALUES (?, ?, ?, ?, 0, ?)",
                 (tenant, object_id, category, expires, ciphertext),
             )
-            self._commit(access.peer_uid, scope, "capture", now, expires=expires)
+            self._commit(access.peer_uid, scope, action, now, expires=expires)
         finally:
             if self._db.in_transaction:
                 self._db.rollback()
@@ -293,6 +305,15 @@ class LocalEvidenceVault:
         ]
         return {"verification_key": self._key.public_key().public_bytes_raw().hex(), "receipts": receipts}
 
+    def _incident_summary(self, tenant: str, category: str, object_id: str) -> dict[str, object]:
+        if category != "tool-result" or self._db.execute(
+            "SELECT 1 FROM audit WHERE tenant=? AND category=? AND action='incident' "
+            "AND json_extract(CAST(payload AS TEXT), '$.object_id')=? LIMIT 1",
+            (tenant, category, object_id),
+        ).fetchone() is None:
+            raise EvidenceVaultError("EVD-POLICY")
+        return signed_incident_summary(self._key, object_id)
+
     def _summary(self, tenant: str, category: str) -> dict[str, object]:
         counts = {}
         for action in ("capture", "read", "export", "delete"):
@@ -300,8 +321,12 @@ class LocalEvidenceVault:
                 "SELECT count(*) FROM (SELECT 1 FROM audit WHERE tenant=? AND category=? AND action=? LIMIT 100)",
                 (tenant, category, action),
             ).fetchone()
-        return signed_summary(self._key, captures=counts["capture"], reviews=counts["read"] + counts["export"],
-                              deletions=counts["delete"])
+        incidents, = self._db.execute(
+            "SELECT count(*) FROM (SELECT 1 FROM audit WHERE tenant=? AND category=? AND action='incident' LIMIT 100)",
+            (tenant, category),
+        ).fetchone()
+        return signed_summary(self._key, captures=counts["capture"] + incidents,
+                              reviews=counts["read"] + counts["export"], deletions=counts["delete"])
 
     def _commit(self, uid: int, scope: dict, action: str, now: int, *, expires: int | None = None) -> None:
         seq = self._head[0] + 1

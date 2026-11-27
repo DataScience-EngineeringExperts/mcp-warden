@@ -61,6 +61,35 @@ mcp-warden evidence verify-summary --artifact /approved/local/summary.json \
 
 The signature verifies the anonymous count bands under the enrolled key. Establish tenant, category, publication authorization and freshness through the customer’s separate exchange record before accepting an artifact for a specific reporting scope.
 
+## Contain a Linux stdio session
+
+Add `--contain-incidents` to the evidence-enabled guard invocation for a customer-supervised text-only MCP tool. Grant the recorder an additional `incident` action for `tool-result` with role `recorder` and purpose `evidence-capture`. A distinct reviewer account can receive `incident-summary` for `tool-result` with an approved reporting purpose. The custodian daemon refuses an incident grant without a corresponding result-capture grant. For tenants with incident grants, it also refuses reviewer grants for recorder UIDs.
+
+```sh
+mcp-warden guard --contain-incidents \
+  --evidence-socket /run/warden-evidence/vault.sock \
+  --evidence-service-uid 1234 --evidence-tenant customer-a -- python ./server.py
+```
+
+For covered `tools/call` responses, the guard accepts a `content` list of text-only blocks and an optional boolean `isError`. Detection uses strict charset and secret-echo defaults plus the existing offline domain and IP literal rules. DNS hostname queries are disabled in this profile. Deterministic findings in scope always withhold the entire result and end the session. The guard refuses audit-only, category demotions and secret redaction options. Fuzzy phrase matches stay monitor-only unless the operator enables `--block-inject-phrase` or `--block-inject-phrase-only`. RPC errors, unsupported tool result shapes and unsolicited server messages cause a generic fail-closed exit. Other request and response methods retain their existing inspection scope, including the separate lock-based tools/list gate.
+
+The vault stores the decoded blocked result and the private finding codes as one encrypted object, subject to its 1 MiB serialized payload limit, with its signed `incident` audit event in the same database commit. The guard stops forwarding in both directions, attempts bounded termination of the owned child process group, and returns the same generic exit code 3 and JSON-RPC error for a covered block or an unavailable vault. A disconnected or stalled client may only observe that the relay closed. To confirm durable capture, inspect the local audit. Storage failure before commit can leave no incident event.
+
+A reviewer can locate the exact local object in the `tool-result` audit and inspect it with a separately granted `read` or `export`. Use the existing hold and retention procedures for the incident object. Request the minimized report separately.
+
+```sh
+mcp-warden evidence act incident-summary --socket /run/warden-evidence/vault.sock \
+  --service-uid 1234 --tenant customer-a --category tool-result \
+  --purpose approved-report --object-id "$INCIDENT_OBJECT_ID" > incident-summary.json
+
+mcp-warden evidence verify-summary --incident --artifact incident-summary.json \
+  --verification-key "$ENROLLED_VAULT_PUBLIC_KEY"
+```
+
+The signed report contains the schema version, `reported-withheld` disposition and an opaque identifier stable for that incident. The signature attests that the vault recorded a withholding report from an authorized recorder account. It contains no raw evidence, rule details, local object ID, tenant or timestamp. The opaque identifier permits deduplication and links repeat exports of the same report. The historical report remains available from audit after raw evidence disposition. Use the customer's separate exchange record to establish source, intended audience and freshness.
+
+Containment applies to this relay session. Independent sessions retain their ordinary admission path. The customer owns the recorder account, tool process supervision and prevention of direct access. The child shares the recorder UID and can exercise that UID's grants. Prior effects and processes outside the owned process group are outside this profile. Verified live bundle identity, persistent quarantine, capability lease revocation and governed bundle recovery remain open.
+
 ## Qualification
 
 Run `python -m pytest tests/test_local_evidence_vault.py tests/test_evidence_key_service.py` on Linux. The cross-UID fixture uses only synthetic data through the real CLI and Unix socket. Run it on an isolated sudo-enabled Linux test host, with test dependencies installed and the checkout accessible to the fixture’s temporary numeric accounts.
