@@ -11,8 +11,12 @@ from .evidence_vault_files import CATEGORIES, EvidenceVaultError
 
 class LocalEvidenceCapture:
     def __init__(self, socket: Path, *, service_uid: int, tenant: str) -> None:
+        import anyio
+
         from .evidence_key_service import LocalServiceClient
 
+        if not hasattr(anyio, "wait_readable"):
+            raise EvidenceVaultError("EVD-PLATFORM")
         self.client = LocalServiceClient(socket, service_uid=service_uid)
         self.tenant = tenant
 
