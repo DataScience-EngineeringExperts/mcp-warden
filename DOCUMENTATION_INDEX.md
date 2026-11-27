@@ -197,6 +197,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 
 | Plan | Purpose |
 |---|---|
+| [`docs/plans/2026-11-26-control-plane-deployment-design.md`](docs/plans/2026-11-26-control-plane-deployment-design.md) | Proposed managed and self-hosted profiles, shared security semantics, regional data boundaries, recovery and upgrade design, and installation parity gates (DSE-730) |
 | [`docs/plans/2026-10-04-dse717-reconciliation.md`](docs/plans/2026-10-04-dse717-reconciliation.md) | Recovered-branch provenance, integration ownership, failure-path validation and exact-head security/external-review gates |
 | [`docs/plans/2026-07-19-decision-receipts-design.md`](docs/plans/2026-07-19-decision-receipts-design.md) | Original DSE-717 receipt, deterministic rule, evidence, recovery and replay design |
 | [`docs/plans/2026-07-19-decision-receipts-implementation.md`](docs/plans/2026-07-19-decision-receipts-implementation.md) | Original strict-TDD execution plan and independently reviewed release gates |
