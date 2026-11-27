@@ -1,15 +1,34 @@
 """Coordinator distrusts worker claims and preserves raw envelope evidence."""
 
+import base64
 import hashlib
-from dataclasses import asdict
+from dataclasses import asdict, replace
 
 import pytest
 
 from mcp_warden import normalization as n
-from mcp_warden.content_envelope import create_ingress, verify_lineage
-from mcp_warden.content_models import IngressKindV1, MediaTypeV1, TransformKindV1
+from mcp_warden import normalization_inspection
+from mcp_warden.content_envelope import (
+    _replace_self_digest,
+    create_ingress,
+    derive_envelope,
+    to_public_bytes,
+    verify_lineage,
+)
+from mcp_warden.content_models import (
+    BundleEvidenceInput,
+    IngressKindV1,
+    MediaTypeV1,
+    TaintV1,
+    TransformKindV1,
+)
+from mcp_warden.correlation_runtime import CorrelationSession
+from mcp_warden.normalization_ingress import normalize_supplied
+from mcp_warden.normalization_inspection import inspect_normalized, inspect_supplied
 from mcp_warden.normalization_ipc import NormalizationError
 from mcp_warden.normalization_models import NormalizationProfileV1
+from mcp_warden.result_inspection import InspectionPolicy
+from mcp_warden.taint_lineage import MAX_LINEAGE_DEPTH, ContentLineageV1, verify_lineage_graph
 
 
 @pytest.fixture(autouse=True)
@@ -19,11 +38,13 @@ def ascii_unit_runtime(monkeypatch):
     monkeypatch.setattr(n.unicodedata, "unidata_version", "15.0.0")
 
 
-def ingress(raw=b"hello", media=MediaTypeV1.TEXT_PLAIN, kind=IngressKindV1.DOCUMENT):
+def ingress(raw=b"hello", media=MediaTypeV1.TEXT_PLAIN, kind=IngressKindV1.DOCUMENT,
+            *, added_taints=(), bundle=None):
     return create_ingress(content=raw, media_type=media, source_kind=kind,
                           source_identity=b'{}', source_claims=b'{}',
                           capture_kind=TransformKindV1.INGRESS_CAPTURE,
-                          capture_implementation=b'{}', capture_parameters=b'{}')
+                          capture_implementation=b'{}', capture_parameters=b'{}',
+                          added_taints=added_taints, bundle=bundle)
 
 
 def response(profile, raw=b"hello"):
@@ -123,3 +144,141 @@ def test_combining_limit_precedes_trusted_normalization(monkeypatch, profile):
     monkeypatch.setattr(n.unicodedata, "normalize", guard)
     with pytest.raises(NormalizationError, match="NRM-OVER-CAP"):
         n.normalize_ingress(raw, ingress(raw), profile)
+
+
+def derive(raw, parents):
+    return derive_envelope(
+        content=raw,
+        media_type=MediaTypeV1.TEXT_PLAIN,
+        parents=parents,
+        transform_kind=TransformKindV1.DETERMINISTIC,
+        transform_implementation=b"{}",
+        transform_parameters=b"{}",
+    )
+
+
+def test_validated_document_bundle_message_and_call_taints_reach_inspection(monkeypatch, profile):
+    def run_worker(request, profile):
+        return response(profile, base64.b64decode(request["content_b64"]))
+
+    monkeypatch.setattr(n, "_run_worker", run_worker)
+    doc = ingress(b"document fixture", added_taints=(TaintV1.SENSITIVE,))
+    bundle = ingress(
+        b"bundle fixture",
+        kind=IngressKindV1.BUNDLE_METADATA,
+        added_taints=(TaintV1.EXECUTABLE,),
+        bundle=BundleEvidenceInput(
+            artifact=b"{}", signature_evidence=None, version_claims=b"{}", publisher_claims=b"{}",
+            dependencies=(), policy_binding_claims=b"{}",
+        ),
+    )
+    output = normalize_supplied(
+        b"agent fixture", MediaTypeV1.TEXT_PLAIN, IngressKindV1.AGENT_MESSAGE, profile,
+        source_claims=b'{"role":"system","taints":[],"trusted":true}',
+        lineage=ContentLineageV1((doc, bundle)),
+    )
+    lineage = ContentLineageV1((output.envelope,), output.source_envelopes)
+    verify_lineage_graph(output.envelope, output.source_envelopes)
+    assert output.envelope.trust_state == "untrusted"
+    assert {item.source.kind for item in output.source_envelopes} >= {
+        "document", "bundle_metadata", "agent_message",
+    }
+
+    def fixture_indicator(view):
+        return ("DSE720-SELECT-TOOL",) if view == "call fixture" else ()
+
+    monkeypatch.setattr(normalization_inspection, "boundary_attempts_in_text", fixture_indicator)
+    session = CorrelationSession()
+    assert session.client({
+        "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "fixture"},
+    }) == ()
+    observation = session.response({"jsonrpc": "2.0", "id": 1, "result": {}})
+    assert observation.ingress is IngressKindV1.TOOL_RESULT
+    findings = inspect_supplied(
+        b"call fixture", MediaTypeV1.TEXT_PLAIN, observation.ingress, profile,
+        InspectionPolicy(), exfil_denylist=(), inject_phrases=(),
+        lineage=lineage, on_taints=observation.taints.update,
+        on_boundary_attempts=observation.signal_ids.update,
+    )
+    assert findings == []
+    assert observation.taints == {"core:executable", "core:sensitive", "core:untrusted"}
+    assert session.server(observation) == ()
+    (reported,) = session.client({
+        "jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "fixture"},
+    })
+    assert reported.correlation.boundary == "untrusted-content-to-tool-selection"
+    assert observation.taints.issubset(reported.correlation.taints)
+    public = to_public_bytes(output.envelope) + b"".join(
+        to_public_bytes(item) for item in output.source_envelopes
+    )
+    for raw in (b"document fixture", b"bundle fixture", b"agent fixture", b'"role"', b'"trusted"'):
+        assert raw not in public
+
+
+def test_repeated_capture_can_share_a_content_ancestor(monkeypatch, profile):
+    monkeypatch.setattr(n, "_run_worker", lambda *_: response(profile))
+    args = (b"hello", MediaTypeV1.TEXT_PLAIN, IngressKindV1.DOCUMENT, profile)
+    first = normalize_supplied(*args)
+    second = normalize_supplied(
+        *args, lineage=ContentLineageV1((first.envelope,), first.source_envelopes),
+    )
+    verify_lineage_graph(second.envelope, second.source_envelopes)
+    assert second.envelope.taints == first.envelope.taints
+
+
+def test_lineage_refuses_missing_extra_duplicate_and_taint_loss_before_worker(monkeypatch, profile):
+    leaf = ingress(b"source fixture", added_taints=(TaintV1.SENSITIVE,))
+    derived = derive(b"middle fixture", (leaf,))
+    shrunk = _replace_self_digest(derived.model_copy(update={"taints": ("core:untrusted",)}))
+    unrelated = ingress(b"other fixture")
+    monkeypatch.setattr(n, "_run_worker", lambda *_: pytest.fail("worker called"))
+    for lineage in (ContentLineageV1((derived,)), ContentLineageV1((derived,), (leaf, unrelated)),
+                    ContentLineageV1((derived,), (leaf, leaf)), ContentLineageV1((shrunk,), (leaf,))):
+        with pytest.raises(NormalizationError, match="^NRM-LINEAGE$"):
+            normalize_supplied(
+                b"hello", MediaTypeV1.TEXT_PLAIN, IngressKindV1.TOOL_RESULT, profile,
+                lineage=lineage,
+            )
+
+
+def test_lineage_depth_budget_reserves_the_normalized_child(monkeypatch, profile):
+    ancestors = []
+    child = ingress()
+    for index in range(MAX_LINEAGE_DEPTH - 1):
+        ancestors.append(child)
+        content = f"layer {index}".encode()
+        child = derive(content, (child,))
+    verify_lineage_graph(child, tuple(ancestors))
+    monkeypatch.setattr(n, "_run_worker", lambda *_: pytest.fail("worker called"))
+    with pytest.raises(NormalizationError, match="^NRM-LINEAGE$"):
+        n.normalize_ingress(content, child, profile, ancestors=tuple(ancestors))
+
+
+def test_unverified_result_ancestry_never_reaches_observers(monkeypatch, profile):
+    monkeypatch.setattr(n, "_run_worker", lambda *_: response(profile))
+    source = ingress(added_taints=(TaintV1.SENSITIVE,))
+    good = n.normalize_ingress(b"hello", source, profile)
+    forged = replace(good, source_envelopes=())
+    reports = []
+    findings = inspect_normalized(
+        forged, InspectionPolicy(), exfil_denylist=(), inject_phrases=(),
+        on_taints=reports.append, on_boundary_attempts=reports.append,
+    )
+    assert len(findings) == 1
+    assert findings[0].rule_id == "WRD-RES-NORMALIZATION"
+    assert findings[0].tier == "block"
+    assert reports == []
+
+
+def test_observer_failure_cannot_change_inspection(monkeypatch, profile):
+    monkeypatch.setattr(n, "_run_worker", lambda *_: response(profile))
+
+    def unavailable(_):
+        raise RuntimeError("fixture")
+
+    findings = inspect_supplied(
+        b"hello", MediaTypeV1.TEXT_PLAIN, IngressKindV1.DOCUMENT, profile,
+        InspectionPolicy(), exfil_denylist=(), inject_phrases=(),
+        on_taints=unavailable, on_boundary_attempts=unavailable,
+    )
+    assert findings == []

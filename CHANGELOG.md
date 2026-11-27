@@ -32,6 +32,10 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ### Added
 
+- DSE-720 adds session-local reporting of related signals across calls in
+  `guard` and directed `inspect` traces. Findings identify the attempted
+  boundary and the observations that support it.
+
 - DSE-719 adds versioned rule evidence to offline prompt-injection findings.
   Readers can identify which catalog rules matched tool output. The guard
   continues to report phrase findings by default.

@@ -76,3 +76,5 @@ class NormalizationResultV1:
     profile_id: str = PROFILE_ID
     status: str = "structurally-complete"
     semantic_completeness_proven: bool = False
+    # Digest-only closure makes taint independently checkable on subsequent hops.
+    source_envelopes: tuple[ContentEnvelopeV1, ...] = ()

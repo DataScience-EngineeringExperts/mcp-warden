@@ -257,13 +257,21 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             summary_box["frames_inspected"] = n
 
         def _on_finding(f) -> None:
-            findings_sink.append(f)
-            message = f"[{severity_to_level(f.severity)}] {f.rule_id} {f.action} {f.tool} (id={f.rpc_id})"
+            if f.correlation is None or sarif is not None or json_out is not None:
+                findings_sink.append(f)
+            message = f"[{severity_to_level(f.severity)}] {f.rule_id} {f.action}"
+            if f.correlation is None:
+                message += f" {f.tool} (id={f.rpc_id})"
             evidence = _catalog_evidence(f)
             err_console.print(f"{message} {evidence}" if evidence else message, highlight=False)
 
         def _record(direction: str, frame: dict) -> None:
             record_lines.append(json.dumps({"direction": direction, "frame": frame}, ensure_ascii=False))
+
+        def _record_withheld(frame: dict) -> None:
+            record_lines[-1] = json.dumps(
+                {"direction": "c2s", "frame": frame, "forwarded": False}, ensure_ascii=False
+            )
 
         # Startup posture banner (§4): last stderr before the child's first frame; from resolved `cfg`, names NO server.
         if not quiet:
@@ -279,6 +287,7 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             inject_phrases=phrases,
             on_finding=_on_finding,
             record=_record if record is not None else None,
+            record_withheld=_record_withheld if record is not None else None,
             on_summary=_on_summary,
         )
 
@@ -370,6 +379,12 @@ def _validate_universal_flags(image, *optouts):
 
 
 def _catalog_evidence(finding: ResultFinding) -> str:
+    if finding.correlation is not None:
+        match = finding.correlation
+        return " | ".join((match.boundary, *(
+            f"{item.ordinal} {item.ingress or 'request'} ({', '.join(item.signal_ids) or ', '.join(item.taints)})"
+            for item in match.evidence
+        )))
     return " | ".join(
         f"{match.rule_id} ({', '.join(match.evidence_ids)})"
         for match in finding.injection_matches

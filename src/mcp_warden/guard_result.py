@@ -12,6 +12,7 @@ from dataclasses import replace
 from typing import Any
 
 from . import res_rules, wire_block
+from .correlation_runtime import ResponseEvidence
 from .framing import Frame, serialize_frame
 from .result_inspection import (
     TIER_BLOCK,
@@ -39,6 +40,8 @@ def _frame_error_note(direction: str, rpc_id: Any, detail: str) -> ResultFinding
 
 
 def handle_s2c(state, frame: Frame, mode: str) -> bytes:
+    obj = frame.json
+    evidence = state.correlation.response(obj) if obj is not None else ResponseEvidence(None)
     if state.config.normalization_image is not None:
         from .guard_loop import StrictInspectionAbort
         from .normalization_guard import handle_universal
@@ -47,8 +50,15 @@ def handle_s2c(state, frame: Frame, mode: str) -> bytes:
         except Exception:
             raise StrictInspectionAbort(site="normalization-config", tool="?",
                                         exc_type="InvalidProfile", rpc_id=None) from None
-        return handle_universal(state, frame, mode, _handle_s2c_legacy)
-    return _handle_s2c_legacy(state, frame, mode)
+        out = handle_universal(state, frame, mode, _handle_s2c_legacy, evidence)
+    else:
+        out = _handle_s2c_legacy(state, frame, mode)
+        if evidence.ingress is not None:
+            evidence.add_raw(obj["result"])
+    if obj is not None:
+        for finding in state.correlation.server(evidence):
+            state.emit(finding)
+    return out
 
 
 def _handle_s2c_legacy(state, frame: Frame, mode: str) -> bytes:

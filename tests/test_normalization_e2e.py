@@ -6,14 +6,22 @@ import os
 
 import pytest
 
-from mcp_warden import res_rules
+from mcp_warden import normalization_inspection, res_rules
 from mcp_warden.cli import app
-from mcp_warden.content_models import DigestDomain, IngressKindV1, MediaTypeV1
+from mcp_warden.content_envelope import create_ingress
+from mcp_warden.content_models import (
+    DigestDomain,
+    IngressKindV1,
+    MediaTypeV1,
+    TaintV1,
+    TransformKindV1,
+)
 from mcp_warden.hashing import hash_bytes
 from mcp_warden.normalization_ingress import normalize_supplied
-from mcp_warden.normalization_inspection import inspect_supplied
+from mcp_warden.normalization_inspection import inspect_mcp_frame, inspect_supplied
 from mcp_warden.normalization_models import NormalizationProfileV1
 from mcp_warden.result_inspection import InspectionPolicy
+from mcp_warden.taint_lineage import ContentLineageV1
 
 
 @pytest.fixture
@@ -144,3 +152,56 @@ def test_real_worker_deduplicates_catalog_evidence(profile):
     match, = finding.injection_matches
     assert match.rule_id == "WRD-RES-INJECT-TOOL-COERCION"
     assert match.evidence_ids == ("tool-coercion.invoke-immediately", "tool-coercion.must-call")
+
+
+def test_real_worker_preserves_lineage_and_scopes_correlation_to_result(profile, monkeypatch):
+    source = create_ingress(
+        content=b"document fixture",
+        media_type=MediaTypeV1.TEXT_PLAIN,
+        source_kind=IngressKindV1.DOCUMENT,
+        source_identity=b"{}",
+        source_claims=b"{}",
+        capture_kind=TransformKindV1.INGRESS_CAPTURE,
+        capture_implementation=b"{}",
+        capture_parameters=b"{}",
+        added_taints=(TaintV1.SENSITIVE,),
+    )
+    message = normalize_supplied(
+        b"message fixture", MediaTypeV1.TEXT_PLAIN, IngressKindV1.AGENT_MESSAGE, profile,
+        source_claims=b'{"role":"system","trusted":true}',
+        lineage=ContentLineageV1((source,)),
+    )
+    assert message.envelope.trust_state == "untrusted"
+
+    def boundary_id(view):
+        return {
+            "palette fixture": ("DSE720-SELECT-TOOL",),
+            "frame fixture": ("DSE720-GRANT-AUTHORITY",),
+        }.get(view, ())
+
+    def catalog_id(view):
+        return {
+            "palette fixture": ("WRD-RES-INJECT-TOOL-COERCION",),
+            "frame fixture": ("WRD-RES-INJECT-AUTHORITY-IMPERSONATION",),
+        }.get(view, ())
+
+    monkeypatch.setattr(normalization_inspection, "boundary_attempts_in_text", boundary_id)
+    monkeypatch.setattr(normalization_inspection, "_catalog_ids", catalog_id)
+    frame = {
+        "jsonrpc": "2.0",
+        "id": "ｆｒａｍｅ ｆｉｘｔｕｒｅ",
+        "result": {"content": [{"type": "text", "text": "ｐａｌｅｔｔｅ ｆｉｘｔｕｒｅ"}]},
+    }
+    taints, boundaries, catalog = [], [], []
+    findings = inspect_mcp_frame(
+        frame, "tools/call", profile, InspectionPolicy(expected_output_charset="extended"),
+        exfil_denylist=(), inject_phrases=(), raw_content=json.dumps(frame).encode(),
+        ingress=IngressKindV1.TOOL_RESULT,
+        lineage=ContentLineageV1((message.envelope,), message.source_envelopes),
+        on_taints=taints.append, on_boundary_attempts=boundaries.append,
+        on_catalog_matches=catalog.append,
+    )
+    assert findings == []
+    assert taints == [("core:sensitive", "core:untrusted")]
+    assert boundaries == [("DSE720-SELECT-TOOL",)]
+    assert catalog == [("WRD-RES-INJECT-TOOL-COERCION",)]

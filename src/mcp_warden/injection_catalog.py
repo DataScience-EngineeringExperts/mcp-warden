@@ -120,7 +120,7 @@ def _is_word_character(character: str) -> bool:
     return character.isalnum() or character == "_"
 
 
-def _contains_indicator(text: str, phrase: str) -> bool:
+def contains_indicator(text: str, phrase: str) -> bool:
     """Find a literal with word boundaries, allowing a terminal delimiter."""
     start = text.find(phrase)
     requires_end_boundary = _is_word_character(phrase[-1])
@@ -144,7 +144,7 @@ def match_injection_catalog(text: str) -> tuple[InjectionMatch, ...]:
         evidence_ids = tuple(
             indicator.evidence_id
             for indicator in rule.evidence
-            if _contains_indicator(normalized, indicator.phrase)
+            if contains_indicator(normalized, indicator.phrase)
         )
         if evidence_ids:
             matches.append(

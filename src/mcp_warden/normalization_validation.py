@@ -17,6 +17,7 @@ from .normalization_models import (
     NormalizedSegmentV1,
 )
 from .normalization_trace import decode_object
+from .taint_lineage import verify_lineage_graph
 
 
 def validate_result(result) -> None:
@@ -92,4 +93,9 @@ def _validate(result) -> None:
             or envelope.transform.parameters_digest != hash_bytes(
                 canonical({"manifest_digest": result.manifest_digest, "budget": asdict(budget)}),
                 domain=DigestDomain.TRANSFORM_PARAMETERS)):
+        raise NormalizationError("NRM-MANIFEST")
+    verify_lineage_graph(envelope, result.source_envelopes)
+    source_digest = envelope.parents[0].envelope_digest
+    source = next(item for item in result.source_envelopes if item.envelope_digest == source_digest)
+    if source.content.length != length or source.content.media_type != media:
         raise NormalizationError("NRM-MANIFEST")

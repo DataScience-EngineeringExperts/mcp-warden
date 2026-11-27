@@ -55,6 +55,21 @@ def _sarif_result(f: ResultFinding) -> dict[str, Any]:
             }
             for match in f.injection_matches
         ]
+    if f.correlation is not None:
+        result.pop("locations")
+        result["properties"]["correlation"] = {
+            "boundary": f.correlation.boundary,
+            "taints": list(f.correlation.taints),
+            "evidence": [
+                {
+                    "ordinal": item.ordinal,
+                    "ingress": item.ingress,
+                    "signalIds": list(item.signal_ids),
+                    "taints": list(item.taints),
+                }
+                for item in f.correlation.evidence
+            ],
+        }
     return result
 
 
@@ -129,6 +144,20 @@ def result_finding_to_dict(f: ResultFinding) -> dict[str, Any]:
             {**asdict(match), "evidence_ids": list(match.evidence_ids)}
             for match in f.injection_matches
         ]
+    if f.correlation is not None:
+        record["correlation"] = {
+            "boundary": f.correlation.boundary,
+            "taints": list(f.correlation.taints),
+            "evidence": [
+                {
+                    "ordinal": item.ordinal,
+                    "ingress": item.ingress,
+                    "signal_ids": list(item.signal_ids),
+                    "taints": list(item.taints),
+                }
+                for item in f.correlation.evidence
+            ],
+        }
     return record
 
 

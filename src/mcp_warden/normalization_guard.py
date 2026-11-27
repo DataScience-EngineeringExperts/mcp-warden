@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from dataclasses import replace
 
+from .correlation_runtime import ResponseEvidence
 from .framing import serialize_frame
 from .normalization_inspection import inspect_mcp_frame
 from .normalization_models import NormalizationProfileV1
 from .result_inspection import TIER_BLOCK, TIER_MONITOR, policy_for_tool
 
 
-def handle_universal(state, frame, mode: str, legacy) -> bytes:
+def handle_universal(state, frame, mode: str, legacy, evidence: ResponseEvidence) -> bytes:
     from . import res_rules, wire_block
     from .guard_loop import StrictInspectionAbort
     if state.record is not None:
@@ -38,6 +39,10 @@ def handle_universal(state, frame, mode: str, legacy) -> bytes:
             exfil_denylist=state.exfil_denylist,
             inject_phrases=state.inject_phrases,
             raw_content=frame.body,
+            ingress=evidence.ingress,
+            on_taints=evidence.taints.update if evidence.ingress is not None else None,
+            on_boundary_attempts=evidence.signal_ids.update if evidence.ingress is not None else None,
+            on_catalog_matches=evidence.signal_ids.update if evidence.ingress is not None else None,
         )
     except Exception:
         raise StrictInspectionAbort(site="normalization-inspect", tool="?",
