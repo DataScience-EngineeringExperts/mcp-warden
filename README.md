@@ -39,6 +39,10 @@ feature first ships in the 2.1.0 package. The development
 governed decisions and recovery ports. Live checkpoint enforcement still requires
 an independently protected platform provider and DSE-1076 guard integration.
 
+The isolated [capability preparation foundation](docs/CAPABILITY_BROKER.md) uses exact signed grants to prepare canonical MCP/client requests and minimal synthetic descriptors.
+It selects a narrower approved time window only for the same bound operation; ambiguity denies. It issues no lease, signs no receipt or opens transport.
+Final PEP authorization, call consumption and live bypass protection remain separate gates.
+
 The offline [capability review command](docs/CAPABILITY_REVIEW.md) shows declared
 and observed capability evidence one operation at a time. Matching evidence can
 make a capability pending human review. Review output grants no authority.

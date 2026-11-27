@@ -30,6 +30,15 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ## [Unreleased]
 
+### Capability preparation foundation
+
+- Add pure selection from existing exact signed grants, minimal synthetic
+  tool-list projection and canonical MCP/client request preparation (DSE-725).
+  A unique narrower time interval can be selected only for the same bound
+  operation; equal or incomparable candidates prepare nothing.
+- Preserve independent final PDP/PEP authorization. This development foundation
+  adds no lease issuance, signing, transport, call accounting or live enforcement.
+
 ### Added
 
 - DSE-722 adds an offline deployment identity format and `identity compare`.
