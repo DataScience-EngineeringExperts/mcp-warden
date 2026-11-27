@@ -19,6 +19,34 @@ CHECKS = {
 }
 
 
+def fixture_nodes(control, node):
+    if control == "vendor-drift":
+        return [f"{node}[mutation0]", f"{node}[mutation1]"]
+    return [node]
+
+
+def verified_cases(report):
+    try:
+        cases = ET.parse(report).findall(".//testcase")
+    except (OSError, ET.ParseError):
+        return set()
+    verified = set()
+    seen = set()
+    duplicates = set()
+    for case in cases:
+        classname = case.get("classname", "")
+        if not classname.startswith("tests."):
+            continue
+        module = classname.removeprefix("tests.")
+        node = f"{module}.py::{case.get('name', '')}"
+        if node in seen:
+            duplicates.add(node)
+        seen.add(node)
+        if all(case.find(tag) is None for tag in ("error", "failure", "skipped")):
+            verified.add(node)
+    return verified - duplicates
+
+
 def git(*args):
     return subprocess.check_output(["git", *args], cwd=ROOT, text=True).strip()
 
@@ -29,7 +57,7 @@ def main():
         sys.exit("A clean checkout is required to identify the tested source.")
     outcomes = dict.fromkeys(CHECKS, "unverified")
     env = {
-        **os.environ,
+        **{k: v for k, v in os.environ.items() if not k.startswith("PYTEST_")},
         "PYTHONPATH": str(ROOT / "src"),
         "PYTEST_ADDOPTS": "",
         "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
@@ -37,7 +65,11 @@ def main():
     with tempfile.TemporaryDirectory() as scratch:
         report = Path(scratch) / "report.xml"
         args = [sys.executable, "-m", "pytest", "-o", "addopts=", "--junitxml", str(report)]
-        args.extend(f"tests/{node}" for node in CHECKS.values())
+        args.extend(
+            f"tests/{case}"
+            for control, node in CHECKS.items()
+            for case in fixture_nodes(control, node)
+        )
         run = subprocess.run(
             args,
             cwd=ROOT,
@@ -46,25 +78,10 @@ def main():
             stderr=subprocess.DEVNULL,
             check=False,
         )
-        if report.exists():
-            cases = ET.parse(report).findall(".//testcase")
-            for control, node in CHECKS.items():
-                module, name = node.split("::")
-                matches = [
-                    case
-                    for case in cases
-                    if case.get("classname") == f"tests.{module[:-3]}"
-                    and case.get("name", "").split("[")[0] == name
-                ]
-                if matches:
-                    outcomes[control] = (
-                        "passed"
-                        if all(
-                            all(case.find(tag) is None for tag in ("error", "failure", "skipped"))
-                            for case in matches
-                        )
-                        else "unverified"
-                    )
+        verified = verified_cases(report)
+        for control, node in CHECKS.items():
+            if set(fixture_nodes(control, node)) <= verified:
+                outcomes[control] = "passed"
     passed = run.returncode == 0 and all(value == "passed" for value in outcomes.values())
     outcomes.update(retention="operator-evidence-required", deletion="operator-evidence-required")
     print(
