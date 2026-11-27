@@ -238,6 +238,10 @@ scope-honesty box and makes no compliance/regulatory claim.
 
 ## Source layout
 
+[Capability review](docs/CAPABILITY_REVIEW.md) documents the offline operator
+command and the separate agent output. `src/mcp_warden/capability_review.py`
+implements the projection with coverage in `tests/test_capability_review.py`.
+
 `src/mcp_warden/artifact_payload.py`, `artifact_trust.py`, and `cli_trust.py` implement
 the strict existing-artifact decoder, opt-in public-key verifier, and unsigned
 review/signature CLI. Tests are `tests/test_artifact_trust.py`,

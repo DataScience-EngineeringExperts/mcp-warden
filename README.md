@@ -39,6 +39,10 @@ feature first ships in the 2.1.0 package. The development
 governed decisions and recovery ports. Live checkpoint enforcement still requires
 an independently protected platform provider and DSE-1076 guard integration.
 
+The offline [capability review command](docs/CAPABILITY_REVIEW.md) shows declared
+and observed capability evidence one operation at a time. Matching evidence can
+make a capability pending human review. Review output grants no authority.
+
 > ⚠️ **Install `mcp-warden-cli`, not `mcp-warden`.** The PyPI name `mcp-warden` is
 > an **unrelated package by a different author** — it is not this project. The
 > correct install is `pip install mcp-warden-cli` (the CLI command is still

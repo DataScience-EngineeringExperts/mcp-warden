@@ -16,6 +16,13 @@ from mcp_warden.artifact_trust import (
     parse_roots,
     roots_digest,
 )
+from mcp_warden.capability_review import (
+    MAX_REVIEW_BYTES,
+    ReviewAudienceV1,
+    parse_review_evidence,
+    project_agent_review,
+    project_human_review,
+)
 from mcp_warden.decision_models import ArtifactKindV1, VerificationAlgorithmV1
 
 
@@ -67,6 +74,23 @@ def register(app, console, err_console) -> None:
 
     def emit(value: dict) -> None:
         typer.echo(json.dumps(value, sort_keys=True))
+
+    @trust.command("review-capabilities")
+    def review_capabilities(
+        evidence: Path = typer.Argument(..., help="Local capability evidence JSON."),
+        audience: ReviewAudienceV1 = typer.Option(
+            ..., "--audience", help="Use human only on an operator-controlled output channel."
+        ),
+    ) -> None:
+        """Project offline evidence into pending or ineligible capability rows."""
+        try:
+            records = parse_review_evidence(_read(evidence, MAX_REVIEW_BYTES))
+            if audience == ReviewAudienceV1.HUMAN:
+                typer.echo(json.dumps(project_human_review(records), indent=2, sort_keys=True))
+            else:
+                emit(project_agent_review(records))
+        except ArtifactTrustError as error:
+            fail(error)
 
     @trust.command("roots-digest")
     def digest_roots(
