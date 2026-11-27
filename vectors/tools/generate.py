@@ -361,6 +361,7 @@ DRIFT: list[tuple[str, str, dict[str, Any], dict[str, Any]]] = [
     ("no-drift", "Identical surface: overall_digest matches, the drift set is empty.", _SIMPLE, _SIMPLE),
     ("server-identity", "argv changed -> server-identity (critical).", one_tool_surface(obj({}), args=["server.py"]), one_tool_surface(obj({}), args=["other.py"])),
     ("server-identity-url", "HTTP endpoint changed -> server-identity (critical).", one_tool_surface(obj({}), url="https://a.example.com/mcp"), one_tool_surface(obj({}), url="https://b.example.com/mcp")),
+    ("digest-mismatch-unexplained", "A baseline with duplicate tool names: the shadowed first duplicate changes, name-keyed diffing sees nothing, yet overall_digest differs -> digest-mismatch-unexplained (high), never a clean verdict.", surface([tool("a", obj({}), "one"), tool("a", obj({}), "same")]), surface([tool("a", obj({}), "two"), tool("a", obj({}), "same")])),
     ("tool-added", "A new tool name -> tool-added (high).", surface([tool("a", obj({}))]), surface([tool("a", obj({})), tool("b", obj({}))])),
     ("tool-removed", "A tool disappeared -> tool-removed (medium).", surface([tool("a", obj({})), tool("b", obj({}))]), surface([tool("a", obj({}))])),
     ("capability-added", "A command-like property appears -> capability-added shell-exec (high) plus the schema facts.", one_tool_surface(obj({"x": {}})), one_tool_surface(obj({"command": {}}))),

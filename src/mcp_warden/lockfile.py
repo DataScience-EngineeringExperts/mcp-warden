@@ -12,6 +12,9 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
+import os
+import secrets
+import stat
 from pathlib import Path
 from typing import Any
 
@@ -314,7 +317,21 @@ def write_lock(lock: WardenLock, path: str | Path) -> None:
     """
     p = Path(path)
     try:
-        p.write_text(lock_to_pretty_json(lock), encoding="utf-8")
+        data = lock_to_pretty_json(lock)
+        try:
+            mode = stat.S_IMODE(p.stat().st_mode) & 0o777
+        except FileNotFoundError:
+            mode = 0o644
+        tmp = p.with_name(f".warden-{secrets.token_hex(16)}.tmp")
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(tmp, p)
+        finally:
+            tmp.unlink(missing_ok=True)
     except OSError as exc:
         logger.error("failed to write lock to %s: %s", p, exc)
         raise

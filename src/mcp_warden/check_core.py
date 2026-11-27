@@ -30,7 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from .capture import capture_surface_http_sync, capture_surface_sync
+from .capture import MAX_LIST_PAGES, capture_surface_http_sync, capture_surface_sync
 from .checks import run_checks
 from .drift import DriftItem, compute_drift
 from .lockfile import build_lock, read_lock, surface_digest
@@ -59,6 +59,7 @@ def run_check_full(
     timeout_s: float,
     *,
     url: str | None = None,
+    max_pages: int = MAX_LIST_PAGES,
 ) -> CheckResult:
     """Run the full check verdict path: read lock -> capture -> checks -> drift.
 
@@ -73,6 +74,7 @@ def run_check_full(
         timeout_s: Capture timeout in seconds.
         url: When set, connect to this HTTP/SSE endpoint instead of spawning a
             subprocess. Mutually exclusive with meaningful ``command``/``args``.
+        max_pages: Cap on ``nextCursor`` pages per list call (``--max-pages``).
 
     Returns:
         A :class:`CheckResult` (``drift`` empty == clean).
@@ -84,9 +86,9 @@ def run_check_full(
     """
     baseline = read_lock(lock_path)
     if url:
-        surface = capture_surface_http_sync(url, timeout_s=timeout_s)
+        surface = capture_surface_http_sync(url, timeout_s=timeout_s, max_pages=max_pages)
     else:
-        surface = capture_surface_sync(command, args, timeout_s=timeout_s)
+        surface = capture_surface_sync(command, args, timeout_s=timeout_s, max_pages=max_pages)
     findings = run_checks(surface)
     # build_lock constructs an IN-MEMORY current lock for diffing only; it is
     # never written to disk on the check path.

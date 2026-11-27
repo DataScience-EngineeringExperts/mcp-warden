@@ -1,8 +1,8 @@
 # mcp-warden — System Context Diagram
 
-Last Updated: 2026-10-19
+Last Updated: 2026-11-26
 
-**CLI 2.0.0 / schema level 4** extends capture/lock/check to complete tool annotations and output
+**CLI 2.3.0 / schema level 4** includes complete tool annotations and output
 schemas, with structural output drift and Python/TypeScript parity. The existing
 tools/list gate compares those commitments for v4 locks; legacy locks retain narrower
 runtime coverage and require re-pin for the new fields. Annotations grant no authority.
@@ -45,6 +45,16 @@ logic) plus a separate informational provenance section. It never prints raw
 > `trust prepare` emits unsigned review/signing bytes; `trust verify` checks signatures
 > only. Human signing remains external and the root pin must be host-protected.
 
+> [`identity compare`](docs/ARTIFACT_TRUST.md#offline-deployment-identity-comparison)
+> reads two offline deployment observations and verifies both with an independently pinned
+> observation key set. Package identity is independent of deployment. The command reports
+> matching commitments, material drift, or indeterminate evidence. Capture, approval, and
+> revocation remain separate paths.
+
+> [Capability review](docs/CAPABILITY_REVIEW.md) projects separate declaration
+> and observation references for an offline operator review. The agent view
+> exposes closed statuses and descriptors for eligible rows.
+
 > `conclave` (the 4-model adversarial council referenced in `docs/THREAT_MODEL.md`)
 > is a **dev-time design reviewer** that shaped this contract. It is **NOT** a
 > runtime dependency and is never invoked by `pin`/`check`/`policy`.
@@ -59,6 +69,27 @@ logic) plus a separate informational provenance section. It never prints raw
 > exit-code contract (0/1/2, fail closed) and the shared SARIF + JSONL emitters, so they
 > enter an existing code-scanning pipeline with no new plumbing. Runtime capability
 > brokering remains out of scope (DSE-725). See [`docs/AGENT_GATES.md`](docs/AGENT_GATES.md).
+
+> **Supplied-content normalization (DSE-718)** is an opt-in Linux worker path,
+> separate from the base CLI parser dependencies. All nine input families use
+> the same engine over supplied bytes; no external connectors fetch content.
+> The coordinator creates digest-bound untrusted lineage/maps and validates
+> bounded output; PDP/PEP remains the delivery authority. The optional guard
+> wrapper inspects every complete server frame before legacy delivery, forces
+> strict refusal, and has no in-process fallback. See
+> [`docs/CONTENT_NORMALIZATION.md`](docs/CONTENT_NORMALIZATION.md).
+
+```mermaid
+flowchart LR
+    supplied[Supplied bytes: nine ingress families] --> capture[Exact-byte ingress envelope]
+    capture --> coord[normalization.py: trusted evidence coordinator]
+    coord --> sandbox[normalization_sandbox.py: Linux isolated immutable worker]
+    sandbox --> parser[components/normalizer: bounded recursive parsers]
+    parser --> validate[Bounded untrusted manifest validation]
+    validate --> evidence[Derived untrusted envelope and source-map digest]
+    evidence --> inspection[Raw and normalized shared inspection]
+    inspection --> gate[Existing policy and delivery boundary]
+```
 
 > **`doctor` (DSE-1516)** is the zero-config entry point and sits at the far left of the
 > picture: it reads the MCP client configs already on the developer's machine (Claude
@@ -86,7 +117,10 @@ logic) plus a separate informational provenance section. It never prints raw
 
 > **`pin --sign` / `check --verify` (Issue #16)** add optional **Sigstore keyless** signing of
 > the lock: `--sign` writes a `<lockname>.sigstore` bundle binding `overall_digest` (survives
-> `lock rotate`); `--verify` recomputes + verifies **fail-closed** (`docs/SIGNING.md`). The
+> `lock rotate`); `--verify` recomputes + verifies **fail-closed** (`docs/SIGNING.md`).
+> `lock sign` (DSE-1530) applies the same signing to an existing unsigned lock, for
+> attesters that capture in a network-less sandbox; it never overwrites or stacks a
+> signature (exclusive `os.link` placement). The
 > release pipeline (`.github/workflows/release.yml`) signs mcp-warden's OWN published artifacts
 > the same way ("heal thyself"). Signing is the optional `mcp-warden-cli[sigstore]` extra — the
 > core gate has no crypto dependency.
@@ -98,7 +132,14 @@ logic) plus a separate informational provenance section. It never prints raw
 > Minting can change PyPI pending-publisher records; it is not universally read-only.
 > Successful exchange is not proof of project upload permission. CLI 2.0.0's
 > failed OIDC exchange was recovered with an authorized manual upload of the signed bytes;
-> publisher alignment must be verified independently. See [`RELEASING.md`](RELEASING.md).
+> the company-repository publisher subsequently passed the 2026-11-06
+> authentication-only check ([run 42224199909](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/runs/42224199909)).
+> `mcp-warden-cli` now belongs to the [TheDataExperts PyPI organization](https://pypi.org/org/TheDataExperts/).
+> The normal [v2.3.0 release run](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/runs/43605647867)
+> subsequently built, OIDC-uploaded and Sigstore-signed the package. GitHub/PyPI
+> artifact hashes match; PyPI provenance identifies the company repository and
+> `release.yml`. The manual fallback remains retained; retirement is separate.
+> See [`RELEASING.md`](RELEASING.md#normal-release-proof--2026-11-14).
 
 ---
 
@@ -140,15 +181,22 @@ flowchart TB
     envelope["Content Envelope V1\nDSE-715 · implemented evidence foundation\nNOT wired to guard · grants no authority"]
     decision["Deterministic PDP/PEP V1\nDSE-716 · signed adapter/bundle gates + fixed corpus\nNOT wired to guard"]
     artifactTrust["Opt-in Ed25519 artifact verifier\nartifact_trust.py · protected root pin + key roles\ntrust CLI: unsigned preparation / signature verification"]
+    reviewInputs["Offline declaration and observation references"]
+    capabilityReview["Capability review projection\ncapability_review.py"]
+    humanReview["Operator-controlled review output"]
+    agentReview["Redacted agent report"]
     evidence["PEP V2 · signed evidence before effect\nDSE-717 reference SDK · recovery + replay\nnine live floors · retained historical signer pins\nindependent platform provider still required"]
     atk -. "governs partial foundation" .-> envelope
     envelope -. "required input" .-> decision
     artifactTrust -. "external signature verification port" .-> decision
+    reviewInputs --> capabilityReview
+    capabilityReview --> humanReview
+    capabilityReview --> agentReview
     decision -. "requires production gate" .-> evidence
 
     subgraph ci["CI pipeline (GitHub Actions / local)"]
         warden["mcp-warden CLI
-doctor · pin · check (· --against-community) · policy · lock rotate · diff
+doctor · pin · check (· --against-community) · policy · lock rotate · lock sign · diff
 deploy-gate · auth audit"]
     end
 
@@ -242,10 +290,12 @@ sequenceDiagram
 flowchart LR
     subgraph live["Live session (v0.2 guard)"]
         client["MCP client\n(agent / host)"]
-        guard["mcp-warden guard\n(transparent stdio proxy)\nv0.3: deterministic tier\nblocks by default"]
+        guard["mcp-warden guard\n(stdio-facing)\nv0.3: deterministic tier\nblocks by default"]
         server2["Target MCP server\n(child, argv array,\nNEVER via a shell)"]
-        client <-- "c2s frames" --> guard
-        guard <-- "s2c frames" --> server2
+        httpServer["Streamable HTTP MCP server"]
+        client <-- "MCP over stdio" --> guard
+        guard <-- "stdio" --> server2
+        guard <-- "HTTP POST / SSE / DELETE" --> httpServer
     end
 
     lock[("warden.lock\n+ §11 per-tool\ninspection policy")]
@@ -268,10 +318,10 @@ flowchart LR
     guard -- "on block (opt-in): JSON-RPC error\nOR redacted-content result" --> client
 ```
 
-- `guard` passes **every frame through untouched EXCEPT** `tools/call` request/response
+- Launched-stdio `guard` passes **every frame through untouched EXCEPT** `tools/call` request/response
   (+ the `tools/list_changed` gate vs the lock). `initialize`/capabilities are never
   rewritten; enforcement begins only at the first `tools/call` (`GUARD_PROXY.md` §2).
-- A framing/inspection **error fails open** by default — the frame passes through and the session
+- A framing/inspection **error fails open** by default on launched stdio — the frame passes through and the session
   is never killed (`GUARD_PROXY.md` §9). Oversized frames (> `--max-frame-bytes`) and truncated
   frames at EOF also fail open (`GUARD_PROXY_V3.md` §2.3–§2.4). **(#21)** The opt-in `--strict`
   flag fails CLOSED instead, but only for the inspection layer: an error at the result /
@@ -301,7 +351,7 @@ sequenceDiagram
     CI->>S: initialize · tools/list · resources/list · prompts/list
     S-->>CI: declared surface → drift verdict vs warden.lock (unchanged path)
     CI->>C: https/ssh clone @ --corpus-ref (protocol.allow=never, hooks off, "--") or local path
-    C-->>CI: attesters.json (discovery only) + locks/<eco>/<pkg>/<ver>/<id>.lock + .sigstore
+    C-->>CI: attesters.json (discovery only) + locks/schema-N/<eco>/<pkg>/<ver>/<id>.lock + .sigstore
     CI->>CI: intersect with pin — unpinned id ignored (warn), divergent identity → exit 2
     CI->>CI: confine paths under corpus root · size caps · schema_version == implemented
     CI->>SG: verify each bundle over build_statement(overall_digest, DIRECTORY coordinate) for the pinned identity/issuer
@@ -324,7 +374,8 @@ follows the layout in `docs/COMMUNITY_CORPUS.md`.
   the repo (delegated to host controls — PR review, branch protection).
 - **Untrusted:** the target server and everything beyond its transport boundary.
 - The boundary is the **stdio channel** to a spawned child or the network channel to the
-  configured Streamable HTTP endpoint. Runtime `guard` interception remains stdio-only.
+  configured Streamable HTTP endpoint. The [HTTP adapter](docs/STREAMABLE_HTTP_GUARD.md)
+  rejects incomplete frames before delivery and mediates inspected results before writing to the harness.
 
 ## What is explicitly NOT in this picture
 
@@ -334,14 +385,13 @@ follows the layout in `docs/COMMUNITY_CORPUS.md`.
 
 **Still NOT in scope, even with v0.2 `guard`/`inspect`:**
 - No behavioral defense (`T-BEHAVE`) — content is inspected, side effects are not.
-- No cross-call/conversational correlation; each frame is inspected independently.
+- Correlation uses a bounded observation window within one runtime session or offline trace.
 - No decoding of image/audio/blob/base64 result content (coverage gap recorded as
   `WRD-RES-UNINSPECTABLE`).
-- No network calls / no DNS resolution by checks, policy, or the proxy. Exfil + SSRF match
-  on literal host strings **and (#54, D6) raw IP literals** in result text/args against the
-  SSRF/exfil address ranges (`net_rules`) — deterministic, still no DNS-name resolution.
-- No HTTP/SSE runtime proxy: `guard` remains stdio-only. Streamable HTTP support is limited
-  to definition capture by `pin` and `check` via `--url`.
+- Offline result inspection and argument-policy evaluation match literal hosts and IP
+  addresses without network access. Runtime result inspection can also resolve DNS
+  names. The Streamable HTTP adapter applies a DNS deadline and candidate limit.
+- Runtime `guard --url` uses Streamable HTTP. The legacy HTTP+SSE transport and upstream-initiated client RPC are outside the adapter contract.
 - The fuzzy `WRD-RES-INJECT-PHRASE` MONITOR tier is **never default-block**, even in v0.3
   (opt-in only via `--block-inject-phrase`).
 - Windows lifecycle guarantees are **experimental** in v0.3 — job-object best-effort teardown,

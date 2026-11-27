@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from . import res_rules
 from .checks_secret import scan_field
+from .injection_catalog import match_injection_catalog
 
 if TYPE_CHECKING:  # avoid a circular import at runtime
     from .result_inspection import InspectionPolicy, ResultFinding
@@ -172,21 +173,23 @@ def inspect_url_note(
 
 
 def inspect_inject(text: str, tool: str, idx: int, phrases: tuple[str, ...] | list[str]) -> list["ResultFinding"]:
-    """WRD-RES-INJECT-PHRASE (§4.1): narrow exact-phrase, MONITOR tier."""
+    """Report versioned indicators and legacy exact phrases at the MONITOR tier."""
     hits = res_rules.match_inject_phrases(text, phrases)
-    if not hits:
+    injection_matches = match_injection_catalog(text)
+    if not hits and not injection_matches:
         return []
+    message = "Result matched the injection catalog."
+    if hits:
+        message = f"tools/{tool}: result matched curated injection phrase(s): {', '.join(hits)}"
     return [
         _RF(
             rule_id="WRD-RES-INJECT-PHRASE",
             severity="medium",
             tier=TIER_MONITOR,
-            message=f"tools/{tool}: result matched curated injection phrase(s): {', '.join(hits)}",
+            message=message,
             block_index=idx,
-            # Discrete, machine-readable copy of the matched curated phrases (safe:
-            # from our own denylist, never raw result text). Enables per-phrase FP
-            # aggregation without parsing `message` (issue #12).
             matched_phrases=tuple(hits),
+            injection_matches=injection_matches,
         )
     ]
 

@@ -253,3 +253,35 @@ def test_relaxed_ref_def_across_v2_v3_boundary_blocks_high(monkeypatch):
     assert any(
         d.target == "tools/t" and d.drift_class == "schema-constraint-relaxed" for d in drift
     )
+
+
+def test_digest_mismatch_without_item_diff_is_drift_unapproved():
+    """DSE-2125: duplicate-name entries collapse in the name-keyed index, so a change to the
+    shadowed (first) duplicate moves overall_digest with no per-item diff. Must not be clean."""
+    def tools(first_desc):
+        return [
+            CapturedTool(name="a", description=first_desc, input_schema={}),
+            CapturedTool(name="a", description="same", input_schema={}),
+        ]
+    base = _lock(_surface(tools("one")))
+    cur = _lock(_surface(tools("two")))
+    assert base.overall_digest != cur.overall_digest
+    assert not base.pin.approved
+    drift = compute_drift(base, cur)
+    unexplained = [d for d in drift if d.drift_class == "digest-mismatch-unexplained"]
+    assert drift and unexplained and unexplained[0].severity == "high"
+
+
+def test_digest_mismatch_without_item_diff_is_drift_forced_digest():
+    s = _surface([CapturedTool(name="read_file", description="d", input_schema={})])
+    base = _lock(s)
+    cur = _lock(s).model_copy(update={"overall_digest": "0" * 64})
+    drift = compute_drift(base, cur)
+    assert [d.drift_class for d in drift] == ["digest-mismatch-unexplained"]
+
+
+def test_unexplained_finding_not_added_when_items_explain_the_mismatch():
+    base = _lock(_surface([CapturedTool(name="a", input_schema={})]))
+    cur = _lock(_surface([CapturedTool(name="a", input_schema={}), CapturedTool(name="b", input_schema={})]))
+    classes = {d.drift_class for d in compute_drift(base, cur)}
+    assert "tool-added" in classes and "digest-mismatch-unexplained" not in classes

@@ -16,10 +16,12 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
 from . import res_rules
+from .correlation_runtime import CorrelationSession, ResponseEvidence
 from .result_inspection import (
     TIER_BLOCK,
     ResultFinding,
@@ -37,8 +39,8 @@ class TraceError(Exception):
 def _load_records(path: str | Path) -> list[dict[str, Any]]:
     """Load a JSONL trace into a list of normalized records.
 
-    Each record is ``{"direction": str|None, "frame": dict}``. A bare frame line
-    is wrapped with ``direction=None`` (inferred later).
+    Wrapped records may flag a locally withheld request with ``forwarded: false``.
+    Bare frames retain inferred direction for single-result inspection only.
 
     Raises:
         TraceError: On read failure or a non-JSON line.
@@ -62,7 +64,11 @@ def _load_records(path: str | Path) -> list[dict[str, Any]]:
         if not isinstance(obj, dict):
             raise TraceError(f"trace line {n} is not a JSON object")
         if "frame" in obj and isinstance(obj["frame"], dict):
-            records.append({"direction": obj.get("direction"), "frame": obj["frame"]})
+            records.append({
+                "direction": obj.get("direction"), "frame": obj["frame"],
+                "directed_record": not {"jsonrpc", "method", "id", "result", "error"}.intersection(obj),
+                "forwarded": obj.get("forwarded") is not False,
+            })
         else:
             records.append({"direction": None, "frame": obj})
     return records
@@ -87,6 +93,7 @@ def analyze_trace(
     exfil_denylist: tuple[str, ...] | None = None,
     inject_phrases: tuple[str, ...] | None = None,
     stats: dict[str, Any] | None = None,
+    normalization_profile=None,
 ) -> list[ResultFinding]:
     """Analyze a recorded trace and return stamped result findings.
 
@@ -108,7 +115,16 @@ def analyze_trace(
     Raises:
         TraceError: On trace read/parse failure.
     """
-    records = _load_records(path)
+    if normalization_profile is not None:
+        from .normalization import _profile
+        from .normalization_trace import load_universal_records
+        try:
+            _profile(normalization_profile)
+            records = load_universal_records(path)
+        except Exception:
+            raise TraceError("NRM-PROTOCOL") from None
+    else:
+        records = _load_records(path)
     exfil = exfil_denylist or res_rules.SEED_EXFIL_DENYLIST
     phrases = inject_phrases or res_rules.SEED_INJECT_PHRASES
 
@@ -116,49 +132,71 @@ def analyze_trace(
     tool_by_id: dict[Any, str] = {}
     findings: list[ResultFinding] = []
     frames_inspected = 0
+    correlation = CorrelationSession()
 
+    universal_incoming = 0
     for rec in records:
         frame = rec["frame"]
         direction = _direction_of(rec)
         rpc_id = frame.get("id")
+        directed = rec.get("directed_record", True) and rec["direction"] in ("c2s", "s2c")
+        if not directed:
+            correlation.undirected()
+        elif direction == "c2s":
+            findings.extend(correlation.client(frame, forwarded=rec.get("forwarded", True)))
+        if normalization_profile is not None and rpc_id is not None and type(rpc_id) not in (str, int):
+            raise TraceError("NRM-PROTOCOL")
         if direction == "c2s" and frame.get("method") is not None and rpc_id is not None:
             inflight[rpc_id] = str(frame["method"])
             params = frame.get("params") or {}
             if isinstance(params, dict):
                 tool_by_id[rpc_id] = str(params.get("name", ""))
             continue
-        if direction != "s2c" or rpc_id is None or "result" not in frame:
-            continue
-        if inflight.get(rpc_id) != "tools/call":
-            continue
-        result = frame.get("result")
-        if not isinstance(result, dict):
-            continue
-        tool = tool_by_id.get(rpc_id, "")
-        pol = policy_for_tool(lock, tool)
-        frames_inspected += 1
+        is_directed_response = directed and direction == "s2c"
+        evidence = correlation.response(frame) if is_directed_response else ResponseEvidence(None)
+        if normalization_profile is None and evidence.ingress is not None:
+            evidence.add_raw(frame["result"])
         try:
-            raw = inspect_result(result, tool, pol, exfil_denylist=exfil, inject_phrases=phrases)
-        except Exception as exc:  # mirror guard's fail-open posture (§9)
-            logger.error("inspect: catalog raised on id=%s: %s", rpc_id, exc)
-            continue
-        for f in raw:
-            findings.append(
-                ResultFinding(
-                    rule_id=f.rule_id,
-                    severity=f.severity,
-                    tier=f.tier,
-                    message=f.message,
-                    snippet=f.snippet,
-                    block_index=f.block_index,
-                    sub_rule=f.sub_rule,
-                    action="reported",
-                    direction="s2c",
-                    rpc_id=rpc_id,
-                    tool=tool,
-                    matched_phrases=f.matched_phrases,
+            if normalization_profile is not None and direction == "s2c":
+                universal_incoming += 1
+                from .normalization_inspection import inspect_mcp_frame
+                raw = inspect_mcp_frame(
+                    frame, inflight.get(rpc_id, ""), normalization_profile,
+                    policy_for_tool(lock, tool_by_id.get(rpc_id, "")),
+                    exfil_denylist=exfil, inject_phrases=phrases,
+                    ingress=evidence.ingress,
+                    on_taints=evidence.taints.update if evidence.ingress is not None else None,
+                    on_boundary_attempts=evidence.signal_ids.update if evidence.ingress is not None else None,
+                    on_catalog_matches=evidence.signal_ids.update if evidence.ingress is not None else None,
                 )
-            )
+                if inflight.get(rpc_id) == "tools/call" and "result" in frame:
+                    frames_inspected += 1
+                for finding in raw:
+                    findings.append(replace(finding, action="reported", direction=direction, rpc_id=rpc_id))
+                inflight.pop(rpc_id, None)
+                tool_by_id.pop(rpc_id, None)
+                continue
+            if direction != "s2c" or rpc_id is None or "result" not in frame:
+                continue
+            if inflight.get(rpc_id) != "tools/call":
+                continue
+            result = frame.get("result")
+            if not isinstance(result, dict):
+                continue
+            tool = tool_by_id.get(rpc_id, "")
+            pol = policy_for_tool(lock, tool)
+            frames_inspected += 1
+            try:
+                raw = inspect_result(result, tool, pol, exfil_denylist=exfil, inject_phrases=phrases)
+            except Exception as exc:  # mirror guard's fail-open posture (§9)
+                logger.error("inspect: catalog raised on id=%s: %s", rpc_id, exc)
+                continue
+            findings.extend(replace(f, action="reported", direction="s2c", rpc_id=rpc_id, tool=tool) for f in raw)
+        finally:
+            if is_directed_response:
+                findings.extend(correlation.server(evidence))
+    if normalization_profile is not None and not universal_incoming:
+        raise TraceError("NRM-PARTIAL")
     if stats is not None:
         stats["frames_inspected"] = frames_inspected
     return findings

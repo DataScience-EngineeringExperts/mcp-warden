@@ -109,10 +109,17 @@ written at a different `schema_version` than this mcp-warden implements is
 ## 4. Corpus layout
 
 ```
-attesters.json                                          discovery list (NOT the trust root)
-locks/<ecosystem>/<segment>/<version>/<attester-id>.lock
-locks/<ecosystem>/<segment>/<version>/<attester-id>.lock.sigstore
+attesters.json                                                   discovery list (NOT the trust root)
+locks/schema-<N>/<ecosystem>/<segment>/<version>/<attester-id>.lock
+locks/schema-<N>/<ecosystem>/<segment>/<version>/<attester-id>.lock.sigstore
 ```
+
+- `schema-<N>` is the lock `schema_version`. mcp-warden reads and writes only the
+  subtree for the schema it implements (`schema-4` since 2.2.0), so one append-only
+  corpus can carry several lock formats side by side. Schema-3 entries written by
+  mcp-warden 1.x sit at the legacy `locks/<ecosystem>/...` path and read as NOVEL to
+  2.x; a lock whose `schema_version` disagrees with its subtree is still
+  `WRD-CONSENSUS-SCHEMA-MISMATCH`.
 
 - `ecosystem` ∈ `npm` | `pypi`.
 - `segment` is the package name with `/` replaced by `__`, so the scoped npm package

@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from . import res_rules
+from .correlation_runtime import CorrelationSession
 from .framing import Frame, serialize_frame
 from .guard_result import _frame_error_note, handle_s2c  # noqa: F401  (re-exported)
 from .policy_eval import evaluate_call, overall_denied
@@ -118,6 +119,25 @@ class GuardConfig:
     strict_frame_cap: bool = False
     max_frame_bytes: int = 8 * 1024 * 1024
     max_inflight: int = 1024
+    normalization_image: str | None = None
+
+    def __post_init__(self) -> None:
+        self.validate_normalization()
+
+    def validate_normalization(self) -> None:
+        """Universal mode cannot silently inherit legacy shadow/fail-open flags."""
+        if self.normalization_image is None:
+            return
+        from .normalization import _profile
+        from .normalization_ipc import NormalizationError
+        from .normalization_models import NormalizationProfileV1
+        _profile(NormalizationProfileV1(self.normalization_image))
+        if self.audit_only or any(getattr(self, name) for name in (
+            "no_block_ansi", "no_block_secret_echo", "no_block_exfil_domain",
+            "no_block_exfil_ip_literal", "no_block_list_changed", "no_block_policy",
+        )):
+            raise NormalizationError("NRM-PROFILE")
+        self.strict = self.strict_frame_cap = True
 
     #: Maps each default-on deterministic result rule to its opt-out field name.
     _DET_OPTOUT = {
@@ -192,6 +212,8 @@ class GuardState:
     #: task group before another pump can raise), but this flag GUARANTEES a single
     #: stderr line + single exit 3 even if that concurrency assumption ever changes.
     strict_abort_fired: bool = False
+    correlation: CorrelationSession = field(init=False, default_factory=CorrelationSession, repr=False)
+    record_withheld: Callable[[dict[str, Any]], None] | None = None
 
     def remember_request(self, rpc_id: Any, method: str, tool: str = "") -> None:
         """Record an in-flight request id->method (+tool), bounded LRU (§4.4)."""
@@ -222,6 +244,20 @@ class GuardState:
 
 
 def handle_c2s(state: GuardState, frame: Frame, mode: str) -> bytes:
+    """Handle a client frame, then observe its local forwarding disposition."""
+    obj = frame.json
+    if state.record is not None and obj is not None:
+        state.record("c2s", obj)
+    out = _handle_c2s(state, frame, mode)
+    if obj is not None:
+        if not out and state.record_withheld is not None:
+            state.record_withheld(obj)
+        for finding in state.correlation.client(obj, forwarded=bool(out)):
+            state.emit(finding)
+    return out
+
+
+def _handle_c2s(state: GuardState, frame: Frame, mode: str) -> bytes:
     """Process one client->server frame; return the bytes to forward to the server (§4.1).
 
     Pass-through unless a ``tools/call`` request hits a policy deny WITH
@@ -236,8 +272,6 @@ def handle_c2s(state: GuardState, frame: Frame, mode: str) -> bytes:
     Returns:
         The bytes to forward server-ward (``b""`` to withhold a blocked request).
     """
-    if state.record is not None and frame.json is not None:
-        state.record("c2s", frame.json)
     obj = frame.json
     if obj is None:
         state.emit(_frame_error_note("c2s", None, frame.parse_error or "unparseable frame"))

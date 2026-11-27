@@ -252,6 +252,12 @@ emit low `schema-out-cosmetic-modified`; missing skeletons fall back to high
 `schema-out-modified`. SARIF prefixes these with `WRD-DRIFT-`, including
 `WRD-DRIFT-SCHEMA-OUT-TYPE-BROADENED`.
 
+A differing `overall_digest` is itself drift. If it differs and the per-entry diff produced
+no item (for example a baseline with duplicate tool/resource/prompt keys, which name-keyed
+indexing collapses), an implementation MUST emit high `digest-mismatch-unexplained` (target
+`lock/overall_digest`) so the verdict is never clean. Any other item, including the
+`schema-version-migrated` advisory, already explains the mismatch and suppresses it.
+
 
 ### 8.1 Overall digest
 
@@ -290,6 +296,12 @@ changes the pass/fail decision.
 | Resource/prompt modified | analogous to tools | **low** |
 | Inspection-policy modified | a tool's §11 `inspection` value changed/added/removed | **medium** |
 | No drift | every `entry_digest` matches **and** `overall_digest` matches | — |
+
+**Capture completeness (normative).** A capturer MUST drain every `nextCursor` page of
+each list call and MUST fail rather than emit a lock when a chain exceeds its page cap
+(reference: 256, `--max-pages`) or a later page errors. Tool names, prompt names and
+resource URIs are entry identities: a capturer MUST refuse a surface that repeats one,
+on any page, because a name-keyed diff would let one entry shadow the other.
 
 When `overall_digest` matches the baseline there is provably no drift, and per-entry
 diffing MAY be skipped; otherwise an implementation diffs per entry so that a report can

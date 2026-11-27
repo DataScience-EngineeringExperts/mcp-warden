@@ -14,7 +14,13 @@ import re
 from dataclasses import dataclass
 from pathlib import PurePosixPath
 
+from . import SCHEMA_VERSION
 from .checks_supply import _is_flag, _is_local_path
+
+#: Corpus subtree for the lock schema this mcp-warden reads and writes. Entries at
+#: another schema live beside it (schema 3 at the legacy ``locks/<ecosystem>/...``)
+#: and are never looked at, so an append-only corpus can carry several formats.
+CORPUS_SCHEMA_DIR = f"schema-{SCHEMA_VERSION}"
 
 #: Explicit ``--coordinate`` grammar: ``<ecosystem>:<name>@<version>``.
 _EXPLICIT = re.compile(r"(?P<eco>npm|pypi):(?P<name>[^:]+)@(?P<ver>[^@/]+)\Z")
@@ -41,8 +47,8 @@ class Coordinate:
         return self.name.replace("/", "__")
 
     def relative_dir(self) -> PurePosixPath:
-        """``locks/<ecosystem>/<segment>/<version>`` inside a corpus checkout."""
-        return PurePosixPath("locks") / self.ecosystem / self.path_segment / self.version
+        """``locks/schema-<N>/<ecosystem>/<segment>/<version>`` inside a corpus checkout."""
+        return PurePosixPath("locks") / CORPUS_SCHEMA_DIR / self.ecosystem / self.path_segment / self.version
 
 
 def _clean(text: str) -> bool:

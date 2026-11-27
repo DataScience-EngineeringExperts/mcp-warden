@@ -1,6 +1,6 @@
 # Documentation Index — mcp-warden
 
-Last Updated: 2026-10-19
+Last Updated: 2026-11-26
 
 Master index of every document in this repository. The `docs/` files are the
 **security contract and source of truth** for all algorithms; the three core docs
@@ -8,11 +8,15 @@ describe and visualize the implementation that satisfies that contract.
 
 ---
 
+## Privacy operations
+
+[Control mappings and local fixture report](docs/PRIVACY_EVIDENCE.md) · [Deployment record template](docs/PRIVACY_OPERATOR_TEMPLATE.md)
+
 ## Core docs (3-core rule)
 
 | # | Doc | Purpose |
 |---|-----|---------|
-| 1 | [`README.md`](README.md) | Project overview, install, the pin/check CI demo (full walkthrough archived to [`docs/PIN_CHECK_DEMO.md`](docs/PIN_CHECK_DEMO.md) to hold the 500-line core-doc limit), CLI reference (incl. v0.3 `lock rotate` + redacted offline `diff` viewer), GitHub Action usage section (Issue #18), **pre-commit hook section (Issue #22)** |
+| 1 | [`README.md`](README.md) | Project overview, install, the pin/check CI demo (full walkthrough in [`docs/PIN_CHECK_DEMO.md`](docs/PIN_CHECK_DEMO.md)), CLI reference (incl. v0.3 `lock rotate`, DSE-1530 `lock sign`, DSE-1539 `--max-pages` + redacted offline `diff` viewer), GitHub Action usage section (Issue #18), **pre-commit hook section (Issue #22)** |
 | 2 | [`SYSTEM_CONTEXT_DIAGRAM.md`](SYSTEM_CONTEXT_DIAGRAM.md) | System context + pin/check sequence (mermaid); trust boundary; `conclave` as dev-time reviewer only; composite GitHub Action + **pre-commit hook** as consumer delivery vehicles |
 | 3 | [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md) | This file |
 
@@ -34,6 +38,31 @@ implementations (Python reference, zero-dependency TypeScript) prove it in CI.
 | [`packages/lock-ts/`](packages/lock-ts/README.md) | `@mcp-warden/lock` — verify-only TypeScript: hand-written JCS, SHA-256, capability + skeleton derivation, drift classifier; `npm test` runs the same corpus |
 | [`.github/workflows/integrity-gate.yml`](.github/workflows/integrity-gate.yml) `conformance` job | Runs both harnesses; mutation proof flips one hex char and requires BOTH to fail |
 
+## Supplied-content normalization (DSE-718)
+
+| Artifact | Purpose |
+|---|---|
+| [`docs/CONTENT_NORMALIZATION.md`](docs/CONTENT_NORMALIZATION.md) | Finite nine-ingress supplied-content contract, format/provenance limits, Linux sandbox, budgets, refusal/migration and qualification |
+| [`components/normalizer/README.md`](components/normalizer/README.md) | Standalone parser component, independent hash lock, pinned runtime and conservative format profiles |
+| [`src/mcp_warden/normalization_models.py`](src/mcp_warden/normalization_models.py) | Frozen finite profiles and evidence types |
+| [`src/mcp_warden/normalization.py`](src/mcp_warden/normalization.py) | Trusted coordinator validates worker evidence and derives untrusted envelopes |
+| [`src/mcp_warden/normalization_sandbox.py`](src/mcp_warden/normalization_sandbox.py) | Fixed immutable-image Linux Docker supervisor; bounded IPC and fail-closed cleanup |
+| [`src/mcp_warden/normalization_ingress.py`](src/mcp_warden/normalization_ingress.py) | All nine supplied-payload adapters; no external retrieval |
+| [`src/mcp_warden/normalization_inspection.py`](src/mcp_warden/normalization_inspection.py) | Raw/normalized shared catalog and supplied MCP container checks |
+| [`src/mcp_warden/normalization_guard.py`](src/mcp_warden/normalization_guard.py) | Atomic opt-in live frame mediation before legacy handling |
+| [`src/mcp_warden/normalization_trace.py`](src/mcp_warden/normalization_trace.py) | Bounded, explicit-direction offline trace loading |
+| [`scripts/qualify_normalizer.sh`](scripts/qualify_normalizer.sh) | Actual-image qualification with independent builder QA claims |
+| [`.github/workflows/normalization.yml`](.github/workflows/normalization.yml) | Dedicated Python 3.12 Linux parser/sandbox/every-ingress/fuzz qualification |
+
+## Offline deployment identity (DSE-722)
+
+| Artifact | Purpose |
+|---|---|
+| [Deployment observation workflow](docs/ARTIFACT_TRUST.md#offline-deployment-identity-comparison) | Signed observation format, evidence custody, digest formulas, and CLI exit codes |
+| [`src/mcp_warden/bundle_identity.py`](src/mcp_warden/bundle_identity.py) | Strict package and deployment records and signature-gated comparison |
+| [`src/mcp_warden/bundle_identity_lock.py`](src/mcp_warden/bundle_identity_lock.py) | Declared capability projection from v4 lock entries |
+| [`tests/test_bundle_identity.py`](tests/test_bundle_identity.py) | Local and remote observation fixtures, signature and schema validation, and material drift |
+
 ## Agent gates (`deploy-gate` + `auth audit` — DSE-1257 / DSE-1258)
 
 Two fail-closed gates extending warden past MCP-surface integrity into the adjacent
@@ -47,9 +76,11 @@ is the MCP auth posture sound. Both reuse the `check` exit-code contract (0 clea
 | [`src/mcp_warden/deploy_gate.py`](src/mcp_warden/deploy_gate.py) | `WRD-GATE-*` engine: eval thresholds, guardrail presence, budget, approval receipt |
 | [`src/mcp_warden/cli_deploy_gate.py`](src/mcp_warden/cli_deploy_gate.py) | `deploy-gate` command body (register idiom) |
 | [`src/mcp_warden/auth_audit.py`](src/mcp_warden/auth_audit.py) | `WRD-AUTH-*` static config audit; reuses `checks_secret.scan_field` for vendor patterns (vendor hits are never downgraded); template fill-me-ins are `WRD-AUTH-PLACEHOLDER-SECRET` (low), matched on whole tokens |
+| [`src/mcp_warden/auth_refs.py`](src/mcp_warden/auth_refs.py) | Reference / locator / placeholder heuristics behind `WRD-AUTH-*`: `${VAR}` forms, secret-manager URIs and credential paths, token-shaped segments (incl. `-`/`_`-joined tokens, DSE-1540), position-scoped 1Password IDs (DSE-2124), placeholder bounds |
 | [`src/mcp_warden/cli_auth.py`](src/mcp_warden/cli_auth.py) | `auth audit` sub-app command body |
 | [`tests/test_deploy_gate.py`](tests/test_deploy_gate.py) | Engine per-control pass/fail + CLI exit codes + fail-closed on malformed evidence |
 | [`tests/test_auth_audit.py`](tests/test_auth_audit.py) | Every rule, the deliberate non-flags (loopback, `${VAR}` refs, stdio), redaction, CLI/JSON/SARIF |
+| [`tests/test_auth_refs_op_ids.py`](tests/test_auth_refs_op_ids.py) | 1Password ID references and field, fragment, scheme, length, case and malformed-path regression controls (DSE-2124) |
 | [`tests/test_agent_gates_examples.py`](tests/test_agent_gates_examples.py) | Pins the shipped examples to the per-server verdicts their README claims, so a rule change cannot silently make the docs wrong; also asserts the planted fake credentials never reach a finding field |
 | [`examples/agent-gates/`](examples/agent-gates/) | Runnable demos — a 6-server config (4 flagged / 2 deliberately clean, incl. the `Bearer ${VAR}` embedded-reference shape from #94) and pass/fail deploy evidence, with expected verdicts documented and verified |
 
@@ -161,18 +192,19 @@ scope-honesty box and makes no compliance/regulatory claim.
 | [`docs/SPEC.md`](docs/SPEC.md) | **MCP Lock Format v1** — the vendor-neutral, self-contained format specification any tool can implement: on-disk `warden.lock` schema, RFC 8785 (JCS) canonicalization, SHA-256 `sha256:<hex>` hashing, `overall_digest` construction, the normative drift class + severity table, the optional per-tool inspection block, and a Conformance section (§12.1: passing `vectors/` **is** conformance) + worked example. `WARDEN_LOCK_SCHEMA.md` is the mcp-warden implementation of this format |
 | [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) | **(v0.1)** Positioning, trust model (TOFU + `--approve`), assets/actors, the four threat classes (MCP-DRIFT / MCP-CAPSURF / MCP-SECRET / MCP-SUPPLY), explicit out-of-scope limits, deliberate cuts |
 | [`docs/THREAT_MODEL_V2.md`](docs/THREAT_MODEL_V2.md) | **(v0.2)** Addendum extending the v0.1 model: T-RESULT vectors, the defends (BLOCK) / monitors (fuzzy) / still-does-NOT-defend (T-BEHAVE) table, runtime trust-model notes, retained + added cuts, shadow-default positioning |
-| [`docs/AGENT_TRUST_KERNEL.md`](docs/AGENT_TRUST_KERNEL.md) | **(DSE-714, design contract)** Normative invariants for the future deterministic Agent Trust Kernel: trust boundaries, complete mediation, default deny, non-overridable critical classes, evidence-before-effect, offline operation, residual risks, and bindings for DSE-715 through DSE-717. MCP-Warden 2.0.0 is explicitly not yet ATK-conformant |
+| [`docs/AGENT_TRUST_KERNEL.md`](docs/AGENT_TRUST_KERNEL.md) | **(DSE-714, design contract)** Normative invariants for the future deterministic Agent Trust Kernel: trust boundaries, complete mediation, default deny, non-overridable critical classes, evidence-before-effect, offline operation, residual risks, and bindings for DSE-715 through DSE-717. MCP-Warden 2.1.0 is explicitly not yet ATK-conformant |
 | [`docs/CONTENT_ENVELOPE.md`](docs/CONTENT_ENVELOPE.md) | **(DSE-715, implemented foundation)** Strict immutable V1 content envelope, domain-separated exact-byte digests, canonical metadata boundary, bounded one-hop lineage, monotonic taint, stable code-only errors, and secret-safe public projection. Evidence only; no authority or whole-ATK conformance claim |
 | [`docs/POLICY_ENFORCEMENT.md`](docs/POLICY_ENFORCEMENT.md) | **(DSE-716, implemented foundation)** Versioned signed policy/runtime/adapter/executable-bundle activation, exact adapter/bundle-bound leases, mechanically derived frozen handler identity, deterministic default-deny PDP, evidence-gated structural PEP, stable reason/recovery matrix, caps, and non-optional fixed-corpus adapter harness. Separate DSE-717 V2 evidence foundation; real protected-platform and live-guard gates remain pending |
-| [`docs/DECISION_RECEIPTS.md`](docs/DECISION_RECEIPTS.md) | **(DSE-717, development foundation)** Independently authorized signed receipts, strict strengthening rules and finite noncritical overrides; separate primary/fallback logs, protected-state/latch ports, authenticated recovery, pure historical replay, current eligibility, safe projections and nonoptional reference conformance. Reference providers cannot establish platform rollback resistance; absent from PyPI 2.0.0 |
+| [`docs/DECISION_RECEIPTS.md`](docs/DECISION_RECEIPTS.md) | **(DSE-717, development foundation)** Independently authorized signed receipts, strict strengthening rules and finite noncritical overrides; separate primary/fallback logs, protected-state/latch ports, authenticated recovery, pure historical replay, current eligibility, safe projections and nonoptional reference conformance. Reference providers cannot establish platform rollback resistance; first published in 2.1.0 |
 | [`docs/WARDEN_LOCK_SCHEMA.md`](docs/WARDEN_LOCK_SCHEMA.md) | **mcp-warden implementation of [`docs/SPEC.md`](docs/SPEC.md) (MCP Lock Format v1).** `warden.lock` format, RFC 8785 canonicalization + SHA-256 hashing, field/entry/overall digests, the normative drift definition + severities; **§5.1/§6.2 structural schema diff** (normalized per-tool `schema_skeleton`, `schema_version` 4 — annotations/output added at v4, skeleton added at v2, in-document `$ref` resolution at v3 (#29), granular `WRD-DRIFT-SCHEMA-*` taxonomy + severities, v1 fallback); **§8.1/§8.2 (v0.3, #19)** structured out-of-digest provenance (`pinner` / `attestations` / `rotation_count`, `PROVENANCE_VERSION`, B4 `bound_digest` format) + `lock rotate` digest-invariant semantics + the #16 signing implication; **§11 (v0.2)** optional per-tool inspection policy (`expected_output_charset` / `may_return_urls` / `secret_echo_applies`, fail-safe defaults, digest impact) |
 | [`docs/WARDEN_LOCK_EXAMPLE.md`](docs/WARDEN_LOCK_EXAMPLE.md) | Illustrative full `warden.lock` + a post-`lock rotate` `pin` block (archived from WARDEN_LOCK_SCHEMA §9 to keep that core doc under the line cap) |
 | [`docs/CHECKS.md`](docs/CHECKS.md) | The deterministic `WRD-*` static-check catalog (capability/secret/supply/robustness), the shared tokenizer, severity→SARIF mapping, redaction rule, CUT list. **Reused by v0.2** `WRD-RES-SECRET-ECHO` (the `WRD-SEC-*` patterns + redaction) |
 | [`docs/POLICY_MODEL.md`](docs/POLICY_MODEL.md) | Policy schema, the four high-risk shapes, constraint vocabulary, fail-closed defaults, SSRF deny ranges, lint + single-sample eval semantics. **Enforced at runtime by v0.2 `guard`** on live `tools/call` requests |
 | [`docs/RESULT_INSPECTION.md`](docs/RESULT_INSPECTION.md) | **(v0.2)** The `WRD-RES-*` result-inspection catalog: deterministic/fuzzy tier partition, per-rule exact match definitions (ANSI allowlist, secret-echo via `WRD-SEC-*`, exfil seed denylist, injection seed phrase list), severities, SARIF mapping, redaction, fail-safe per-tool precision. Run identically by `guard` and `inspect` |
 | [`docs/GUARD_PROXY.md`](docs/GUARD_PROXY.md) | **(v0.2 base, updated to v0.3 defaults)** The `guard` transparent stdio proxy + `inspect` offline analyzer contract: frame-handling discipline, single-loop framing (Content-Length + newline), incremental scan, subprocess lifecycle, runtime arg-policy + `tools/list_changed` gate, the **v0.3 default-block posture** + `--no-block-*` opt-outs + `--audit-only`, reserved codes `-32001`/`-32002`, and the exact on-the-wire "block" behavior |
+| [`docs/STREAMABLE_HTTP_GUARD.md`](docs/STREAMABLE_HTTP_GUARD.md) | Streamable HTTP runtime guard, laptop harness configuration, supported lifecycle, and rollback |
 | [`docs/GUARD_PROXY_V3.md`](docs/GUARD_PROXY_V3.md) | **(v0.3)** The proxy-hardening contract: `notifications/cancelled`/`progress` untouched passthrough (§1), subprocess-lifecycle edge cases — server-crash `-32002` synthesis, client-disconnect process-group teardown, truncated/oversized-frame fail-open (§2), Windows experimental degradation (§3), the full v0.3 block-flag scheme + precedence (§4), and **(#21) `--strict` fail-CLOSED mode — terminate on an inspection-layer error, `-32003` non-retriable, exit `3` (§5)** |
-| [`docs/SIGNING.md`](docs/SIGNING.md) | **(v0.3, #16)** Sigstore keyless signing + verification of `warden.lock`: the optional `[sigstore]` extra, the deterministic `mcp-warden-lock-digest/v1` statement that binds ONLY `overall_digest` (survives `lock rotate`), `pin --sign` / `check --verify` usage, the **fixed-sidecar** verify contract (pointer field never trusted), the full fail-closed matrix, the TUF-cache/offline caveat, and the two accepted trade-offs (rotate-replay + committed-fixture coverage gap + refresh steps) |
+| [`docs/SIGNING.md`](docs/SIGNING.md) | **(v0.3, #16)** Sigstore keyless signing + verification of `warden.lock`: the optional `[sigstore]` extra, the deterministic `mcp-warden-lock-digest/v1` statement that binds ONLY `overall_digest` (survives `lock rotate`), `pin --sign` / **`lock sign` (DSE-1530, exclusive placement, no overwrite/stacking)** / `check --verify` usage, the **fixed-sidecar** verify contract (pointer field never trusted), the full fail-closed matrix, the TUF-cache/offline caveat, and the two accepted trade-offs (rotate-replay + committed-fixture coverage gap + refresh steps) |
 
 ## Non-normative design and implementation plans
 
@@ -180,6 +212,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 
 | Plan | Purpose |
 |---|---|
+| [`docs/plans/2026-11-26-control-plane-deployment-design.md`](docs/plans/2026-11-26-control-plane-deployment-design.md) | Proposed managed and self-hosted profiles, shared security semantics, regional data boundaries, recovery and upgrade design, and installation parity gates (DSE-730) |
 | [`docs/plans/2026-10-04-dse717-reconciliation.md`](docs/plans/2026-10-04-dse717-reconciliation.md) | Recovered-branch provenance, integration ownership, failure-path validation and exact-head security/external-review gates |
 | [`docs/plans/2026-07-19-decision-receipts-design.md`](docs/plans/2026-07-19-decision-receipts-design.md) | Original DSE-717 receipt, deterministic rule, evidence, recovery and replay design |
 | [`docs/plans/2026-07-19-decision-receipts-implementation.md`](docs/plans/2026-07-19-decision-receipts-implementation.md) | Original strict-TDD execution plan and independently reviewed release gates |
@@ -211,7 +244,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 | Doc | Purpose |
 |-----|---------|
 | [`RELEASING.md`](RELEASING.md) | Operator runbook: existing-project PyPI publisher settings, authentication-only verification, release delivery, post-release checks, failed-job recovery and rollback/yank. PyPI dist name is `mcp-warden-cli`; CLI/repo stay `mcp-warden`. |
-| [`CHANGELOG.md`](CHANGELOG.md) | Keep-a-Changelog history through CLI 2.0.0 / schema level 4 with explicit in/out-of-scope. |
+| [`CHANGELOG.md`](CHANGELOG.md) | Keep-a-Changelog history through CLI 2.1.0 (schema level 4) with explicit in/out-of-scope. |
 | [`.github/workflows/release.yml`](.github/workflows/release.yml) | Publish-on-Release: build Python + tested TypeScript tarball; upload only Python through OIDC (repo gate + `skip-existing`); Sigstore-sign artifacts/checksums. Manual `verify-pypi` exchanges credentials without build/upload/signing. The gate variable alone does not prove publisher alignment. |
 | [`scripts/verify_pypi_oidc.py`](scripts/verify_pypi_oidc.py) | Standard-library OIDC probe: reviewed-main binding, owner inspection acknowledgment, bounded HTTPS, no redirects/token logs/storage/uploads. PyPI minting can mutate pending records; exchange does not prove project upload permission. |
 | [`docs/plans/2026-10-02-pypi-automation-repair.md`](docs/plans/2026-10-02-pypi-automation-repair.md) | Bounded automation repair and session wrap plan, including the authenticated PyPI browser boundary. |
@@ -220,6 +253,10 @@ scope-honesty box and makes no compliance/regulatory claim.
 ---
 
 ## Source layout
+
+[Capability review](docs/CAPABILITY_REVIEW.md) documents the offline operator
+command and the separate agent output. `src/mcp_warden/capability_review.py`
+implements the projection with coverage in `tests/test_capability_review.py`.
 
 Capability preparation modules are additive and remain outside the live guard:
 
@@ -246,7 +283,7 @@ review/signature CLI. Tests are `tests/test_artifact_trust.py`,
 | `src/mcp_warden/decision_models.py` · `policy_decision.py` | **(DSE-716)** Strict V1 decision models; signed policy/runtime activation; exact lease/request binding; deterministic default-deny PDP; canonical digest-only decisions and stable recovery codes | POLICY_ENFORCEMENT.md / AGENT_TRUST_KERNEL ATK-03/05/06/07/08/09 |
 | `src/mcp_warden/policy_enforcement.py` · `handler_identity.py` · `executable_bundle.py` · `adapter_conformance.py` | **(DSE-716)** Signed adapter and executable-bundle closure; exact manifest-bound leases; closure-free mechanically code/dependency-derived frozen handlers; canonical effect binding; evidence-gated PEP; PEP-owned execution trace and multiple output-channel scans; mandatory versioned malformed-input corpus | POLICY_ENFORCEMENT.md / AGENT_TRUST_KERNEL ATK-03/04/06/08 |
 | `src/mcp_warden/tokenizer.py` | Shared tokenizer + capability derivation (single source of truth) | CHECKS §3 / WARDEN_LOCK_SCHEMA §5.4 |
-| `src/mcp_warden/capture.py` | Declared-surface capture over stdio (argv array, no shell) or Streamable HTTP (`--url`); shared list normalization, timeouts, and errors | THREAT_MODEL §3.3 / WARDEN_LOCK_SCHEMA §4.1 |
+| `src/mcp_warden/capture.py` | Declared-surface capture over stdio (argv array, no shell) or Streamable HTTP (`--url`) through one `_capture_session`; capability-aware, fail-closed list calls (DSE-1538); `--max-pages` cursor cap (default `MAX_LIST_PAGES` 256) and duplicate tool-name / resource-URI / prompt-name rejection (DSE-1539); timeouts and errors | THREAT_MODEL §3.3 / WARDEN_LOCK_SCHEMA §4.1 |
 | `src/mcp_warden/models.py` | Pydantic models for captured surface + lock (incl. `Pinner`/`Attestation` provenance) | WARDEN_LOCK_SCHEMA §2–§8 |
 | `src/mcp_warden/lockfile.py` | Lock builder + reader/writer + overall digest | WARDEN_LOCK_SCHEMA §5–§6, §9 |
 | `src/mcp_warden/check_core.py` | **(#22)** Shared check verdict core (`run_check` / `run_check_full`): read_lock→capture→checks→build_lock(in-memory)→compute_drift. Single source of truth for `cli.py:check` AND the pre-commit wrapper | WARDEN_LOCK_SCHEMA §6.2 |
@@ -277,7 +314,7 @@ review/signature CLI. Tests are `tests/test_artifact_trust.py`,
 | `src/mcp_warden/wire_block.py` | **(v0.2/v0.3)** on-wire block synthesis: `-32001` error-response + redacted-content (`_meta.warden.modified`); **v0.3** `-32002` `transport_error`; **(#21)** `-32003` `strict_abort_error` (non-retriable) | GUARD_PROXY §7 · V3 §2.6, §5 |
 | `src/mcp_warden/inspector.py` | **(v0.2)** offline JSONL analyzer over recorded sessions (same catalog) | GUARD_PROXY §3 |
 | `src/mcp_warden/emit_res.py` | **(v0.2)** SARIF 2.1.0 + JSONL emitters for `ResultFinding` (action/direction/tier) | GUARD_PROXY §10 |
-| `src/mcp_warden/cli.py` · `cli_guard.py` · `cli_lock.py` · `cli_diff.py` | `typer` CLI (`pin`/`check`/`policy`/`guard`/`inspect`/`lock rotate`/`diff`), exit codes; **`check` delegates its verdict to `check_core.run_check_full` (#22)**; `guard`/`inspect` bodies in `cli_guard`, `lock rotate` + integrity gate in `cli_lock`, **(v0.3) `diff` redacted offline lock viewer (`SAFE_PROVENANCE_FIELDS` allowlist, never reads `server.command`/`args`)** in `cli_diff` | all |
+| `src/mcp_warden/cli.py` · `cli_guard.py` · `cli_lock.py` · `cli_diff.py` | `typer` CLI (`pin`/`check`/`policy`/`guard`/`inspect`/`lock rotate`/`lock sign`/`diff`), exit codes; **`check` delegates its verdict to `check_core.run_check_full` (#22)**; `guard`/`inspect` bodies in `cli_guard`, `lock rotate` + `lock sign` (DSE-1530) + shared integrity / stale-approval gate in `cli_lock`, **(v0.3) `diff` redacted offline lock viewer (`SAFE_PROVENANCE_FIELDS` allowlist, never reads `server.command`/`args`)** in `cli_diff` | all |
 | `src/mcp_warden/precommit.py` | **(#22)** `mcp-warden-precommit` pre-commit entry point — wraps `check_core.run_check`; check-only (never imports `pin`/lock-writer, never opens the lock for write) | README pre-commit section |
 
 ## Tests
@@ -315,3 +352,10 @@ review/signature CLI. Tests are `tests/test_artifact_trust.py`,
 | `tests/fixtures/poison_server.py` | **(v0.2)** result-poisoning fixture server (ANSI/secret-echo/exfil/inject/clean tools) |
 | `tests/fixtures/crash_server.py` · `listchange_server.py` · `clean_listchange.warden.lock` | **(v0.3)** raw-stdio lifecycle fixtures: crash-mid-call (`-32002`) and `tools/list_changed` rug-pull + its pinned clean lock |
 | `tests/fixtures/fault_guard_launcher.py` | **(#21)** test-only launcher that monkeypatches ONE inspection function (`inspect_result` / `evaluate_call` / `diverges_from_lock` / `_hash_live_tools`) to raise inside the spawned guard child, then runs the real CLI — drives the `--strict` terminate-site tests without any test branch in production code; `FAULT_SECRET` plants a secret for the redaction test |
+
+## Version history
+
+| Date | Change |
+|------|--------|
+| 2026-11-14 | Shipped DSE-718 in v2.3.0; normal company OIDC upload, matching GitHub/PyPI hashes, verified signatures/provenance and installed CLI smoke. See [release proof](RELEASING.md#normal-release-proof--2026-11-14). Manual fallback retained. README operator examples preserved in [archive](docs/archive/2026-11-14-readme-operations.md). |
+| 2026-11-06 | Recorded TheDataExperts PyPI ownership, Active organization billing, normal company publisher and removal of the obsolete personal publisher; linked successful authentication-only run 42224199909. Account-wide token revoked; project-only manual fallback retained. No upload today; 2.2.0 unchanged and next normal release upload/provenance proof outstanding. |

@@ -69,6 +69,7 @@ Drift items are emitted as SARIF/JSONL results with `ruleId = WRD-DRIFT-<CLASS>`
 | `WRD-DRIFT-SCHEMA-COSMETIC-MODIFIED` | note (low) | schema bytes differ, structure identical |
 | `WRD-DRIFT-SCHEMA-MODIFIED` | error (high) | v1-lock fallback / **unresolvable** opaque-leaf `$ref` change |
 | `WRD-DRIFT-SCHEMA-VERSION-MIGRATED` | note (low) | lock schema-format upgrade (v2→v3) moved the digest; advisory only (#29) |
+| `WRD-DRIFT-DIGEST-MISMATCH-UNEXPLAINED` | error (high) | `overall_digest` differs but no per-entry item explains it (e.g. duplicate keys); never a clean verdict (DSE-2125) |
 
 Schema-drift results additionally carry `properties.detail` (a compact, non-secret summary,
 e.g. `maxLength 64→4096`) and `properties.schemaPath` (the changed entry, `tools/<name>`).

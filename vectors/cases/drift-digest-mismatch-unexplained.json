@@ -1,0 +1,119 @@
+{
+  "id": "drift/digest-mismatch-unexplained",
+  "kind": "drift",
+  "description": "A baseline with duplicate tool names: the shadowed first duplicate changes, name-keyed diffing sees nothing, yet overall_digest differs -> digest-mismatch-unexplained (high), never a clean verdict.",
+  "lock": {
+    "schema_version": 4,
+    "warden_version": "0.0.0",
+    "server": {
+      "command": "python",
+      "args": [
+        "server.py"
+      ],
+      "url": null,
+      "command_digest": "sha256:b42e4fe9ab2871e34b4115b0f7a8a762c2e2fd3712805c4e323da999456eeb77"
+    },
+    "tools": [
+      {
+        "name": "a",
+        "description_hash": "sha256:49e9fcfb5617aad332d56d58ffd0c7020d29ec1d0d0a03b7d7c47f268820acf3",
+        "input_schema_hash": "sha256:efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:2d8c4084daa010804bd17d176ad23efd75cb5a090341e68e7ea1dd0d48a9fcf4"
+      },
+      {
+        "name": "a",
+        "description_hash": "sha256:106c4202d3d02a3ff34000f19889ac489e6a40f2ee68ea9e3984633ab059dd4d",
+        "input_schema_hash": "sha256:efddc7bd8bbcef73a14eb1ace1ffdaec81e518ef1e13c1e9271d0b8acb694a49",
+        "capabilities": [],
+        "schema_skeleton": {
+          "props": {
+            "$root": {
+              "type": [
+                "object"
+              ],
+              "required": false,
+              "enum": null,
+              "constraints": {
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "annotations_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_hash": "sha256:74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b",
+        "output_schema_skeleton": null,
+        "entry_digest": "sha256:3ec940342d024cc39e7567d7e044d7932b8f1292dde0686df95feec2b0d4d851"
+      }
+    ],
+    "resources": [],
+    "prompts": [],
+    "findings": [],
+    "overall_digest": "sha256:e39b92e8eee4119c53c7f63034babc49b719de4c79b357d40b0cdf0022f1d0af",
+    "pin": {
+      "created_at": "2026-01-01T00:00:00Z",
+      "warden_version": "0.0.0",
+      "mcp_protocol_version": "2025-06-18",
+      "approved": false,
+      "approver": null,
+      "approved_at": null,
+      "approved_digest": null,
+      "provenance_version": 1,
+      "pinner": null,
+      "attestations": [],
+      "rotated_at": null,
+      "rotation_count": 0
+    }
+  },
+  "surface": {
+    "command": "python",
+    "args": [
+      "server.py"
+    ],
+    "tools": [
+      {
+        "name": "a",
+        "description": "two",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      },
+      {
+        "name": "a",
+        "description": "same",
+        "inputSchema": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    ],
+    "resources": [],
+    "prompts": []
+  },
+  "expect": [
+    {
+      "drift_class": "digest-mismatch-unexplained",
+      "severity": "high",
+      "target": "lock/overall_digest",
+      "detail": null
+    }
+  ]
+}

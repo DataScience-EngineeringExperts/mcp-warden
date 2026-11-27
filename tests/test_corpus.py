@@ -50,7 +50,7 @@ CORPUS = FIXTURES / "corpus"
 ATTESTERS = CORPUS / "attesters.json"
 CLEAN_LOCK = read_lock(FIXTURES / "clean.warden.lock")
 CLEAN_DIGEST = surface_digest(CLEAN_LOCK)
-OTHER_DIGEST = surface_digest(read_lock(CORPUS / "locks/npm/@example__other/1.0.0/alice.lock"))
+OTHER_DIGEST = surface_digest(read_lock(CORPUS / "locks/schema-4/npm/@example__other/1.0.0/alice.lock"))
 
 CLEAN = Coordinate("npm", "@example/clean", "1.0.0")
 OTHER = Coordinate("npm", "@example/other", "1.0.0")
@@ -164,7 +164,7 @@ def test_resolve_coordinate_from_argv(command, args, expected):
 def test_explicit_coordinate_overrides_argv():
     got = resolve_coordinate("node", ["./x.js"], explicit="npm:@example/clean@1.0.0")
     assert got == CLEAN and got.path_segment == "@example__clean"
-    assert str(got.relative_dir()) == "locks/npm/@example__clean/1.0.0"
+    assert str(got.relative_dir()) == f"locks/schema-{SCHEMA_VERSION}/npm/@example__clean/1.0.0"
 
 
 # --- trust (CSO C3) -----------------------------------------------------------
@@ -248,13 +248,23 @@ def test_relocated_sidecar_is_rejected(monkeypatch, tmp_path):
     install_fake_verify(monkeypatch)
     root = tmp_path / "corpus"
     shutil.copytree(CORPUS, root)
-    src = root / "locks/npm/@example__clean/1.0.0"
-    dst = root / "locks/npm/@example__other/1.0.0"
+    src = root / "locks/schema-4/npm/@example__clean/1.0.0"
+    dst = root / "locks/schema-4/npm/@example__other/1.0.0"
     shutil.copy(src / "alice.lock", dst / "alice.lock")
     shutil.copy(src / "alice.lock.sigstore", dst / "alice.lock.sigstore")
     with pytest.raises(CorpusError) as ei:
         verified_digests(root, OTHER, consumer_pin())
     assert ei.value.rule_id == RULE_UNVERIFIABLE and "signature did not verify" in str(ei.value)
+
+
+def test_legacy_layout_entries_are_never_read(monkeypatch, tmp_path):
+    # DSE-2143: schema-3 entries sit at the legacy locks/<eco>/... path. A 2.x consumer
+    # looks only under locks/schema-<N>/, so they are NOVEL, never a schema mismatch.
+    install_fake_verify(monkeypatch)
+    root = tmp_path / "corpus"
+    shutil.copytree(CORPUS, root)
+    (root / "locks/schema-4/npm").rename(root / "locks/npm")
+    assert verified_digests(root, CLEAN, consumer_pin()) == {}
 
 
 @pytest.mark.parametrize("name", ["@example/nosig", "@example/corrupt", "@example/wrongsig", "@example/stranger"])
@@ -287,7 +297,7 @@ def test_hostile_corpus_shapes_are_unverifiable_not_tracebacks(monkeypatch, tmp_
     install_fake_verify(monkeypatch)
     root = tmp_path / "corpus"
     shutil.copytree(CORPUS, root)
-    d = root / "locks/npm/@example__clean/1.0.0"
+    d = root / "locks/schema-4/npm/@example__clean/1.0.0"
     shutil.rmtree(d)
     (d / "alice.lock").mkdir(parents=True)
     with pytest.raises(CorpusError) as ei:
@@ -304,7 +314,7 @@ def test_size_caps(monkeypatch, tmp_path):
     install_fake_verify(monkeypatch)
     root = tmp_path / "corpus"
     shutil.copytree(CORPUS, root)
-    d = root / "locks/npm/@example__clean/1.0.0"
+    d = root / "locks/schema-4/npm/@example__clean/1.0.0"
     for target, cap in (
         (d / "alice.lock", corpus_verify.MAX_LOCK_BYTES),
         (d / "alice.lock.sigstore", corpus_verify.MAX_SIDECAR_BYTES),
@@ -348,7 +358,7 @@ def test_schema_version_mismatch_is_distinct(monkeypatch, tmp_path):
     install_fake_verify(monkeypatch)
     root = tmp_path / "corpus"
     shutil.copytree(CORPUS, root)
-    p = root / "locks/npm/@example__clean/1.0.0/alice.lock"
+    p = root / "locks/schema-4/npm/@example__clean/1.0.0/alice.lock"
     doc = json.loads(p.read_text())
     doc["schema_version"] = SCHEMA_VERSION - 1
     p.write_text(json.dumps(doc))
@@ -361,7 +371,7 @@ def test_pydantic_error_text_is_reduced_to_field_paths(monkeypatch, tmp_path):
     install_fake_verify(monkeypatch)
     root = tmp_path / "corpus"
     shutil.copytree(CORPUS, root)
-    p = root / "locks/npm/@example__clean/1.0.0/alice.lock"
+    p = root / "locks/schema-4/npm/@example__clean/1.0.0/alice.lock"
     doc = json.loads(p.read_text())
     doc["overall_digest"] = "SECRET-LOOKING-VALUE-THAT-MUST-NOT-ECHO"
     del doc["tools"]
@@ -622,7 +632,7 @@ def test_fetch_unreachable_url(monkeypatch, tmp_path):
 
 def test_fixture_sidecars_are_not_real_bundles():
     # The fixture corpus must never pass REAL verification: its sidecars are fakes.
-    sc = CORPUS / "locks/npm/@example__clean/1.0.0/alice.lock.sigstore"
+    sc = CORPUS / "locks/schema-4/npm/@example__clean/1.0.0/alice.lock.sigstore"
     doc = json.loads(sc.read_text())
     assert doc["over"] == build_statement(CLEAN_LOCK.overall_digest, "npm:@example/clean@1.0.0").decode()
     assert "mediaType" not in doc  # a real sigstore bundle carries mediaType
@@ -637,8 +647,8 @@ def test_surface_digest_is_launch_independent_and_signature_covers_it():
 
 def test_tampered_entries_under_a_valid_signature_are_rejected(monkeypatch, tmp_path):
     install_fake_verify(monkeypatch)
-    src = CORPUS / "locks/npm/@example__clean/1.0.0"
-    dst = tmp_path / "locks/npm/@example__clean/1.0.0"
+    src = CORPUS / "locks/schema-4/npm/@example__clean/1.0.0"
+    dst = tmp_path / "locks/schema-4/npm/@example__clean/1.0.0"
     dst.mkdir(parents=True)
     shutil.copy(ATTESTERS, tmp_path / "attesters.json")
     shutil.copy(src / "alice.lock.sigstore", dst / "alice.lock.sigstore")

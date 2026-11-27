@@ -7,7 +7,7 @@ fires here fires identically in both — non-negotiable #1.
 Tier partition (fixed, §2):
   * BLOCK-deterministic: ``WRD-RES-ANSI``, ``WRD-RES-SECRET-ECHO``,
     ``WRD-RES-EXFIL-DOMAIN``, ``WRD-RES-EXFIL-IP-LITERAL``.
-  * MONITOR-fuzzy: ``WRD-RES-INJECT-PHRASE`` (narrow curated exact-phrase).
+  * MONITOR-fuzzy: ``WRD-RES-INJECT-PHRASE`` (exact phrases and versioned indicators).
   * Notes (never block): ``WRD-RES-URL``, ``WRD-RES-UNINSPECTABLE``,
     ``WRD-RES-FRAME-ERROR``, ``WRD-RES-LOCK-INVALID``.
 
@@ -20,10 +20,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from . import res_catalog
+from .injection_catalog import InjectionMatch
 from .models import WardenLock
+
+if TYPE_CHECKING:
+    from .correlation import CorrelationMatch
 
 logger = logging.getLogger("mcp_warden.result_inspection")
 
@@ -74,6 +78,9 @@ class ResultFinding:
             from raw result content, so they are safe to emit into telemetry. They
             make per-phrase FP aggregation possible without parsing the free-text
             ``message`` (issue #12 FP-instrumentation).
+        injection_matches: Versioned catalog metadata for matching categories.
+            Carries stable evidence identifiers and no inspected text.
+        correlation: Ordered finite evidence for a session-level observation.
     """
 
     rule_id: str
@@ -88,6 +95,8 @@ class ResultFinding:
     rpc_id: Any = None
     tool: str = ""
     matched_phrases: tuple[str, ...] = ()
+    injection_matches: tuple[InjectionMatch, ...] = ()
+    correlation: CorrelationMatch | None = None
 
     @property
     def level(self) -> str:

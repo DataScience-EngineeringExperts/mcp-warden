@@ -2,7 +2,7 @@
   "format": "mcp-lock-v1",
   "schema_version": 4,
   "generator": "vectors/tools/generate.py",
-  "count": 111,
+  "count": 112,
   "vectors": [
     {
       "id": "canonical/sorted-keys-utf16",
@@ -148,6 +148,11 @@
       "id": "drift/server-identity-url",
       "kind": "drift",
       "file": "cases/drift-server-identity-url.json"
+    },
+    {
+      "id": "drift/digest-mismatch-unexplained",
+      "kind": "drift",
+      "file": "cases/drift-digest-mismatch-unexplained.json"
     },
     {
       "id": "drift/tool-added",

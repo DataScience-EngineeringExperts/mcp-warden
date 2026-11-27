@@ -34,6 +34,11 @@ logger = logging.getLogger("mcp_warden.capture")
 #: Hard wall-clock timeout for the entire capture handshake (seconds).
 DEFAULT_TIMEOUT_S = 30.0
 
+#: Default cap on ``nextCursor`` pages per list call (``--max-pages``). A cursor
+#: chain that never terminates is a server that never declares a surface; refuse
+#: rather than pin a truncated one (CSO review of #105, F3).
+MAX_LIST_PAGES = 256
+
 
 class CaptureError(Exception):
     """Raised when the MCP server cannot be captured cleanly.
@@ -41,6 +46,22 @@ class CaptureError(Exception):
     Carries a human-readable message suitable for CLI display; never a raw
     traceback from the child process.
     """
+
+
+def _nested_capture_error(exc: BaseException) -> CaptureError | None:
+    """The first :class:`CaptureError` inside an SDK task group's ``ExceptionGroup``.
+
+    A ``CaptureError`` raised inside the SDK's ``async with`` blocks reaches the
+    caller wrapped by anyio's task group; unwrapping it keeps the specific reason
+    (which section failed, and why) instead of a generic "unhandled errors" line.
+    """
+    if isinstance(exc, CaptureError):
+        return exc
+    for inner in getattr(exc, "exceptions", ()) or ():
+        found = _nested_capture_error(inner)
+        if found is not None:
+            return found
+    return None
 
 
 class _WireToolsResult(BaseModel):
@@ -110,7 +131,39 @@ def _protocol_version(init_result: Any) -> str:
     return ""
 
 
-async def _capture_async(command: str, args: list[str], timeout_s: float) -> CapturedSurface:
+def _reject_duplicates(surface: dict[str, Any]) -> None:
+    """Refuse a surface that repeats a tool name, resource URI or prompt name.
+
+    Each is the entry's identity in the lock and in the name-keyed drift diff, so
+    a repeat (typically across pages) lets one entry shadow the other and a
+    swapped duplicate would compare clean. MCP requires them unique; an ambiguous
+    surface is never pinned (DSE-1539).
+    """
+    for section, label, attr in (("tools", "tool name", "name"), ("resources", "resource URI", "uri"),
+                                 ("prompts", "prompt name", "name")):
+        seen: set[str] = set()
+        for entry in surface[section]:
+            key = getattr(entry, attr)
+            if key in seen:
+                raise CaptureError(f"duplicate {label} {key!r}; refusing to pin an ambiguous surface")
+            seen.add(key)
+
+
+async def _capture_session(session: ClientSession, max_pages: int) -> dict[str, Any]:
+    """``initialize`` plus every list call; the transport-independent half of a capture."""
+    init_result = await session.initialize()
+    declared = _declared_capabilities(init_result)
+    surface: dict[str, Any] = {
+        "protocol_version": _protocol_version(init_result),
+        "tools": await _list_tools(session, declared=declared["tools"], max_pages=max_pages),
+        "resources": await _list_resources(session, declared=declared["resources"], max_pages=max_pages),
+        "prompts": await _list_prompts(session, declared=declared["prompts"], max_pages=max_pages),
+    }
+    _reject_duplicates(surface)
+    return surface
+
+
+async def _capture_async(command: str, args: list[str], max_pages: int) -> CapturedSurface:
     """Inner async capture; wrapped with a timeout by :func:`capture_surface`."""
     # StdioServerParameters passes command+args as an argv array to the OS; the
     # MCP SDK does NOT spawn through a shell. This is the §10.4 guarantee.
@@ -118,27 +171,10 @@ async def _capture_async(command: str, args: list[str], timeout_s: float) -> Cap
 
     async with stdio_client(params) as (read_stream, write_stream):
         async with ClientSession(read_stream, write_stream) as session:
-            init_result = await session.initialize()
-            protocol_version = _protocol_version(init_result)
+            surface = await _capture_session(session, max_pages)
 
-            tools = await _list_tools(session)
-            resources = await _list_resources(session)
-            prompts = await _list_prompts(session)
+    return CapturedSurface(command=command, args=list(args), **surface)
 
-    return CapturedSurface(
-        command=command,
-        args=list(args),
-        protocol_version=protocol_version,
-        tools=tools,
-        resources=resources,
-        prompts=prompts,
-    )
-
-
-#: Hard cap on ``nextCursor`` pages per list call. A cursor chain that never
-#: terminates is a server that never declares a surface; refuse rather than pin
-#: a truncated one (CSO review of #105, F3).
-MAX_LIST_PAGES = 256
 
 #: The protocol field set of a prompt argument. Always emitted — ``null`` when the
 #: server omitted the optional — because that is the byte shape the 1.x SDK's
@@ -165,31 +201,66 @@ def _next_cursor(result: Any) -> str | None:
     return None
 
 
-async def _list_all(method: str, list_fn: Any, key: str) -> list[Any] | None:
+#: JSON-RPC "Method not found" — the only error an undeclared collection may answer with.
+_METHOD_NOT_FOUND = -32601
+
+#: ``ServerCapabilities`` field gating each surface section.
+_CAPABILITY_KEYS = ("tools", "resources", "prompts")
+
+
+def _declared_capabilities(init_result: Any) -> dict[str, bool]:
+    """Which surface sections the server declared in its ``initialize`` result.
+
+    Unknown capabilities (no ``capabilities`` object at all) are treated as
+    declared, so a failing list call fails CLOSED rather than being read as
+    "this server has no such section" (DSE-1538).
+    """
+    caps = getattr(init_result, "capabilities", None)
+    if caps is None:
+        return dict.fromkeys(_CAPABILITY_KEYS, True)
+    if isinstance(caps, dict):
+        return {key: caps.get(key) is not None for key in _CAPABILITY_KEYS}
+    # A field the installed SDK does not expose at all is unknown, not undeclared.
+    return {key: not hasattr(caps, key) or getattr(caps, key) is not None for key in _CAPABILITY_KEYS}
+
+
+def _is_method_not_found(exc: BaseException) -> bool:
+    """True for an MCP error carrying JSON-RPC -32601, on either SDK line.
+
+    mcp 1.x raises ``McpError`` and 2.x ``MCPError``; both carry ``.error.code``.
+    """
+    return getattr(getattr(exc, "error", None), "code", None) == _METHOD_NOT_FOUND
+
+
+async def _list_all(
+    method: str, list_fn: Any, key: str, *, declared: bool = True, max_pages: int = MAX_LIST_PAGES
+) -> list[Any] | None:
     """Drain every ``nextCursor`` page of a ``list_*`` call.
 
-    Returns ``None`` when the FIRST page is unavailable, ``[]``-equivalent for the
-    caller. That first-page swallow is a deliberate fail-OPEN: a server without the
-    capability answers the request with an error, and its surface section is
-    recorded as empty rather than aborting the capture. It cannot distinguish
-    "no capability" from "broken server"; tightening that (capability-aware
-    error handling) is DSE-1538, and hashing the Tool fields capture still
-    projects away (annotations, outputSchema) is DSE-1539. Every LATER page fails CLOSED —
-    a partial surface must never be pinned.
+    Returns ``None`` (an empty section for the caller) only when the server did
+    NOT declare the capability and the first page answers "Method not found".
+    Every other failure fails CLOSED with :class:`CaptureError` — a declared
+    section that errors, an undeclared one that errors any other way, or any
+    later page — because a lock missing a section that ``check`` then compares
+    as empty would hide a broken or evasive server (DSE-1538). A partial surface
+    must never be pinned.
     """
     try:
         result = await list_fn()
-    except Exception as exc:  # fail-open on the first page only (see docstring)
-        logger.info("%s unavailable: %s", method, exc)
-        return None
+    except Exception as exc:
+        if not declared and _is_method_not_found(exc):
+            logger.info("%s not supported (capability not declared): %s", method, exc)
+            return None
+        state = "declared" if declared else "undeclared"
+        raise CaptureError(f"{method} failed for a {state} capability: {exc}") from exc
     items: list[Any] = list(getattr(result, key, []) or [])
     cursor = _next_cursor(result)
     pages = 1
     while cursor is not None:
         pages += 1
-        if pages > MAX_LIST_PAGES:
+        if pages > max_pages:
             raise CaptureError(
-                f"{method}: cursor chain exceeded {MAX_LIST_PAGES} pages; "
+                f"{method}: cursor chain exceeded {max_pages} pages (--max-pages); "
                 "refusing to pin a surface that never terminates"
             )
         try:
@@ -201,9 +272,9 @@ async def _list_all(method: str, list_fn: Any, key: str) -> list[Any] | None:
     return items
 
 
-async def _list_tools(session: ClientSession) -> list[CapturedTool]:
-    """Run ``tools/list`` (all pages) and normalize results. Empty list if unsupported."""
-    items = await _list_all("tools/list", session.list_tools, "tools")
+async def _list_tools(session: ClientSession, *, declared: bool = True, max_pages: int = MAX_LIST_PAGES) -> list[CapturedTool]:
+    """Run ``tools/list`` (all pages) and normalize results. Empty list if undeclared and unsupported."""
+    items = await _list_all("tools/list", session.list_tools, "tools", declared=declared, max_pages=max_pages)
     if items is None:
         return []
     out: list[CapturedTool] = []
@@ -221,9 +292,9 @@ async def _list_tools(session: ClientSession) -> list[CapturedTool]:
     return out
 
 
-async def _list_resources(session: ClientSession) -> list[CapturedResource]:
-    """Run ``resources/list`` (all pages) and normalize results. Empty list if unsupported."""
-    items = await _list_all("resources/list", session.list_resources, "resources")
+async def _list_resources(session: ClientSession, *, declared: bool = True, max_pages: int = MAX_LIST_PAGES) -> list[CapturedResource]:
+    """Run ``resources/list`` (all pages) and normalize results. Empty list if undeclared and unsupported."""
+    items = await _list_all("resources/list", session.list_resources, "resources", declared=declared, max_pages=max_pages)
     if items is None:
         return []
     out: list[CapturedResource] = []
@@ -240,9 +311,9 @@ async def _list_resources(session: ClientSession) -> list[CapturedResource]:
     return out
 
 
-async def _list_prompts(session: ClientSession) -> list[CapturedPrompt]:
-    """Run ``prompts/list`` (all pages) and normalize results. Empty list if unsupported."""
-    items = await _list_all("prompts/list", session.list_prompts, "prompts")
+async def _list_prompts(session: ClientSession, *, declared: bool = True, max_pages: int = MAX_LIST_PAGES) -> list[CapturedPrompt]:
+    """Run ``prompts/list`` (all pages) and normalize results. Empty list if undeclared and unsupported."""
+    items = await _list_all("prompts/list", session.list_prompts, "prompts", declared=declared, max_pages=max_pages)
     if items is None:
         return []
     out: list[CapturedPrompt] = []
@@ -266,6 +337,7 @@ async def capture_surface(
     command: str,
     args: list[str],
     timeout_s: float = DEFAULT_TIMEOUT_S,
+    max_pages: int = MAX_LIST_PAGES,
 ) -> CapturedSurface:
     """Spawn an MCP server over stdio and capture its declared surface.
 
@@ -273,6 +345,7 @@ async def capture_surface(
         command: ``argv[0]`` of the server launch (no shell expansion performed).
         args: Remaining argv, order preserved.
         timeout_s: Wall-clock timeout for the whole handshake.
+        max_pages: Cap on ``nextCursor`` pages per list call (:data:`MAX_LIST_PAGES`).
 
     Returns:
         The :class:`CapturedSurface` with tools/resources/prompts.
@@ -284,7 +357,7 @@ async def capture_surface(
     logger.debug("spawning MCP server: command=%r args=%r", command, args)
     try:
         with anyio.fail_after(timeout_s):
-            return await _capture_async(command, args, timeout_s)
+            return await _capture_async(command, args, max_pages)
     except TimeoutError as exc:
         raise CaptureError(
             f"MCP server '{command}' did not complete the handshake within {timeout_s:.0f}s "
@@ -295,6 +368,10 @@ async def capture_surface(
     except FileNotFoundError as exc:
         raise CaptureError(f"MCP server command not found: '{command}' ({exc}).") from exc
     except Exception as exc:
+        nested = _nested_capture_error(exc)
+        if nested is not None:
+            logger.debug("capture failed inside the SDK task group: %r", exc)
+            raise nested from (nested.__cause__ or exc)
         # Covers nonzero exit, broken pipe, protocol error, decode failure, etc.
         raise CaptureError(
             f"Failed to capture MCP server '{command}': {type(exc).__name__}: {exc}"
@@ -305,6 +382,7 @@ def capture_surface_sync(
     command: str,
     args: list[str],
     timeout_s: float = DEFAULT_TIMEOUT_S,
+    max_pages: int = MAX_LIST_PAGES,
 ) -> CapturedSurface:
     """Synchronous wrapper around :func:`capture_surface` for the CLI.
 
@@ -312,6 +390,7 @@ def capture_surface_sync(
         command: ``argv[0]`` of the server launch.
         args: Remaining argv.
         timeout_s: Wall-clock timeout.
+        max_pages: Cap on ``nextCursor`` pages per list call.
 
     Returns:
         The captured surface.
@@ -319,32 +398,22 @@ def capture_surface_sync(
     Raises:
         CaptureError: On any capture failure (see :func:`capture_surface`).
     """
-    return anyio.run(capture_surface, command, args, timeout_s)
+    return anyio.run(capture_surface, command, args, timeout_s, max_pages)
 
 
-async def _capture_http_async(url: str, timeout_s: float) -> CapturedSurface:
+async def _capture_http_async(url: str, max_pages: int) -> CapturedSurface:
     """Inner async HTTP/SSE capture; wrapped with a timeout by :func:`capture_surface_http`."""
     async with streamable_http_client(url) as (read_stream, write_stream, _get_session_id):
         async with ClientSession(read_stream, write_stream) as session:
-            init_result = await session.initialize()
-            protocol_version = _protocol_version(init_result)
+            surface = await _capture_session(session, max_pages)
 
-            tools = await _list_tools(session)
-            resources = await _list_resources(session)
-            prompts = await _list_prompts(session)
-
-    return CapturedSurface(
-        url=url,
-        protocol_version=protocol_version,
-        tools=tools,
-        resources=resources,
-        prompts=prompts,
-    )
+    return CapturedSurface(url=url, **surface)
 
 
 async def capture_surface_http(
     url: str,
     timeout_s: float = DEFAULT_TIMEOUT_S,
+    max_pages: int = MAX_LIST_PAGES,
 ) -> CapturedSurface:
     """Connect to a running MCP server over HTTP/SSE and capture its declared surface.
 
@@ -355,6 +424,7 @@ async def capture_surface_http(
     Args:
         url: HTTP/HTTPS endpoint of the MCP server (e.g. ``https://example.com/mcp``).
         timeout_s: Wall-clock timeout for the whole handshake.
+        max_pages: Cap on ``nextCursor`` pages per list call (:data:`MAX_LIST_PAGES`).
 
     Returns:
         The :class:`CapturedSurface` with ``url`` set and ``command``/``args`` empty.
@@ -365,7 +435,7 @@ async def capture_surface_http(
     logger.debug("connecting to MCP server over HTTP/SSE: url=%r", url)
     try:
         with anyio.fail_after(timeout_s):
-            return await _capture_http_async(url, timeout_s)
+            return await _capture_http_async(url, max_pages)
     except TimeoutError as exc:
         raise CaptureError(
             f"MCP server at '{url}' did not complete the handshake within {timeout_s:.0f}s "
@@ -374,6 +444,10 @@ async def capture_surface_http(
     except CaptureError:
         raise
     except Exception as exc:
+        nested = _nested_capture_error(exc)
+        if nested is not None:
+            logger.debug("capture failed inside the SDK task group: %r", exc)
+            raise nested from (nested.__cause__ or exc)
         raise CaptureError(
             f"Failed to capture MCP server at '{url}': {type(exc).__name__}: {exc}"
         ) from exc
@@ -382,12 +456,14 @@ async def capture_surface_http(
 def capture_surface_http_sync(
     url: str,
     timeout_s: float = DEFAULT_TIMEOUT_S,
+    max_pages: int = MAX_LIST_PAGES,
 ) -> CapturedSurface:
     """Synchronous wrapper around :func:`capture_surface_http` for the CLI.
 
     Args:
         url: HTTP/HTTPS endpoint URL.
         timeout_s: Wall-clock timeout.
+        max_pages: Cap on ``nextCursor`` pages per list call.
 
     Returns:
         The captured surface.
@@ -395,4 +471,4 @@ def capture_surface_http_sync(
     Raises:
         CaptureError: On any capture failure.
     """
-    return anyio.run(capture_surface_http, url, timeout_s)
+    return anyio.run(capture_surface_http, url, timeout_s, max_pages)

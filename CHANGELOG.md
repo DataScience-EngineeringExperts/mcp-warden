@@ -39,6 +39,111 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 - Preserve independent final PDP/PEP authorization. This development foundation
   adds no lease issuance, signing, transport, call accounting or live enforcement.
 
+### Added
+
+- DSE-722 adds an offline deployment identity format and `identity compare`.
+  It compares complete, signed observations against pinned observation roots
+  and reports package and deployment digests, drift dimensions, and evidence gaps.
+- DSE-720 adds session-local reporting of related signals across calls in
+  `guard` and directed `inspect` traces. Findings identify the attempted
+  boundary and the observations that support it.
+
+- DSE-719 adds versioned rule evidence to offline prompt-injection findings.
+  Readers can identify which catalog rules matched tool output. The guard
+  continues to report phrase findings by default.
+
+## [2.3.0] — 2026-11-14
+
+### Added
+
+- DSE-718 opt-in Linux supplied-content normalization: independent isolated parser
+  worker; all nine ingress kinds; bounded text/web/data, MIME, ZIP and conservative
+  text-PDF extraction; raw and normalized inspection, labeled provenance, immutable
+  worker IDs, atomic guard/offline refusal, `normalize` evidence CLI and dedicated
+  real-sandbox qualification. Office/OCR, external retrieval and non-Linux worker
+  execution are unsupported. No whole-ATK or arbitrary-format claim is made.
+
+### Fixed
+
+- Both dependency locks pin `opentelemetry-api` 1.45.2 to address
+  GHSA-mf5v-w3w3-f6cg (quadratic-time traceparent parsing).
+- `auth audit` accepts 26-character lowercase alphanumeric 1Password vault/item
+  IDs in exact `op://vault/item/field` references. Field and fragment token checks
+  and checks for other URI schemes and filesystem paths remain in force (DSE-2124).
+- `check` no longer passes when `overall_digest` differs but no per-entry drift fires
+  (e.g. a baseline lock with duplicate tool/resource/prompt keys): it now reports
+  `digest-mismatch-unexplained` (high) and exits non-zero (DSE-2125).
+
+## [2.2.0] — 2026-10-24
+
+### Community corpus layout (DSE-2143)
+
+- `check --against-community` reads entries from `locks/schema-<N>/<ecosystem>/...`,
+  where `<N>` is the implemented lock schema (4). The schema-3 corpus written by 1.x
+  stays at `locks/<ecosystem>/...` and is no longer read: 2.0.0 and 2.1.0 refused every
+  entry there with `WRD-CONSENSUS-SCHEMA-MISMATCH`; it now reads as NOVEL until a
+  schema-4 entry exists. See `docs/COMMUNITY_CORPUS.md` §4.
+
+## [2.1.0] — 2026-10-23
+
+### Pagination (DSE-1539)
+
+- `pin` and `check` take `--max-pages N` (default 256, `MAX_LIST_PAGES`): a list call
+  whose `nextCursor` chain runs past the cap fails capture with exit 2.
+- Capture now refuses a surface that repeats a tool name, prompt name or resource URI
+  (typically across pages). Each is the entry's identity in the name-keyed drift diff,
+  so a repeat let one entry shadow the other. **Behaviour change:** a server that lists
+  a duplicate now fails `pin`/`check` with exit 2 instead of pinning.
+- SPEC §8.2 states capture completeness and identity uniqueness normatively.
+- `pin`/`check` escape capture errors before printing, so a server-supplied name with
+  console markup (`x[/red]`) cannot crash the CLI into exit 1 or restyle the output.
+
+### Auth audit
+
+- `WRD-AUTH-TOKEN-IN-CONFIG` now catches tokens joined by `-` or `_` inside a path or
+  secret-manager URI (DSE-1540, CSO NF-2). `~/.aws/<uuid-shaped key>` and
+  `pass://a.b/tok_<hex>` were read as file names and reported nothing. A `-`/`_`-joined
+  piece of a segment (including the stem of a dotted name, so `<uuid>.json`) is now a
+  literal when a part is a token-shaped run with a digit, or when its non-word,
+  non-numeric parts switch between letters and digits 3+ times over 20+ characters
+  (16+ if mixed case). The same rule covers URI fragments and `${VAR:?msg}` messages.
+  `gcp-sa-key-prod-2024`, `id_ed25519_github-work`, GCP key files
+  (`<project>-123456-<hex>.json`) and `application_default_credentials` stay names.
+- Reference, locator and placeholder heuristics move from `auth_audit.py` into
+  `auth_refs.py`; the rule above is the only behaviour change.
+
+### Capture integrity
+
+- `pin`/`check` capture is capability-aware and fails closed (DSE-1538). A declared
+  `tools`/`resources`/`prompts` section whose list call errors now exits 2 instead of
+  being pinned as empty; an undeclared section is empty only on JSON-RPC `-32601`.
+- CI regenerates and diffs `action/requirements.lock`, the lock the published action
+  installs, alongside `requirements-dev.lock`, then installs it with `--require-hashes`
+  and runs `pip-audit` over its exact pins with platform markers stripped, so
+  Windows-, macOS- and PyPy-only pins are audited too. The diff alone keeps existing pins
+  as its baseline, so it cannot see a tampered hash or an in-range downgrade. A further
+  step fails when any action-lock pin differs from the dev-lock pin CI tests.
+- Security: the action lock had fallen behind the dev lock and shipped advisories in
+  `mcp` 2.1.1, `starlette` 1.2.1, `cryptography` 48.0.0 and `anyio` 4.13.0. Both locks
+  move to `mcp` 2.2.0, and every action-lock pin now equals the audited dev-lock pin.
+- THREAT_MODEL §5.3.4 documents capture completeness and OS-trust-store TLS for `--url`.
+
+### Signing
+
+- `mcp-warden lock sign <lock> [--coordinate C] [--identity-token T]` signs an existing
+  unsigned lock (DSE-1530), for attesters that capture inside a network-less sandbox and
+  sign afterwards. Same contract as `pin --sign`: v2 statement with `--coordinate`, v1
+  without, exit 1 on signing failure with no partial sidecar. It refuses (exit 2) a lock
+  that fails the integrity gate or carries a stale approval, an invalid coordinate, an
+  existing sidecar (a dangling symlink included), and a lock that already carries a
+  signature pointer, so it never overwrites or stacks a signature. The sidecar is placed
+  with `os.link` before the lock is rewritten, so a run that loses a race to another
+  signer exits 2 and leaves the winner's files untouched (a filesystem without hard
+  links fails closed with exit 1). A symlinked lock is resolved
+  so the sidecar sits beside the file that is verified.
+- `pin --sign` and `lock sign` stage the bundle in a uniquely named `O_EXCL` temp file,
+  so a planted `.sigstore.tmp` symlink is never followed.
+
 ### Decision receipt foundation
 
 - Add protocol-neutral V2 enforcement with independently authorized signed decision
@@ -510,7 +615,10 @@ v1-strong foundation. Highlights of the 0.3.0 → 1.0.0 arc:
   declared surface, RFC 8785 (JCS) + SHA-256 canonicalization, SARIF output, and a live
   integrity-gate workflow with committed `clean.warden.lock`.
 
-[Unreleased]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v2.2.0...v2.3.0
+[2.2.0]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v2.1.0...v2.2.0
+[2.1.0]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v2.0.0...v2.1.0
 [1.1.0]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/DataScience-EngineeringExperts/mcp-warden/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/DataScience-EngineeringExperts/mcp-warden/releases/tag/v1.0.0

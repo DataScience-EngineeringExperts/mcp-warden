@@ -8,9 +8,11 @@ Split from ``guard_loop.py`` to keep each module under the LOC budget.
 from __future__ import annotations
 
 import logging
+from dataclasses import replace
 from typing import Any
 
 from . import res_rules, wire_block
+from .correlation_runtime import ResponseEvidence
 from .framing import Frame, serialize_frame
 from .result_inspection import (
     TIER_BLOCK,
@@ -37,7 +39,29 @@ def _frame_error_note(direction: str, rpc_id: Any, detail: str) -> ResultFinding
     )
 
 
-def handle_s2c(state, frame: Frame, mode: str) -> bytes:
+def handle_s2c(state, frame: Frame, mode: str, *, dns_findings=None) -> bytes:
+    obj = frame.json
+    evidence = state.correlation.response(obj) if obj is not None else ResponseEvidence(None)
+    if state.config.normalization_image is not None:
+        from .guard_loop import StrictInspectionAbort
+        from .normalization_guard import handle_universal
+        try:
+            state.config.validate_normalization()
+        except Exception:
+            raise StrictInspectionAbort(site="normalization-config", tool="?",
+                                        exc_type="InvalidProfile", rpc_id=None) from None
+        out = handle_universal(state, frame, mode, _handle_s2c_legacy, evidence)
+    else:
+        out = _handle_s2c_legacy(state, frame, mode, dns_findings=dns_findings)
+        if evidence.ingress is not None:
+            evidence.add_raw(obj["result"])
+    if obj is not None:
+        for finding in state.correlation.server(evidence):
+            state.emit(finding)
+    return out
+
+
+def _handle_s2c_legacy(state, frame: Frame, mode: str, *, dns_findings=None) -> bytes:
     """Process one server->client frame; return the bytes to forward to the client.
 
     Args:
@@ -84,12 +108,13 @@ def handle_s2c(state, frame: Frame, mode: str) -> bytes:
     # Base-rate denominator (issue #12): count every tools/call result frame the
     # catalog actually inspects, so a per-phrase FP rate has a denominator. Counted
     # here (a real result about to be inspected), NOT for pass-through/list frames.
-    state.frames_inspected += 1
+    if state.config.normalization_image is None:
+        state.frames_inspected += 1
     # Inspection-before-write invariant (binding #2): inspect_result runs BEFORE
     # this response frame is forwarded to the client, so a strict abort here
     # cannot leave a partially-forwarded (un-inspected) frame on the wire.
     try:
-        findings = inspect_result(
+        findings = [] if state.config.normalization_image is not None else inspect_result(
             result, tool, pol, exfil_denylist=state.exfil_denylist, inject_phrases=state.inject_phrases
         )
     except StrictInspectionAbort:
@@ -107,7 +132,8 @@ def handle_s2c(state, frame: Frame, mode: str) -> bytes:
     # (fail-open — any DNS error produces no hits, never aborts).
     if state.config.category_enabled("WRD-RES-EXFIL-DNS-SSRF"):
         try:
-            dns_findings = _dns_ssrf_findings(result, tool)
+            if dns_findings is None:
+                dns_findings = _dns_ssrf_findings(result, tool)
             if dns_findings:
                 findings = list(findings) + dns_findings
         except Exception as exc:  # pragma: no cover
@@ -208,27 +234,27 @@ def _dns_ssrf_findings(result: dict, tool: str) -> list[ResultFinding]:
     Returns:
         Per-block ``WRD-RES-EXFIL-DNS-SSRF`` findings (empty if no SSRF hits).
     """
+    from .res_dns import resolve_ssrf_hits
+
+    targets, hosts = _dns_targets(result)
+    return _dns_findings(targets, tool, resolve_ssrf_hits(hosts))
+
+
+def _dns_targets(result: dict) -> tuple[list[tuple[int, list[str]]], list[str]]:
     from . import res_catalog, res_dns
 
     blocks, _ = res_catalog.extract_blocks(result)
-    if not blocks:
-        return []
+    targets = [(idx, res_dns.extract_dns_candidates(text)) for idx, text in blocks]
+    hosts = sorted({host for _, candidates in targets for host in candidates})
+    return targets, hosts
 
-    # Collect unique candidates across all blocks (resolve once, match per block).
-    all_candidates: set[str] = set()
-    for _idx, text in blocks:
-        all_candidates.update(res_dns.extract_dns_candidates(text))
-    if not all_candidates:
-        return []
 
-    hits = res_dns.resolve_ssrf_hits(sorted(all_candidates))
-    if not hits:
-        return []
+def _dns_findings(targets, tool: str, hits: list[tuple[str, str, str]]) -> list[ResultFinding]:
+    from . import res_catalog
 
     hit_map: dict[str, tuple[str, str]] = {h: (ip, lbl) for h, ip, lbl in hits}
     findings: list[ResultFinding] = []
-    for idx, text in blocks:
-        block_candidates = res_dns.extract_dns_candidates(text)
+    for idx, block_candidates in targets:
         block_hits = [(h, hit_map[h][0], hit_map[h][1]) for h in block_candidates if h in hit_map]
         if block_hits:
             findings.extend(res_catalog.inspect_exfil_dns_ssrf(block_hits, tool, idx))
@@ -269,7 +295,8 @@ def _apply_result_findings(
                 and any(res_rules.normalize_phrase_text(p) in subset for p in f.matched_phrases)
             ]
 
-    error_rules = {"WRD-RES-EXFIL-DOMAIN", "WRD-RES-INJECT-PHRASE", "WRD-RES-EXFIL-DNS-SSRF"}
+    error_rules = {"WRD-RES-EXFIL-DOMAIN", "WRD-RES-INJECT-PHRASE", "WRD-RES-EXFIL-DNS-SSRF",
+                   "WRD-RES-EXFIL-IP-LITERAL"}
     if not state.config.redact_secret_echo:
         error_rules.add("WRD-RES-SECRET-ECHO")
     redact_rules = {"WRD-RES-ANSI"}
@@ -304,19 +331,4 @@ def _apply_result_findings(
 
 def _stamp(state, f: ResultFinding, rpc_id: Any, tool: str, action: str) -> None:
     """Stamp direction/id/tool/action onto a finding and emit it."""
-    state.emit(
-        ResultFinding(
-            rule_id=f.rule_id,
-            severity=f.severity,
-            tier=f.tier,
-            message=f.message,
-            snippet=f.snippet,
-            block_index=f.block_index,
-            sub_rule=f.sub_rule,
-            action=action,
-            direction="s2c",
-            rpc_id=rpc_id,
-            tool=tool or f.tool,
-            matched_phrases=f.matched_phrases,
-        )
-    )
+    state.emit(replace(f, action=action, direction="s2c", rpc_id=rpc_id, tool=tool or f.tool))

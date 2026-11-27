@@ -7,6 +7,9 @@ console, err_console)`` attaches the two commands to the given typer app.
 from __future__ import annotations
 
 import json
+import os
+import re
+from dataclasses import replace
 from pathlib import Path
 from typing import Optional
 
@@ -28,11 +31,13 @@ from .guard_lifecycle import (
     is_degraded_platform,
     platform_refusal_message,
 )
-from .guard_loop import GuardConfig
+from .guard_loop import GuardConfig, GuardState
 from .inspector import TraceError, analyze_trace, exit_code_for
 from .lockfile import read_lock
+from .normalization_ipc import NormalizationError
+from .normalization_models import NormalizationProfileV1
 from .policy_model import PolicyError, load_policy
-from .result_inspection import severity_to_level
+from .result_inspection import ResultFinding, severity_to_level
 
 
 def register(app: typer.Typer, console: Console, err_console: Console) -> None:
@@ -80,7 +85,12 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
 
     @app.command()
     def guard(
-        server_cmd: list[str] = typer.Argument(..., help="MCP server launch argv (e.g. node ./server.js)"),
+        server_cmd: list[str] = typer.Argument(None, help="MCP server launch argv (e.g. node ./server.js)"),
+        url: Optional[str] = typer.Option(None, "--url", help="Upstream Streamable HTTP MCP endpoint"),
+        http_token_env: Optional[str] = typer.Option(None, "--http-token-env", help="Environment variable containing the upstream bearer token"),
+        http_timeout: float = typer.Option(30.0, "--http-timeout", help="HTTP call deadline in seconds"),
+        http_concurrency: int = typer.Option(8, "--http-concurrency", help="Maximum concurrent HTTP calls (1–32)"),
+        normalizer_image: Optional[str] = typer.Option(None, "--normalizer-image", help="Immutable qualified Linux worker image ID; enables fail-closed universal inspection"),
         lock: Optional[Path] = typer.Option(None, "--lock", help="Arms per-tool precision + tools/list_changed gate"),
         policy_file: Optional[Path] = typer.Option(None, "--policy", help="Arms runtime argument policy (POLICY_MODEL.md)"),
         exfil_denylist: Optional[Path] = typer.Option(None, "--exfil-denylist", help="Org never-callback domains (merged)"),
@@ -159,8 +169,26 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             ),
         ),
     ) -> None:
-        """Run the transparent stdio guard proxy (v0.3: deterministic tier blocks by default)."""
-        command, args = _split(server_cmd)
+        """Mediate MCP over stdio or a Streamable HTTP upstream."""
+        token = None
+        if url is None:
+            if http_token_env is not None or http_timeout != 30.0 or http_concurrency != 8:
+                err_console.print("error: HTTP options require --url")
+                raise typer.Exit(code=2)
+            command, args = _split(server_cmd)
+        else:
+            if normalizer_image is not None:
+                err_console.print("error: universal normalization is unsupported over Streamable HTTP")
+                raise typer.Exit(code=2)
+            if server_cmd or is_degraded_platform():
+                err_console.print("error: --url requires POSIX stdio and cannot be combined with a server command")
+                raise typer.Exit(code=2)
+            if http_token_env is not None:
+                if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", http_token_env):
+                    token = os.environ.get(http_token_env)
+                if not token:
+                    err_console.print("error: upstream bearer environment variable is invalid or empty")
+                    raise typer.Exit(code=2)
         # Non-POSIX platform gate (GUARD_PROXY_V3.md §3.3): runtime lifecycle
         # guarantees are reduced off-POSIX, so guard must NOT silently run with a
         # false sense of full protection. Emit a LOUD, redacted, structured warning
@@ -189,7 +217,20 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         )
         # --no-block-deterministic demotes the whole tier + both gates (§4.2);
         # --allow-exfil-domain is the sole affirmative alias of --no-block-exfil-domain.
+        if normalizer_image is not None and record is not None:
+            err_console.print("error: universal mode cannot record uninspected raw frames")
+            raise typer.Exit(code=2)
+        try:
+            _validated_normalizer(normalizer_image)
+            _validate_universal_flags(normalizer_image, audit_only, no_block_ansi,
+                                      no_block_secret_echo, no_block_exfil_domain,
+                                      allow_exfil_domain, no_block_exfil_ip_literal,
+                                      no_block_list_changed, no_block_policy, no_block_deterministic)
+        except NormalizationError:
+            err_console.print("error: NRM-PROFILE")
+            raise typer.Exit(code=2) from None
         cfg = GuardConfig(
+            normalization_image=normalizer_image,
             no_block_ansi=no_block_ansi or no_block_deterministic,
             no_block_secret_echo=no_block_secret_echo or no_block_deterministic,
             no_block_exfil_domain=no_block_exfil_domain or allow_exfil_domain or no_block_deterministic,
@@ -205,8 +246,8 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
             armed_policy=policy_file is not None,
             redact_secret_echo=redact_secret_echo,
             audit_only=audit_only,
-            strict=strict,
-            strict_frame_cap=strict_frame_cap,
+            strict=strict or url is not None,
+            strict_frame_cap=strict_frame_cap or url is not None,
             max_frame_bytes=max_frame_bytes,
             max_inflight=max_inflight,
         )
@@ -236,43 +277,81 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         findings_sink: list = []
         record_lines: list[str] = []
         summary_box = {"frames_inspected": 0}
+        inject_findings = 0
+        report_truncated = False
 
         def _on_summary(n: int) -> None:
             summary_box["frames_inspected"] = n
 
         def _on_finding(f) -> None:
-            findings_sink.append(f)
-            err_console.print(
-                f"[{severity_to_level(f.severity)}] {f.rule_id} {f.action} {f.tool} (id={f.rpc_id})",
-                highlight=False,
-            )
+            nonlocal inject_findings, report_truncated
+            inject_findings += f.rule_id == "WRD-RES-INJECT-PHRASE"
+            if url is not None:
+                f = replace(f, message=f.message[:1024], snippet=f.snippet[:1024])
+                if sarif is not None or json_out is not None:
+                    if len(findings_sink) < 1024:
+                        findings_sink.append(f)
+                    else:
+                        report_truncated = True
+            elif f.correlation is None or sarif is not None or json_out is not None:
+                findings_sink.append(f)
+            message = f"[{severity_to_level(f.severity)}] {f.rule_id} {f.action}"
+            if f.correlation is None:
+                message += f" {f.tool} (id={f.rpc_id})"
+            evidence = _catalog_evidence(f)
+            err_console.print(f"{message} {evidence}" if evidence else message, highlight=False)
 
         def _record(direction: str, frame: dict) -> None:
             record_lines.append(json.dumps({"direction": direction, "frame": frame}, ensure_ascii=False))
+
+        def _record_withheld(frame: dict) -> None:
+            record_lines[-1] = json.dumps(
+                {"direction": "c2s", "frame": frame, "forwarded": False}, ensure_ascii=False
+            )
 
         # Startup posture banner (§4): last stderr before the child's first frame; from resolved `cfg`, names NO server.
         if not quiet:
             err_console.print(render_posture_banner(cfg), highlight=False)
 
-        code = run_guard(
-            command,
-            args,
-            cfg,
-            lock=lock_doc,
-            policy=policy,
-            exfil_denylist=exfil,
-            inject_phrases=phrases,
-            on_finding=_on_finding,
-            record=_record if record is not None else None,
-            on_summary=_on_summary,
-        )
+        if url is None:
+            code = run_guard(
+                command,
+                args,
+                cfg,
+                lock=lock_doc,
+                policy=policy,
+                exfil_denylist=exfil,
+                inject_phrases=phrases,
+                on_finding=_on_finding,
+                record=_record if record is not None else None,
+                record_withheld=_record_withheld if record is not None else None,
+                on_summary=_on_summary,
+            )
+        else:
+            from .guard_http import run_http_guard
+            from .guard_http_trace import HTTPTrace
 
+            state = GuardState(config=cfg, lock=lock_doc, policy=policy,
+                               exfil_denylist=exfil, inject_phrases=phrases,
+                               on_finding=_on_finding)
+            try:
+                with HTTPTrace(record) as trace:
+                    if record is not None:
+                        state.record = trace.frame
+                        state.record_withheld = trace.withheld
+                    code = run_http_guard(url, token, state,
+                                          timeout=http_timeout, concurrency=http_concurrency)
+            except OSError:
+                err_console.print("error: could not write HTTP guard trace")
+                raise typer.Exit(code=2) from None
+            _on_summary(state.frames_inspected)
+        if report_truncated:
+            err_console.print("HTTP guard findings report capped at 1024 entries", highlight=False)
         frames_inspected = summary_box["frames_inspected"]
-        inject_findings = sum(1 for f in findings_sink if f.rule_id == "WRD-RES-INJECT-PHRASE")
         summary = run_summary_to_dict(
             frames_inspected=frames_inspected, inject_phrase_findings=inject_findings
         )
-        if record is not None:
+        if record is not None and url is None:
             record.write_text("\n".join(record_lines) + ("\n" if record_lines else ""), encoding="utf-8")
         if sarif is not None:
             sarif.write_text(
@@ -287,6 +366,7 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
     @app.command()
     def inspect(
         trace: Path = typer.Argument(..., help="Recorded JSONL trace of a JSON-RPC session"),
+        normalizer_image: Optional[str] = typer.Option(None, "--normalizer-image", help="Immutable qualified Linux worker image ID"),
         lock: Optional[Path] = typer.Option(None, "--lock", help="Per-tool precision from a warden.lock"),
         exfil_denylist: Optional[Path] = typer.Option(None, "--exfil-denylist", help="Org never-callback domains (merged)"),
         inject_phrases: Optional[Path] = typer.Option(None, "--inject-phrases", help="Org exact injection phrases (merged)"),
@@ -295,6 +375,12 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         audit_only: bool = typer.Option(False, "--audit-only", help="Force exit 0 regardless of findings"),
     ) -> None:
         """Run the WRD-RES-* catalog offline over a recorded trace; exit non-zero on BLOCK-tier."""
+        try:
+            normalization_profile = _validated_normalizer(normalizer_image)
+            _validate_universal_flags(normalizer_image, audit_only)
+        except NormalizationError:
+            err_console.print("error: NRM-PROFILE")
+            raise typer.Exit(code=2) from None
         lock_doc = None
         if lock is not None:
             try:
@@ -309,7 +395,8 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         stats: dict = {}
         try:
             findings = analyze_trace(
-                trace, lock=lock_doc, exfil_denylist=exfil, inject_phrases=phrases, stats=stats
+                trace, lock=lock_doc, exfil_denylist=exfil, inject_phrases=phrases, stats=stats,
+                normalization_profile=normalization_profile,
             )
         except TraceError as exc:
             err_console.print(f"[red]error:[/red] {exc}")
@@ -333,6 +420,32 @@ def register(app: typer.Typer, console: Console, err_console: Console) -> None:
         raise typer.Exit(code=exit_code_for(findings, audit_only=audit_only))
 
 
+def _validated_normalizer(image):
+    from .normalization import _profile
+    profile = NormalizationProfileV1(image) if image is not None else None
+    if profile is not None:
+        _profile(profile)
+    return profile
+
+
+def _validate_universal_flags(image, *optouts):
+    if image is not None and any(optouts):
+        raise NormalizationError("NRM-PROFILE")
+
+
+def _catalog_evidence(finding: ResultFinding) -> str:
+    if finding.correlation is not None:
+        match = finding.correlation
+        return " | ".join((match.boundary, *(
+            f"{item.ordinal} {item.ingress or 'request'} ({', '.join(item.signal_ids) or ', '.join(item.taints)})"
+            for item in match.evidence
+        )))
+    return " | ".join(
+        f"{match.rule_id} ({', '.join(match.evidence_ids)})"
+        for match in finding.injection_matches
+    )
+
+
 def _print_result_findings(console: Console, findings) -> None:
     """Print result-inspection findings as a rich table."""
     if not findings:
@@ -342,5 +455,7 @@ def _print_result_findings(console: Console, findings) -> None:
     for col in ("severity", "tier", "rule", "tool", "message"):
         table.add_column(col)
     for f in findings:
-        table.add_row(f.severity, f.tier, f.rule_id, f.tool, f.message)
+        evidence = _catalog_evidence(f)
+        message = f"{f.message}\n{evidence}" if evidence else f.message
+        table.add_row(f.severity, f.tier, f.rule_id, f.tool, message)
     console.print(table)

@@ -8,8 +8,8 @@ state, or establish whole-kernel conformance.
 
 ## Trust and key custody
 
-Install this development branch with the `artifact-trust` extra. The published
-2.0.0 package does not include this feature. No signing command, private-key
+Install 2.1.0 or later with the `artifact-trust` extra (`mcp-warden-cli[artifact-trust]`);
+the 2.0.0 package does not include this feature. No signing command, private-key
 loader, or key generator exists in the product. Use an independently governed
 external signing service or signing station; keep its private signing capability
 outside agent/tool access. The external signer must review the canonical
@@ -44,7 +44,7 @@ authorized-admin compromise.
 
 Replace the illustrative public-key placeholder with an enrolled public key.
 Kinds are a nonempty, sorted, duplicate-free subset of `adapter`, `bundle`,
-`policy`, `runtime`. Duplicate keys, unknown fields, unsupported schemas,
+`deployment-observation`, `policy`, and `runtime`. Duplicate keys, unknown fields, unsupported schemas,
 non-finite numbers, and duplicate JSON object keys are rejected. Roots are
 bounded to 64 keys and 64 KiB. SDK records are immutable; verification snapshots
 the public keys and allowed roles.
@@ -81,7 +81,8 @@ cross-role/context reuse. Signing raw artifact JSON without the frame is invalid
 
 The payload is the existing canonical serialization from
 `canonical_policy_bytes`, `canonical_runtime_bytes`, `canonical_manifest_bytes`,
-or `canonical_bundle_manifest_bytes`. Preparation accepts an unambiguous JSON
+`canonical_bundle_manifest_bytes`, or `canonical_deployment_identity_bytes`.
+Preparation accepts an unambiguous JSON
 draft and validates the strict existing model. Verification requires exact
 canonical bytes. Unknown artifact fields and schemas are rejected; schema
 integers cannot be booleans. The global input cap is 512 KiB, with narrower
@@ -120,6 +121,95 @@ values supplied by the trusted host; environment variables writable by the
 agent do not create a protected boundary. Success emits `signature-verified`;
 it is not an execution authorization. Failure exits 2 with a code-only error and
 no raw artifact, signature, key file, or lower-layer exception text.
+
+## Offline deployment identity comparison
+
+A deployment evidence producer supplies schema version 1. Enroll a separate
+measurement key for the `deployment-observation` role and obtain the roots
+pin through the host's protected boundary. The measurement producer is responsible
+for checking the inputs behind every commitment. For Streamable HTTP, use an
+authenticated deployment measurement that binds the endpoint to the executing
+artifact and its provenance. A server's URL or self-reported metadata leaves
+those commitments unavailable.
+
+| Field | Producer supplies |
+|---|---|
+| `schema_version` | Integer `1` |
+| `package.coordinate` | A concrete `pypi:<name>@<version>` or `npm:<name>@<major.minor.patch>` coordinate. PyPI names are normalized and npm names preserve case. |
+| `package.artifact_digest` | Digest of the measured package artifact |
+| `package.publisher_identity_digest`, `package.signer_identity_digest`, `package.provenance_digest` | Verified publisher and software signer commitments plus the stable provenance statement commitment |
+| `package.dependency_closure_digest`, `package.sbom_digest` | Commitments to the complete resolved dependency graph and its SBOM, including empty dependency closures |
+| `server_identity_digest` | Stable deployment identity assigned by the trusted host |
+| `configuration_digest` | Effective configuration commitment. Use protected references and generations for secrets. |
+| `transport` | `kind` (`stdio` or `streamable-http`) and `binding_digest`. Commit the resolved executable and launch for stdio or the authenticated endpoint and deployment binding for Streamable HTTP. |
+| `capabilities` | Array of `kind` (`tool`, `resource`, or `prompt`), `identifier_digest`, and v4 lock `entry_digest` records. Use an empty array only for a verified empty surface. |
+| `policy_binding_digest` | Applicable policy version and deployment binding commitment |
+| `behavior` | `profile_digest` for the versioned observation procedure and `evidence_digest` for its stable outcome commitment |
+
+All digest fields use `sha256:` and 64 lowercase hex characters. The Python
+helper `capabilities_from_v4_lock` checks each v4 entry body against its digest
+and derives the identifier commitment from RFC 8785 JSON `[kind, identifier]`
+with the domain `mcp-warden/bundle-identity/v1/capability-identifier`. The
+identifier is the tool or prompt name or the resource URI. Projection checks
+declared metadata integrity. The measurement producer verifies its origin and
+completeness.
+
+JSON is limited to 512 KiB and 2,048 capabilities. Duplicate JSON keys and
+duplicate capability kind/identifier pairs are rejected. Capability order and
+JSON object key order are normalized. Leave unavailable optional fields absent or
+`null` and omit `package` when all package measurements are unavailable.
+Avoid raw secrets, credentials, query strings, or host configuration
+in observation records. Keep per-capture timestamps, nonces and signature bytes
+out of stable commitments.
+
+With the domain-separated hash `H` defined above, package identity is
+`H("mcp-warden/bundle-identity/v1/package", package_bytes)`, where the bytes
+are RFC 8785 JSON of the package fields and `schema_version: 1` in one object.
+Deployment identity is `H("mcp-warden/bundle-identity/v1/deployment", observation_bytes)`,
+where the bytes are the complete canonical JSON, including the package and the
+deployment fields. Each bound field change is material.
+
+Prepare the reference and current observation files for the separately enrolled
+external attester using the existing signing workflow:
+
+```bash
+mcp-warden trust prepare deployment-observation baseline.json \
+  --signer "$BASELINE_ATTESTER" --canonical-out baseline.canonical.json \
+  --signing-out baseline.signing.bin
+mcp-warden trust prepare deployment-observation current.json \
+  --signer "$CURRENT_ATTESTER" --canonical-out current.canonical.json \
+  --signing-out current.signing.bin
+```
+
+The host selects and protects the reference observation and its signature
+independently of the current candidate. Both observations use the enrolled
+measurement role.
+
+After external signing, compare the observations with their raw detached signatures:
+
+```bash
+mcp-warden identity compare baseline.canonical.json current.canonical.json \
+  --roots observation-roots.json --roots-digest "$PROTECTED_ROOTS_DIGEST" \
+  --baseline-signer "$BASELINE_ATTESTER" --baseline-signature baseline.sig \
+  --current-signer "$CURRENT_ATTESTER" --current-signature current.sig
+```
+
+| Exit | Status | Meaning |
+|---|---|---|
+| 0 | `match` | Both complete observations verified and all commitments agree. |
+| 1 | `drift` | Both complete observations verified and at least one commitment differs. |
+| 2 | `indeterminate` | Input, evidence or signature validation is incomplete. Reported field differences may come from unverified claims. |
+
+`identity compare` verifies signatures over the canonical form of each
+supplied observation. In the separate `trust verify` workflow, the input file
+must already contain the exact canonical bytes.
+
+Without signature options the command reports evidence gaps and claimed
+differences with exit 2. JSON output contains reason codes and each side's
+identity digests only when that side is complete and signature-verified.
+A match describes the two supplied records, so comparing the same signed
+observation twice can return a match. Live collection, production measurement,
+observation freshness, human approval, and revocation require separate integration.
 
 ## SDK activation
 

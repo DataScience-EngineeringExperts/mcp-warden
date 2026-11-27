@@ -293,6 +293,74 @@ send the following to
   make it default-block).
 - **SARIF:** `ruleId: WRD-RES-INJECT-PHRASE`, `level: warning`.
 
+#### Versioned catalog evidence
+
+For an injection finding, the outer rule ID remains `WRD-RES-INJECT-PHRASE`.
+Catalog version 1 distinguishes authority impersonation,
+instruction override, secret extraction, tool coercion, data exfiltration,
+and policy evasion. A single content block can match several catalog rules.
+JSONL records expose these matches in `injection_matches`. Each entry includes
+`rule_id`, `catalog_version`, `category`, `severity`, `rationale`, and `evidence_ids`.
+The [catalog definitions](../src/mcp_warden/injection_catalog.py) map each
+evidence ID to its literal indicator. SARIF exposes the same entries under
+`properties.injectionMatches`. Reviewers can look up a match without storing
+the surrounding tool output in catalog evidence.
+
+Category severity describes the indicator. The outer finding retains its medium
+severity and monitor tier. Promoting the entire tier also promotes catalog hits.
+When an operator selects individual phrases, promotion still requires a match
+in the operator's phrase subset.
+
+The [public corpus](../tests/fixtures/rule_catalog_quality.json) exercises positive examples, benign controls and formatting
+variants through the offline inspector. To reproduce the corpus check, run
+`python -m pytest -q tests/test_rule_catalog_quality.py`. A failure identifies
+a missing or unexpected match. Corpus results describe this labeled sample;
+field false-positive rates require separate observation.
+
+### Cross-call correlation
+
+The guard maintains one observation window per transport session. Offline
+inspection reconstructs that window from an explicitly directed trace, such as
+one captured by the guard. Each parsed observation advances a local sequence counter; discarded malformed bytes
+do not advance it.
+The default window includes observations up to 32 positions apart. Callers of
+the correlation engine can set a distance from 1 to 256. Clean observations
+also advance expiry. A new session starts with empty history.
+
+A correlation finding identifies two observations in order and the attempted
+authority, privilege, policy, or tool-selection boundary. Its evidence uses
+local sequence numbers, ingress kinds, and registered signal and taint IDs.
+An ordinary client tool call contributes selection evidence only if earlier
+untrusted content contained a selection directive. The sequence lets a reviewer
+investigate a possible relationship. It does not establish that the content
+caused the client action or that an operation succeeded.
+
+Correlation findings are reported independently of the guard's blocking rules.
+Content, inferred intent and taint labels cannot grant permission. Warden
+continues to apply its configured per-call policies. Raw tool arguments, content,
+and peer-supplied identity claims are excluded from correlation evidence.
+
+An adapter with an observed parent-child relationship can pass
+`ContentLineageV1(parents=(previous.envelope,), ancestors=previous.source_envelopes)`
+to `normalize_supplied` or `inspect_supplied`. Warden verifies the full parent
+graph and preserves inherited taint. The graph is limited to 128 envelopes,
+256 edges and 16 levels. A valid graph establishes consistency of the supplied
+lineage. The host must establish the identity of the adapter and the origin of
+the relationship. The stdio guard has no authenticated bundle or agent identity.
+
+In universal inspection, correlation uses registered signals attributable to
+the parsed result and its verified text views. Whole-frame and embedded-only
+views still receive the normal content inspection. A matched request ID selects
+an outstanding request only within its originating session. The binding table
+retains the 1,024 most recent distinct client IDs as keyed digests, including
+completed and canceled requests. Use a fresh request ID throughout a session.
+New guard recordings label locally withheld requests with `forwarded: false`.
+Older traces lack that disposition. Replay of such a trace assumes that its
+well-formed client requests were forwarded. Bare frames lack captured transport
+direction and cannot supply cross-call evidence. In legacy mode the JSON parser
+collapses duplicate object members before inspection. Universal mode rejects
+duplicate members.
+
 ---
 
 ## 5. Robustness / monitor-only auxiliary rules
@@ -347,12 +415,18 @@ artifact. There is no way to relax a check at runtime without a lock edit.
 
 ## 7. Out of scope for v0.2 (do NOT build)
 
+This table describes the legacy v0.2/v0.3 catalog path. The separately opt-in
+[DSE-718 supplied-content profile](CONTENT_NORMALIZATION.md) adds bounded Linux
+document/archive extraction and atomic server-frame inspection with explicit
+unsupported/refusal outcomes. It does not silently expand the legacy defaults
+or provide OCR/arbitrary binary decoding.
+
 | Item | Why |
 |------|-----|
 | Decoding/scanning image/audio/blob/base64 content | Unbounded cost + new parsers = new attack surface. Surface coverage gap via `WRD-RES-UNINSPECTABLE` instead. |
 | Broad/fuzzy injection regex, NLP intent classification | The v0.1 CUT stands. Only the narrow exact-phrase denylist ships (monitor-only). |
 | DNS resolution of result-borne **hostnames** | No network from the inspector. Exfil-domain match is on the **literal host string**, not a resolved IP. (Mirrors `POLICY_MODEL.md` §2.3 no-DNS rule.) NOTE: raw **IP literals** in results ARE now matched deterministically against the SSRF deny ranges (`WRD-RES-EXFIL-IP-LITERAL`, §3.4) — no DNS needed for those. Resolving a *hostname* to its IP stays out of scope (issue #11 PR-2). |
-| Cross-call / conversational correlation ("this result + that later call = exfil chain") | Stateful behavioral reasoning = `T-BEHAVE`, out of scope (`THREAT_MODEL_V2.md`). |
+| Cross-call / conversational correlation ("this result + that later call = exfil chain") | Causal attribution and exfiltration detection remain outside this rule. The session correlator reports sequences of registered signals as described above. |
 | Blocking by default for the MONITOR (fuzzy) tier | **Still NOT adopted in v0.3.** No field false-positive data exists for `WRD-RES-INJECT-PHRASE`, so it remains monitor-only / opt-in. (Only the **deterministic** tier became default-block in v0.3.) |
 
 ---

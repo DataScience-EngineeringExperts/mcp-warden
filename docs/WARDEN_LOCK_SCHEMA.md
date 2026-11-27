@@ -254,6 +254,7 @@ stored `warden.lock`. Drift classes and severities:
 | **Capability removed** | same `name`, a flag dropped from `capabilities` | **medium** | non-zero |
 | **Description modified** | same `name`, `description_hash` differs, schema + caps unchanged | **low** | non-zero |
 | **Resource/prompt add/remove/modify** | analogous to tools (added=medium, removed=low, modified=low) | as noted | non-zero |
+| **Digest mismatch, unexplained** | `overall_digest` differs but no per-entry item above fired (e.g. duplicate keys collapsed by name-keyed indexing) | **high** | non-zero |
 | **No drift** | every entry_digest matches AND `overall_digest` matches | — | **zero** |
 
 **Schema drift (SCHEMA_VERSION 2, #15).** When `input_schema_hash` differs *and* both the
@@ -299,6 +300,9 @@ Notes:
 - Drift is computed **per entry** so the SARIF output points at the exact tool that
   changed. The `overall_digest` is a fast-path: if it matches, there is provably no drift
   and per-entry diffing can be skipped.
+- A digest mismatch is itself drift. If `overall_digest` differs and the per-entry diff
+  produced no item, `check` emits `digest-mismatch-unexplained` (high, target
+  `lock/overall_digest`) so a changed surface can never yield a clean verdict.
 
 ---
 

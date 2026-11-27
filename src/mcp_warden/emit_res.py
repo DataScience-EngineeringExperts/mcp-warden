@@ -12,6 +12,7 @@ module never sees or emits a raw secret.
 from __future__ import annotations
 
 import json
+from dataclasses import asdict
 from typing import Any
 
 from . import __version__
@@ -22,7 +23,7 @@ from .result_inspection import ResultFinding
 def _sarif_result(f: ResultFinding) -> dict[str, Any]:
     """Build a SARIF result object from a :class:`ResultFinding`."""
     msg = f.message + (f" [{f.snippet}]" if f.snippet else "")
-    return {
+    result = {
         "ruleId": f.rule_id,
         "level": severity_to_level(f.severity),
         "message": {"text": msg},
@@ -42,6 +43,34 @@ def _sarif_result(f: ResultFinding) -> dict[str, Any]:
             "matchedPhrases": list(f.matched_phrases),
         },
     }
+    if f.injection_matches:
+        result["properties"]["injectionMatches"] = [
+            {
+                "ruleId": match.rule_id,
+                "catalogVersion": match.catalog_version,
+                "category": match.category,
+                "severity": match.severity,
+                "rationale": match.rationale,
+                "evidenceIds": list(match.evidence_ids),
+            }
+            for match in f.injection_matches
+        ]
+    if f.correlation is not None:
+        result.pop("locations")
+        result["properties"]["correlation"] = {
+            "boundary": f.correlation.boundary,
+            "taints": list(f.correlation.taints),
+            "evidence": [
+                {
+                    "ordinal": item.ordinal,
+                    "ingress": item.ingress,
+                    "signalIds": list(item.signal_ids),
+                    "taints": list(item.taints),
+                }
+                for item in f.correlation.evidence
+            ],
+        }
+    return result
 
 
 def build_result_sarif(
@@ -94,7 +123,7 @@ def result_finding_to_dict(f: ResultFinding) -> dict[str, Any]:
     from our own denylist — NEVER from raw result content — so per-phrase FP
     aggregation reads a structured field instead of parsing ``message`` (#12).
     """
-    return {
+    record = {
         "kind": "result-finding",
         "rule_id": f.rule_id,
         "sub_rule": f.sub_rule,
@@ -110,6 +139,26 @@ def result_finding_to_dict(f: ResultFinding) -> dict[str, Any]:
         "snippet": f.snippet,
         "matched_phrases": list(f.matched_phrases),
     }
+    if f.injection_matches:
+        record["injection_matches"] = [
+            {**asdict(match), "evidence_ids": list(match.evidence_ids)}
+            for match in f.injection_matches
+        ]
+    if f.correlation is not None:
+        record["correlation"] = {
+            "boundary": f.correlation.boundary,
+            "taints": list(f.correlation.taints),
+            "evidence": [
+                {
+                    "ordinal": item.ordinal,
+                    "ingress": item.ingress,
+                    "signal_ids": list(item.signal_ids),
+                    "taints": list(item.taints),
+                }
+                for item in f.correlation.evidence
+            ],
+        }
+    return record
 
 
 def run_summary_to_dict(*, frames_inspected: int, inject_phrase_findings: int = 0) -> dict[str, Any]:

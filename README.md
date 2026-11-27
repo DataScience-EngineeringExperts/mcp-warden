@@ -1,6 +1,6 @@
 # mcp-warden
 
-Last Updated: 2026-10-19
+Last Updated: 2026-11-26
 
 [![CI](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml/badge.svg)](https://github.com/DataScience-EngineeringExperts/mcp-warden/actions/workflows/integrity-gate.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -10,7 +10,7 @@ Last Updated: 2026-10-19
 
 **mcp-warden is the lockfile and CI gate for MCP servers: it pins a server's declared
 tool/resource/prompt surface into a signed `warden.lock`, then fails CI when that surface
-drifts.** `pin` and `check` support stdio and Streamable HTTP; `guard` is stdio-only.
+drifts.** `pin`, `check`, and `guard` support stdio and Streamable HTTP. To route an HTTP endpoint through a laptop harness, see the [Streamable HTTP guard guide](docs/STREAMABLE_HTTP_GUARD.md).
 
 **CLI 2.0.0 / schema level 4** locks complete tool annotations and output schemas. Changing
 destructiveHint, removing a result schema, or widening its types now triggers drift;
@@ -19,21 +19,33 @@ Older locks stay readable, but require review and re-pinning for this coverage.
 Hints are server claims, not proof of safety, and schemas do not certify content. Release
 operators can check production OIDC without uploading via [`RELEASING.md`](RELEASING.md).
 
+`mcp-warden-cli` is owned by the [TheDataExperts PyPI organization](https://pypi.org/org/TheDataExperts/).
+The normal [v2.3.0 release](https://github.com/DataScience-EngineeringExperts/mcp-warden/releases/tag/v2.3.0)
+uploaded through the company Trusted Publisher, with matching GitHub/PyPI artifact
+hashes, verified signatures and PyPI provenance. See the
+[release proof](RELEASING.md#normal-release-proof--2026-11-14).
+
 The proposed next direction is a protocol-neutral **Warden**: human-approved tool versions and bounded actions, with untrusted inputs kept separate from authority.
 The [upgrade plan and checkpoint proposal](docs/plans/2026-10-02-tool-integrity-upgrade.md)
 maps prompts, retrieval, code execution, and serverless adapters to existing Agent
 Trust Kernel work. Those broader checkpoints are proposals, not shipped guarantees.
 
-The opt-in [artifact trust foundation](docs/ARTIFACT_TRUST.md) verifies signatures
-for kernel artifacts via `trust`; keys and signers require an independently
-protected root pin. It is development-only, not in 2.0.0. The [decision receipt
-foundation](docs/DECISION_RECEIPTS.md) adds signed evidence, governed decisions
-and recovery ports. Live enforcement still requires a protected provider and
-DSE-1076 integration.
+The opt-in [artifact trust foundation](docs/ARTIFACT_TRUST.md) adds public-key
+verification for the existing kernel activation APIs and `trust` CLI commands
+to prepare unsigned review artifacts and verify external signatures. Keys and
+signer roles require an independently protected root pin. This development
+feature first ships in the 2.1.0 package. The development
+[decision receipt foundation](docs/DECISION_RECEIPTS.md) adds signed evidence,
+governed decisions and recovery ports. Live checkpoint enforcement still requires
+an independently protected platform provider and DSE-1076 guard integration.
 
 The isolated [capability preparation foundation](docs/CAPABILITY_BROKER.md) uses exact signed grants to prepare canonical MCP/client requests and minimal synthetic descriptors.
 It selects a narrower approved time window only for the same bound operation; ambiguity denies. It issues no lease, signs no receipt or opens transport.
 Final PEP authorization, call consumption and live bypass protection remain separate gates.
+
+The offline [capability review command](docs/CAPABILITY_REVIEW.md) shows declared
+and observed capability evidence one operation at a time. Matching evidence can
+make a capability pending human review. Review output grants no authority.
 
 > ⚠️ **Install `mcp-warden-cli`, not `mcp-warden`.** The PyPI name `mcp-warden` is
 > an **unrelated package by a different author** — it is not this project. The
@@ -179,6 +191,21 @@ automatically — so the use cases are sequenced by leverage:
   lock against a known-good baseline — no live server required.
 - **Agent-framework integrator** *(post-launch).* Enforce that only warden-locked servers
   register in a LangGraph-style orchestrator — one integration locks an entire downstream ecosystem.
+
+### Isolated supplied-content inspection (DSE-718)
+
+The opt-in Linux normalizer processes supplied text/web/data, email, ZIP and a
+conservative text-PDF subset through one engine across all nine declared ingress
+families. A separately hash-locked parser image runs without network, credentials
+or host-data mounts. The coordinator preserves raw-byte evidence and creates
+untrusted derived envelopes with labeled source precision; it grants no delivery
+authority. Office/OCR, external retrieval and non-Linux worker execution refuse.
+
+`normalize <file> --media-type <MIME> --source-kind <kind> --normalizer-image <sha256:id>`
+emits evidence and redacted findings. `guard` and `inspect` accept the same
+`--normalizer-image` option for atomic, fail-closed inspection using a qualified
+immutable local image. Without it, their narrower legacy contracts remain.
+See [the supported profiles, sandbox qualification and limits](docs/CONTENT_NORMALIZATION.md).
 
 ---
 
@@ -385,15 +412,20 @@ run the gate only on push:
 
 | Command | Purpose | Exit code |
 |---------|---------|-----------|
-| `mcp-warden pin <server-cmd...> \| --url URL [--approve --approver <id>] [--sign [--identity-token T]] [--sarif F] [--json]` | Capture over stdio or Streamable HTTP + write `warden.lock` (TOFU baseline). **(#16)** `--sign` Sigstore-signs `overall_digest` (out-of-digest; needs `mcp-warden[sigstore]`) | 0 on success, 2 on capture/IO error, **1 on signing failure (fail closed, no partial sidecar)** |
-| `mcp-warden check <server-cmd...> \| --url URL [--lock F] [--sarif F] [--json]` | Re-capture over stdio or Streamable HTTP + diff vs lock | **non-zero on drift**, 2 on error |
+| `mcp-warden trust review-capabilities EVIDENCE --audience human\|agent` | Review separate typed declaration and observation records. Use the human view on an operator-controlled output channel. See [capability review](docs/CAPABILITY_REVIEW.md). | 0 on projection, 2 on input error |
+| `mcp-warden pin <server-cmd...> \| --url URL [--approve --approver <id>] [--sign [--identity-token T]] [--max-pages N] [--sarif F] [--json]` | Capture over stdio or Streamable HTTP + write `warden.lock` (TOFU baseline). `--max-pages` (default 256) caps `nextCursor` pages per list call; a longer chain or a repeated tool/prompt name or resource URI fails capture (exit 2), never pins a partial or ambiguous surface. **(#16)** `--sign` Sigstore-signs `overall_digest` (out-of-digest; needs `mcp-warden[sigstore]`) | 0 on success, 2 on capture/IO error, **1 on signing failure (fail closed, no partial sidecar)** |
+| `mcp-warden check <server-cmd...> \| --url URL [--lock F] [--max-pages N] [--sarif F] [--json]` | Re-capture over stdio or Streamable HTTP + diff vs lock (same `--max-pages` cap and duplicate refusal as `pin`) | **non-zero on drift**, 2 on error |
 | `mcp-warden check --verify --certificate-identity ID --certificate-oidc-issuer ISS [--lock F] [--offline-bundle P]` | **(#16)** Verify the lock's Sigstore signature against a fixed sidecar (`<lockname>.sigstore` next to the lock); no server spawn. See [`docs/SIGNING.md`](docs/SIGNING.md) | **0 only on clean verify**; non-zero on any failure (fail closed) |
 | `mcp-warden policy lint <file> [--lock F]` | Lint a policy file (fail closed) | non-zero on lint error |
 | `mcp-warden policy eval <file> <sample.json> [--lock F]` | Evaluate one sample call | **non-zero on a deny verdict** (CI assertion) |
 | `mcp-warden guard <server-cmd...> [--lock F] [--policy F] [--no-block-* / --allow-exfil-domain] [--block-inject-phrase] [--audit-only] [--strict] [--sarif F] [--record T]` | **(v0.3)** Transparent stdio proxy: inspects `tools/call` results + arguments at runtime. **Deterministic tier blocks by default**; opt out per-category with `--no-block-<category>` or fully with `--audit-only`. `--strict` fails CLOSED on an internal inspection error (exit `3`) | child's exit code; `3` on a `--strict` abort; otherwise never breaks the session |
+| `mcp-warden guard --url URL [--http-token-env NAME] [--lock F] [--policy F]` | Mediate a Streamable HTTP session over a harness stdio command | `0` on disconnect, `2` on transport failure, `3` on strict refusal |
 | `mcp-warden inspect <trace.jsonl> [--lock F] [--sarif F]` | **(v0.2)** Offline analyzer over a recorded JSON-RPC session — same `WRD-RES-*` catalog as `guard` (always report-only) | non-zero on any BLOCK-tier finding; 2 on read error |
+| `mcp-warden normalize <file> --media-type MIME --source-kind KIND --normalizer-image sha256:ID` | Linux supplied-content normalization/inspection through an independently qualified isolated worker; emits evidence, not extracted content. `guard`/`inspect` also accept `--normalizer-image`; see [`docs/CONTENT_NORMALIZATION.md`](docs/CONTENT_NORMALIZATION.md) | 0 no blocking finding; 1 blocking finding; 2 refusal/error |
 | `mcp-warden lock rotate <lock> [--approver ID] [--actor ID] [--note T] [--json]` | **(v0.3)** Re-attest provenance on an existing baseline without re-capturing the surface; `overall_digest` stays **byte-identical** (WARDEN_LOCK_SCHEMA §8.2). Fails closed on a tampered/inconsistent lock | 0 on success, 2 on missing/invalid/tampered lock |
+| `mcp-warden lock sign <lock> [--coordinate C] [--identity-token T]` | **(DSE-1530)** Sigstore-sign an existing **unsigned** lock and write `<lockname>.sigstore` beside it — for attesters that capture offline and sign afterwards. v2 statement (binds the coordinate) with `--coordinate`, v1 otherwise; `overall_digest` unchanged. Refuses an existing sidecar or an already-signed lock | 0 on success; **1 on signing failure (fail closed, no partial sidecar)**; 2 on missing/tampered lock, bad coordinate, existing signature, or missing `mcp-warden[sigstore]` |
 | `mcp-warden diff <lock-a> <lock-b> [--json] [--sarif F] [--no-provenance] [--exit-code]` | **(v0.3)** Offline, **redacted** viewer over the drift engine: renders integrity drift between two existing locks (A=baseline, B=current) + a separate informational provenance section. Never re-captures and never prints raw `server.command`/`args` (secret-safe) | 0 (viewer); with `--exit-code`, 1 on **integrity** drift only; 2 on missing/invalid lock |
+| `mcp-warden identity compare BASELINE CURRENT` | Offline comparison of signed deployment observations for package, configuration, capability, policy, and behavior drift. See [deployment observation workflow](docs/ARTIFACT_TRUST.md#offline-deployment-identity-comparison) | 0 verified match, 1 verified drift, 2 indeterminate |
 | `mcp-warden deploy-gate --policy F --evidence F [--json] [--sarif F]` | **(v1.2)** Fail-closed CI gate for agent deployments: verifies declared eval thresholds, required guardrails, a budget/quota, and a human-approval receipt. Adjudicates evidence — it does **not** run evals. See [`docs/AGENT_GATES.md`](docs/AGENT_GATES.md) | 0 only when every control is satisfied; 1 on any gate finding; 2 on unreadable/malformed input (fail closed) |
 | `mcp-warden doctor [--config F]... [--no-discover] [--json] [--sarif F] [--pin [--yes]]` | **(v1.2)** Zero-config posture scan: discovers every MCP client config on the machine (Claude Code / Claude Desktop / Cursor / VS Code / Windsurf / Codex), runs `auth audit` + `WRD-SUP-*` launch checks per server, reports servers with no `warden.lock` (`WRD-DOCTOR-NO-LOCK`) and prints the exact `pin` command. Static by default; `--pin` is the opt-in that spawns, and refuses non-interactively without `--yes`. See [`docs/DOCTOR.md`](docs/DOCTOR.md) | 0 clean or no configs; 1 on any finding; 2 on unreadable/malformed config or a `--pin` failure (fail closed) |
 | `mcp-warden auth audit <config...> [--json] [--sarif F]` | **(v1.2)** Static MCP auth-posture audit over client/server config: remote endpoints without auth, cleartext `http://`, credential literals committed into config. No server spawn, no network. See [`docs/AGENT_GATES.md`](docs/AGENT_GATES.md) | 0 clean; 1 on any finding; 2 on read/parse error (fail closed) |
@@ -406,9 +438,11 @@ is mutually exclusive with a server command. Set `WARDEN_LOG_LEVEL=INFO` for dia
 
 ### Runtime result inspection
 
-`guard` inspects stdio tool results and blocks deterministic hazards by default.
-`--audit-only` restores observation; `--strict` terminates on inspection errors.
-Framing errors still fail open. Prompt-injection phrase matching remains monitor-only.
+`guard` inspects tool results from either runtime transport and blocks deterministic hazards by default.
+`--audit-only` reports findings without applying their policy action. Launched stdio
+fails open on framing errors and uses `--strict` to terminate on inspection errors.
+The Streamable HTTP adapter refuses malformed frames and incomplete inspections.
+Prompt-injection phrase matching remains monitor-only by default.
 See [runtime examples](docs/archive/2026-10-02-runtime-cli-examples.md) and the
 [guard contract](docs/GUARD_PROXY_V3.md) for flags, reserved errors, and limitations.
 
@@ -434,16 +468,8 @@ failure codes and `--require-consensus`.
 
 ## Policy (design-time only)
 
-`policy` **lints** a YAML policy and **evaluates a single provided sample call**.
-It does **not** intercept live calls — there is no runtime enforcement in v0.1
-(deferred to v0.2). Fail-closed defaults: `shell_exec.allow=false`,
-`http_request.deny_private=true` (SSRF ranges), `sql_query.allow_readonly_only=true`,
-empty `allow_paths` = deny-all. See [`docs/POLICY_MODEL.md`](docs/POLICY_MODEL.md).
-
-```bash
-.venv/bin/mcp-warden policy eval policy.yaml ssrf_sample.json
-#  -> deny: host 169.254.169.254 is in deny_private range 169.254.0.0/16  (exit 1)
-```
+`policy` lints YAML and evaluates a supplied sample call; it does not intercept live calls.
+See [the contract](docs/POLICY_MODEL.md) and [operator examples](docs/archive/2026-11-14-readme-operations.md#policy-design-time-only).
 
 ---
 
@@ -456,8 +482,8 @@ V1's default evidence gate denies effects. DSE-717 adds a separate V2 PEP with i
 authorized signed receipts, strengthening rules, finite noncritical overrides, primary/fallback
 logs, protected-state/recovery ports, pure replay and a mandatory reference failure corpus.
 Reference providers prove local durability and fail-closed ordering; they cannot establish
-platform rollback resistance or whole-kernel conformance. These development APIs are absent
-from the published 2.0.0 package. See [`docs/DECISION_RECEIPTS.md`](docs/DECISION_RECEIPTS.md),
+platform rollback resistance or whole-kernel conformance. These development APIs first ship
+in the 2.1.0 package. See [`docs/DECISION_RECEIPTS.md`](docs/DECISION_RECEIPTS.md),
 [`docs/POLICY_ENFORCEMENT.md`](docs/POLICY_ENFORCEMENT.md) and
 [`docs/AGENT_TRUST_KERNEL.md`](docs/AGENT_TRUST_KERNEL.md).
 
@@ -469,21 +495,9 @@ schemas in `warden.lock` and the SARIF output match them byte-for-byte.
 
 ## Tests
 
-```bash
-PATH="$PWD/.venv/bin:$PATH" .venv/bin/python -m pytest -q
-```
-
-The headline test is a real stdio round-trip: spawn the clean fixture → `pin` →
-re-run `check` against the mutated fixture → assert non-zero exit + the expected
-drift + SARIF finding.
-
-The live runtime attack surface — the stdio JSON-RPC **framer**, the ANSI/control
-**stripper**, the exfil-**domain** matcher, and the secret **redactor** — is
-additionally **property-fuzzed** with [`hypothesis`](https://hypothesis.works/)
-under `tests/fuzz/` (construction-based liveness + soundness properties: a
-known-malicious input IS detected, and the parser never invents, leaks, or
-misclassifies). The deep soak runs via `make fuzz`; see
-[`CONTRIBUTING.md`](CONTRIBUTING.md#fuzzing).
+Run `.venv/bin/python -m pytest -q`; see [test details](docs/archive/2026-11-14-readme-operations.md#tests)
+and [fuzzing](CONTRIBUTING.md#fuzzing). Normalization additionally requires the
+[actual-image qualification](docs/CONTENT_NORMALIZATION.md#qualification-and-rollback).
 
 ## Contributing & security
 
