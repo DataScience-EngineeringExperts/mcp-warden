@@ -39,6 +39,7 @@ from .cli_deploy_gate import register as register_deploy_gate_command
 from .cli_diff import register as register_diff_command
 from .cli_doctor import register as register_doctor_command
 from .cli_guard import register as register_guard_commands
+from .cli_identity import register as register_identity_commands
 from .cli_lock import register as register_lock_commands
 from .cli_normalize import register as register_normalize_command
 from .cli_sign import sign_after_pin, verify_lock_signature
@@ -99,6 +100,7 @@ register_deploy_gate_command(app, console, err_console)
 register_doctor_command(app, console, err_console)
 register_trust_commands(app, console, err_console)
 register_normalize_command(app)
+register_identity_commands(app)
 
 
 def _split_server_cmd(server_cmd: list[str]) -> tuple[str, list[str]]:

@@ -1,6 +1,6 @@
 # mcp-warden — System Context Diagram
 
-Last Updated: 2026-11-14
+Last Updated: 2026-11-26
 
 **CLI 2.3.0 / schema level 4** includes complete tool annotations and output
 schemas, with structural output drift and Python/TypeScript parity. The existing
@@ -44,6 +44,12 @@ logic) plus a separate informational provenance section. It never prints raw
 > signature port using pinned Ed25519 public keys and explicit artifact-kind roles.
 > `trust prepare` emits unsigned review/signing bytes; `trust verify` checks signatures
 > only. Human signing remains external and the root pin must be host-protected.
+
+> [`identity compare`](docs/ARTIFACT_TRUST.md#offline-deployment-identity-comparison)
+> reads two offline deployment observations and verifies both with an independently pinned
+> observation key set. Package identity is independent of deployment. The command reports
+> matching commitments, material drift, or indeterminate evidence. Capture, approval, and
+> revocation remain separate paths.
 
 > [Capability review](docs/CAPABILITY_REVIEW.md) projects separate declaration
 > and observation references for an offline operator review. The agent view

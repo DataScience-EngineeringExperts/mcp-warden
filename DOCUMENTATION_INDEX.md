@@ -1,12 +1,16 @@
 # Documentation Index — mcp-warden
 
-Last Updated: 2026-11-14
+Last Updated: 2026-11-26
 
 Master index of every document in this repository. The `docs/` files are the
 **security contract and source of truth** for all algorithms; the three core docs
 describe and visualize the implementation that satisfies that contract.
 
 ---
+
+## Privacy operations
+
+[Control mappings and local fixture report](docs/PRIVACY_EVIDENCE.md) · [Deployment record template](docs/PRIVACY_OPERATOR_TEMPLATE.md)
 
 ## Core docs (3-core rule)
 
@@ -49,6 +53,15 @@ implementations (Python reference, zero-dependency TypeScript) prove it in CI.
 | [`src/mcp_warden/normalization_trace.py`](src/mcp_warden/normalization_trace.py) | Bounded, explicit-direction offline trace loading |
 | [`scripts/qualify_normalizer.sh`](scripts/qualify_normalizer.sh) | Actual-image qualification with independent builder QA claims |
 | [`.github/workflows/normalization.yml`](.github/workflows/normalization.yml) | Dedicated Python 3.12 Linux parser/sandbox/every-ingress/fuzz qualification |
+
+## Offline deployment identity (DSE-722)
+
+| Artifact | Purpose |
+|---|---|
+| [Deployment observation workflow](docs/ARTIFACT_TRUST.md#offline-deployment-identity-comparison) | Signed observation format, evidence custody, digest formulas, and CLI exit codes |
+| [`src/mcp_warden/bundle_identity.py`](src/mcp_warden/bundle_identity.py) | Strict package and deployment records and signature-gated comparison |
+| [`src/mcp_warden/bundle_identity_lock.py`](src/mcp_warden/bundle_identity_lock.py) | Declared capability projection from v4 lock entries |
+| [`tests/test_bundle_identity.py`](tests/test_bundle_identity.py) | Local and remote observation fixtures, signature and schema validation, and material drift |
 
 ## Agent gates (`deploy-gate` + `auth audit` — DSE-1257 / DSE-1258)
 
@@ -197,6 +210,7 @@ scope-honesty box and makes no compliance/regulatory claim.
 
 | Plan | Purpose |
 |---|---|
+| [`docs/plans/2026-11-26-control-plane-deployment-design.md`](docs/plans/2026-11-26-control-plane-deployment-design.md) | Proposed managed and self-hosted profiles, shared security semantics, regional data boundaries, recovery and upgrade design, and installation parity gates (DSE-730) |
 | [`docs/plans/2026-10-04-dse717-reconciliation.md`](docs/plans/2026-10-04-dse717-reconciliation.md) | Recovered-branch provenance, integration ownership, failure-path validation and exact-head security/external-review gates |
 | [`docs/plans/2026-07-19-decision-receipts-design.md`](docs/plans/2026-07-19-decision-receipts-design.md) | Original DSE-717 receipt, deterministic rule, evidence, recovery and replay design |
 | [`docs/plans/2026-07-19-decision-receipts-implementation.md`](docs/plans/2026-07-19-decision-receipts-implementation.md) | Original strict-TDD execution plan and independently reviewed release gates |
