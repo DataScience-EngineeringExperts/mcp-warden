@@ -106,3 +106,11 @@ def resolve_ssrf_hits(
                         hits.append((host, ip_str, label))
                         break  # first matching range wins per resolved IP
     return sorted(hits)
+
+if __name__ == "__main__":
+    # Private worker entry point. The HTTP adapter owns the input, deadline,
+    # and subprocess lifetime. Use the same address rules as launched stdio.
+    import json
+    import sys
+
+    print(json.dumps(resolve_ssrf_hits(json.load(sys.stdin))))

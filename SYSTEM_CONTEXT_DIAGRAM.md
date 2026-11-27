@@ -267,10 +267,12 @@ sequenceDiagram
 flowchart LR
     subgraph live["Live session (v0.2 guard)"]
         client["MCP client\n(agent / host)"]
-        guard["mcp-warden guard\n(transparent stdio proxy)\nv0.3: deterministic tier\nblocks by default"]
+        guard["mcp-warden guard\n(stdio-facing)\nv0.3: deterministic tier\nblocks by default"]
         server2["Target MCP server\n(child, argv array,\nNEVER via a shell)"]
-        client <-- "c2s frames" --> guard
-        guard <-- "s2c frames" --> server2
+        httpServer["Streamable HTTP MCP server"]
+        client <-- "MCP over stdio" --> guard
+        guard <-- "stdio" --> server2
+        guard <-- "HTTP POST / SSE / DELETE" --> httpServer
     end
 
     lock[("warden.lock\n+ §11 per-tool\ninspection policy")]
@@ -293,10 +295,10 @@ flowchart LR
     guard -- "on block (opt-in): JSON-RPC error\nOR redacted-content result" --> client
 ```
 
-- `guard` passes **every frame through untouched EXCEPT** `tools/call` request/response
+- Launched-stdio `guard` passes **every frame through untouched EXCEPT** `tools/call` request/response
   (+ the `tools/list_changed` gate vs the lock). `initialize`/capabilities are never
   rewritten; enforcement begins only at the first `tools/call` (`GUARD_PROXY.md` §2).
-- A framing/inspection **error fails open** by default — the frame passes through and the session
+- A framing/inspection **error fails open** by default on launched stdio — the frame passes through and the session
   is never killed (`GUARD_PROXY.md` §9). Oversized frames (> `--max-frame-bytes`) and truncated
   frames at EOF also fail open (`GUARD_PROXY_V3.md` §2.3–§2.4). **(#21)** The opt-in `--strict`
   flag fails CLOSED instead, but only for the inspection layer: an error at the result /
@@ -349,7 +351,8 @@ follows the layout in `docs/COMMUNITY_CORPUS.md`.
   the repo (delegated to host controls — PR review, branch protection).
 - **Untrusted:** the target server and everything beyond its transport boundary.
 - The boundary is the **stdio channel** to a spawned child or the network channel to the
-  configured Streamable HTTP endpoint. Runtime `guard` interception remains stdio-only.
+  configured Streamable HTTP endpoint. The [HTTP adapter](docs/STREAMABLE_HTTP_GUARD.md)
+  rejects incomplete frames before delivery and mediates inspected results before writing to the harness.
 
 ## What is explicitly NOT in this picture
 
@@ -359,14 +362,13 @@ follows the layout in `docs/COMMUNITY_CORPUS.md`.
 
 **Still NOT in scope, even with v0.2 `guard`/`inspect`:**
 - No behavioral defense (`T-BEHAVE`) — content is inspected, side effects are not.
-- No cross-call/conversational correlation; each frame is inspected independently.
+- Correlation uses a bounded observation window within one runtime session or offline trace.
 - No decoding of image/audio/blob/base64 result content (coverage gap recorded as
   `WRD-RES-UNINSPECTABLE`).
-- No network calls / no DNS resolution by checks, policy, or the proxy. Exfil + SSRF match
-  on literal host strings **and (#54, D6) raw IP literals** in result text/args against the
-  SSRF/exfil address ranges (`net_rules`) — deterministic, still no DNS-name resolution.
-- No HTTP/SSE runtime proxy: `guard` remains stdio-only. Streamable HTTP support is limited
-  to definition capture by `pin` and `check` via `--url`.
+- Offline result inspection and argument-policy evaluation match literal hosts and IP
+  addresses without network access. Runtime result inspection can also resolve DNS
+  names. The Streamable HTTP adapter applies a DNS deadline and candidate limit.
+- Runtime `guard --url` uses Streamable HTTP. The legacy HTTP+SSE transport and upstream-initiated client RPC are outside the adapter contract.
 - The fuzzy `WRD-RES-INJECT-PHRASE` MONITOR tier is **never default-block**, even in v0.3
   (opt-in only via `--block-inject-phrase`).
 - Windows lifecycle guarantees are **experimental** in v0.3 — job-object best-effort teardown,
