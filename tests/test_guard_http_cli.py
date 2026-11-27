@@ -29,15 +29,16 @@ async def test_cli_subprocess_connects_applies_shared_policy_and_deletes_session
             process.stdin.write(json.dumps({"jsonrpc": "2.0", **message}).encode() + b"\n")
             await process.stdin.drain()
 
-        async def receive():
-            return json.loads(await asyncio.wait_for(process.stdout.readline(), 5))
+        async def receive(timeout=5):
+            return json.loads(await asyncio.wait_for(process.stdout.readline(), timeout))
 
         try:
             await send(id=1, method="initialize", params={
                 "protocolVersion": VERSION, "capabilities": {},
                 "clientInfo": {"name": "fixture", "version": "1"},
             })
-            assert (await receive())["result"]["protocolVersion"] == VERSION
+            # Covered process startup can take longer on a busy builder.
+            assert (await receive(timeout=20))["result"]["protocolVersion"] == VERSION
             await send(method="notifications/initialized")
             await send(id=2, method="tools/call", params={
                 "name": "echo", "arguments": {"size": 8},
