@@ -59,6 +59,7 @@ class _Session:
         self.active: dict[int | str, _Flight] = {}
         self.request_ids: set[int | str] = set()
         self.writer = anyio.Lock()
+        self.dns_workers = anyio.CapacityLimiter(2)
         self.output_failed = False
         self.tasks: anyio.abc.TaskGroup
         self.failure: tuple[str, str | None] | None = None
@@ -159,6 +160,9 @@ class _Session:
                                        or params["protocolVersion"] not in SUPPORTED_VERSIONS):
                 raise TransportFailure("unsupported initialization")
             self.phase = "initializing"
+        elif "task" in params:
+            await self.write_error(rpc_id, "task-augmented client requests are unsupported")
+            return
         elif method not in SUPPORTED_REQUESTS:
             await self.write_error(rpc_id, "unsupported client request")
             return
@@ -283,7 +287,7 @@ class _Session:
             self.transport.protocol_version = frame.json["result"]["protocolVersion"]
         elif flight.method == "tools/list" and "result" in frame.json and self.state.lock is not None:
             self.state.list_changed_pending = True
-        out = await inspect_response(self.state, frame, flight.method, flight.rpc_id)
+        out = await inspect_response(self.state, frame, flight.method, flight.rpc_id, self.dns_workers)
         if flight.method == "initialize" and out != frame.raw:
             raise TransportFailure("upstream initialization was refused")
         await self.write(out)

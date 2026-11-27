@@ -192,6 +192,8 @@ def _validate_result(method: str, result: dict, has_lock: bool) -> None:
                 or type(result.get("capabilities")) is not dict
                 or type(result.get("serverInfo")) is not dict):
             raise TransportFailure("unsupported upstream initialization")
+    elif "task" in result:
+        raise TransportFailure("upstream task responses are unsupported")
     elif method == "tools/list":
         tools = result.get("tools")
         if (type(tools) is not list or any(type(tool) is not dict

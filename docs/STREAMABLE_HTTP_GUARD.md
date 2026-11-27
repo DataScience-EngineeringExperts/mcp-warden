@@ -65,6 +65,10 @@ receive no call. Until that endpoint is routed and verified, inventory it as unm
   before accumulation using `--max-frame-bytes` (1 KiB–8 MiB). Writes apply pipe
   backpressure and stop the session if stdout stalls. EOF, SIGINT, or SIGTERM
   cancels active exchanges and attempts a bounded DELETE for a stateful session.
+  DNS inspection evaluates up to 32 hostnames per result in a subprocess with a
+  one-second deadline. Each session permits two DNS workers at a time and reaps
+  a worker on timeout or cancellation. A DNS deadline closes the session as an
+  incomplete inspection.
 - Only upstream HTTPS and cleartext loopback HTTP are supported. Redirects, URL
   credentials, query strings, response compression, cookies, and automatic OAuth
   are unsupported. Provider credentials remain in request headers. The adapter

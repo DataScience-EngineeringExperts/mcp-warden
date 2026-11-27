@@ -380,9 +380,7 @@ async def test_list_drift_is_checked_using_the_existing_lock():
 
 
 async def test_dns_inspection_preserves_concurrent_cancellation(monkeypatch):
-    import socket
-
-    import anyio
+    from mcp_warden import guard_http_policy
 
     resolving = asyncio.Event()
     cancelled = asyncio.Event()
@@ -391,9 +389,9 @@ async def test_dns_inspection_preserves_concurrent_cancellation(monkeypatch):
     async def resolve(*args, **kwargs):
         resolving.set()
         await no_reply.wait()
-        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0))]
+        return []
 
-    monkeypatch.setattr(anyio, "getaddrinfo", resolve)
+    monkeypatch.setattr(guard_http_policy, "_resolve", resolve)
 
     async def handle(_, obj):
         if obj["method"] == "notifications/cancelled":
@@ -446,7 +444,7 @@ async def test_literal_ip_disposition_matches_shared_guard(enabled):
 async def test_initialization_must_pass_the_guard_before_admission(monkeypatch, caplog):
     import mcp_warden.guard_http as module
 
-    async def refuse(state, frame, method, rpc_id):
+    async def refuse(state, frame, method, rpc_id, limiter):
         return b"withheld"
 
     monkeypatch.setattr(module, "inspect_response", refuse)
@@ -506,3 +504,53 @@ async def test_unsolicited_resume_cannot_wait_past_the_deadline():
 def test_auth_material_is_refused_as_numeric_or_escaped_json(body):
     with pytest.raises(TransportFailure, match="credential-bearing frame refused"):
         parse_frame(body, ("789123456789",))
+
+
+async def test_dns_worker_uses_local_resolver_and_is_reaped_on_timeout(monkeypatch, tmp_path):
+    import sys
+
+    import anyio
+
+    from mcp_warden import guard_http_policy
+
+    shadow_pkg = tmp_path / "mcp_warden"
+    shadow_pkg.mkdir()
+    (shadow_pkg / "__init__.py").write_text("raise RuntimeError('unexpected package source')")
+    monkeypatch.chdir(tmp_path)
+    limiter = anyio.CapacityLimiter(1)
+    hits = await guard_http_policy._resolve(["localhost"], limiter)
+    assert any(host == "localhost" for host, _, _ in hits)
+
+    start = anyio.open_process
+    started = []
+
+    async def slow(*args, **kwargs):
+        process = await start([sys.executable, "-c", "import time; time.sleep(30)"], **kwargs)
+        started.append(process)
+        return process
+
+    monkeypatch.setattr(anyio, "open_process", slow)
+    monkeypatch.setattr(guard_http_policy, "_DNS_TIMEOUT_SECONDS", 0.15)
+    with pytest.raises(TimeoutError):
+        await asyncio.wait_for(guard_http_policy._resolve(["localhost"], limiter), 2)
+    assert len(started) == 1
+    assert started[0].returncode is not None
+
+
+async def test_task_augmentation_is_refused_before_upstream_execution():
+    async def handle(_, obj):
+        assert "task" not in obj["params"]
+        return reply(rpc(rpc_id=obj["id"], result={"task": {"taskId": "unsupported"}}))
+
+    upstream = Upstream(handle)
+    async with harness(upstream) as (pipe, _):
+        call(pipe, task={"ttl": 1000})
+        assert (await pipe.response())["error"]["data"]["reason"] == (
+            "task-augmented client requests are unsupported"
+        )
+        call(pipe, 3)
+        assert (await pipe.response())["error"]["data"]["reason"] == (
+            "upstream task responses are unsupported"
+        )
+    assert [obj["id"] for _, obj in upstream.requests
+            if obj and obj.get("method") == "tools/call"] == [3]
