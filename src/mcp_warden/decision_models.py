@@ -73,6 +73,9 @@ class DecisionDigestDomain(StrEnum):
     EFFECT_EVIDENCE = "mcp-warden/decision/v1/effect-evidence"
     CONFORMANCE_REPORT = "mcp-warden/decision/v1/conformance-report"
     BUNDLE_MANIFEST = "mcp-warden/decision/v1/bundle-manifest"
+    PACKAGE_IDENTITY = "mcp-warden/bundle-identity/v1/package"
+    DEPLOYMENT_IDENTITY = "mcp-warden/bundle-identity/v1/deployment"
+    CAPABILITY_IDENTIFIER = "mcp-warden/bundle-identity/v1/capability-identifier"
 
 
 def digest_decision_bytes(payload: bytes, *, domain: DecisionDigestDomain) -> str:
@@ -88,6 +91,7 @@ class ArtifactKindV1(StrEnum):
     RUNTIME = "runtime"
     ADAPTER = "adapter"
     BUNDLE = "bundle"
+    DEPLOYMENT_OBSERVATION = "deployment-observation"
 
 
 class VerificationAlgorithmV1(StrEnum):

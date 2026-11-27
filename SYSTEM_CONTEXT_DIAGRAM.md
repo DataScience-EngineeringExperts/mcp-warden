@@ -1,6 +1,6 @@
 # mcp-warden — System Context Diagram
 
-Last Updated: 2026-11-14
+Last Updated: 2026-11-26
 
 **CLI 2.3.0 / schema level 4** includes complete tool annotations and output
 schemas, with structural output drift and Python/TypeScript parity. The existing
@@ -44,6 +44,16 @@ logic) plus a separate informational provenance section. It never prints raw
 > signature port using pinned Ed25519 public keys and explicit artifact-kind roles.
 > `trust prepare` emits unsigned review/signing bytes; `trust verify` checks signatures
 > only. Human signing remains external and the root pin must be host-protected.
+
+> [`identity compare`](docs/ARTIFACT_TRUST.md#offline-deployment-identity-comparison)
+> reads two offline deployment observations and verifies both with an independently pinned
+> observation key set. Package identity is independent of deployment. The command reports
+> matching commitments, material drift, or indeterminate evidence. Capture, approval, and
+> revocation remain separate paths.
+
+> [Capability review](docs/CAPABILITY_REVIEW.md) projects separate declaration
+> and observation references for an offline operator review. The agent view
+> exposes closed statuses and descriptors for eligible rows.
 
 > `conclave` (the 4-model adversarial council referenced in `docs/THREAT_MODEL.md`)
 > is a **dev-time design reviewer** that shaped this contract. It is **NOT** a
@@ -148,10 +158,17 @@ flowchart TB
     envelope["Content Envelope V1\nDSE-715 · implemented evidence foundation\nNOT wired to guard · grants no authority"]
     decision["Deterministic PDP/PEP V1\nDSE-716 · signed adapter/bundle gates + fixed corpus\nNOT wired to guard"]
     artifactTrust["Opt-in Ed25519 artifact verifier\nartifact_trust.py · protected root pin + key roles\ntrust CLI: unsigned preparation / signature verification"]
+    reviewInputs["Offline declaration and observation references"]
+    capabilityReview["Capability review projection\ncapability_review.py"]
+    humanReview["Operator-controlled review output"]
+    agentReview["Redacted agent report"]
     evidence["PEP V2 · signed evidence before effect\nDSE-717 reference SDK · recovery + replay\nnine live floors · retained historical signer pins\nindependent platform provider still required"]
     atk -. "governs partial foundation" .-> envelope
     envelope -. "required input" .-> decision
     artifactTrust -. "external signature verification port" .-> decision
+    reviewInputs --> capabilityReview
+    capabilityReview --> humanReview
+    capabilityReview --> agentReview
     decision -. "requires production gate" .-> evidence
 
     subgraph ci["CI pipeline (GitHub Actions / local)"]
