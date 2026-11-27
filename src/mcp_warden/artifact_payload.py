@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import json
 
+from mcp_warden.bundle_identity import (
+    IdentityError,
+    canonical_deployment_identity_bytes,
+    parse_deployment_identity,
+)
 from mcp_warden.decision_models import (
     ArtifactKindV1,
     PolicyBundleV1,
@@ -71,6 +76,11 @@ def canonical_artifact_payload(kind: ArtifactKindV1, payload: bytes) -> bytes:
     """Validate a review draft using the existing model; return exact canonical bytes."""
     if type(kind) is not ArtifactKindV1:
         raise ArtifactTrustError("TRUST-ARTIFACT-MALFORMED") from None
+    if kind is ArtifactKindV1.DEPLOYMENT_OBSERVATION:
+        try:
+            return canonical_deployment_identity_bytes(parse_deployment_identity(payload))
+        except IdentityError:
+            raise ArtifactTrustError("TRUST-ARTIFACT-MALFORMED") from None
     parsed = bounded_json(payload, cap=MAX_ARTIFACT_BYTES, code="TRUST-ARTIFACT-MALFORMED")
     if (
         type(parsed) is not dict

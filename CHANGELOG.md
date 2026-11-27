@@ -32,6 +32,9 @@ Streamable HTTP; the v0.3 `guard` proxy adds deterministic runtime *result* insp
 
 ### Added
 
+- DSE-722 adds an offline deployment identity format and `identity compare`.
+  It compares complete, signed observations against pinned observation roots
+  and reports package and deployment digests, drift dimensions, and evidence gaps.
 - DSE-720 adds session-local reporting of related signals across calls in
   `guard` and directed `inspect` traces. Findings identify the attempted
   boundary and the observations that support it.
