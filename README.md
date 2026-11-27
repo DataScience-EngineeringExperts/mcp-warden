@@ -39,6 +39,10 @@ feature first ships in the 2.1.0 package. The development
 governed decisions and recovery ports. Live checkpoint enforcement still requires
 an independently protected platform provider and DSE-1076 guard integration.
 
+The offline [capability review command](docs/CAPABILITY_REVIEW.md) shows declared
+and observed capability evidence one operation at a time. Matching evidence can
+make a capability pending human review. Review output grants no authority.
+
 > ⚠️ **Install `mcp-warden-cli`, not `mcp-warden`.** The PyPI name `mcp-warden` is
 > an **unrelated package by a different author** — it is not this project. The
 > correct install is `pip install mcp-warden-cli` (the CLI command is still
@@ -404,6 +408,7 @@ run the gate only on push:
 
 | Command | Purpose | Exit code |
 |---------|---------|-----------|
+| `mcp-warden trust review-capabilities EVIDENCE --audience human\|agent` | Review separate typed declaration and observation records. Use the human view on an operator-controlled output channel. See [capability review](docs/CAPABILITY_REVIEW.md). | 0 on projection, 2 on input error |
 | `mcp-warden pin <server-cmd...> \| --url URL [--approve --approver <id>] [--sign [--identity-token T]] [--max-pages N] [--sarif F] [--json]` | Capture over stdio or Streamable HTTP + write `warden.lock` (TOFU baseline). `--max-pages` (default 256) caps `nextCursor` pages per list call; a longer chain or a repeated tool/prompt name or resource URI fails capture (exit 2), never pins a partial or ambiguous surface. **(#16)** `--sign` Sigstore-signs `overall_digest` (out-of-digest; needs `mcp-warden[sigstore]`) | 0 on success, 2 on capture/IO error, **1 on signing failure (fail closed, no partial sidecar)** |
 | `mcp-warden check <server-cmd...> \| --url URL [--lock F] [--max-pages N] [--sarif F] [--json]` | Re-capture over stdio or Streamable HTTP + diff vs lock (same `--max-pages` cap and duplicate refusal as `pin`) | **non-zero on drift**, 2 on error |
 | `mcp-warden check --verify --certificate-identity ID --certificate-oidc-issuer ISS [--lock F] [--offline-bundle P]` | **(#16)** Verify the lock's Sigstore signature against a fixed sidecar (`<lockname>.sigstore` next to the lock); no server spawn. See [`docs/SIGNING.md`](docs/SIGNING.md) | **0 only on clean verify**; non-zero on any failure (fail closed) |
