@@ -99,7 +99,7 @@ def validate_exact(value, cls):
     try:
         if type(value) is not cls:
             raise ValueError
-        cls.model_validate(value)
+        return cls.model_validate(value)
     except Exception:
         invalid = True
     if invalid:
@@ -189,7 +189,7 @@ class ToolProjectionV1(CapabilityModel):
 
 def serialize_prepared_capability(value):
     """Canonical advisory bytes with digest-only context, never raw arguments."""
-    validate_exact(value, PreparedCapabilityV1)
+    value = validate_exact(value, PreparedCapabilityV1)
     invalid = False
     payload = None
     try:

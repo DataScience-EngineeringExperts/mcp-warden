@@ -101,3 +101,18 @@ def test_preparation_modules_have_no_io_signing_or_dynamic_execution_imports():
                 assert (node.module or "").split(".")[0] not in forbidden
             elif isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
                 assert node.func.id not in {"open", "eval", "exec", "__import__"}
+
+
+def test_preparation_uses_revalidated_nested_models_and_serialization():
+    intent, candidates, authority, _ = fixture()
+    request = candidates[0]
+    # A copy can hold serialized nested data even in a frozen Pydantic model.
+    copied = request.model_copy(update={"operation": request.operation.model_dump()})
+    copied_intent = intent.model_copy(update={"identity": intent.identity.model_dump()})
+    baseline = prepare_mcp_call(wire(), intent, candidates=candidates, **authority)
+    actual = prepare_mcp_call(wire(), copied_intent, candidates=(copied,), **authority)
+    assert actual == baseline
+    assert actual is not None
+    assert type(actual.request.operation) is type(request.operation)
+    serialized_copy = actual.model_copy(update={"request": actual.request.model_dump()})
+    assert serialize_prepared_capability(serialized_copy) == serialize_prepared_capability(actual)

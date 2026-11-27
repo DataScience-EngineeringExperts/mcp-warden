@@ -63,11 +63,10 @@ def select_capability(intent, *, candidates, pdp, adapter, runtime):
     Raises:
         CapabilityError: A closed code for malformed input or unavailable authority.
     """
-    validate_exact(intent, CapabilityIntentV1)
+    intent = validate_exact(intent, CapabilityIntentV1)
     if type(candidates) is not tuple or len(candidates) > MAX_CANDIDATES:
         raise CapabilityError()
-    for candidate in candidates:
-        validate_exact(candidate, DecisionRequestV1)
+    candidates = tuple(validate_exact(candidate, DecisionRequestV1) for candidate in candidates)
     if len({c.request_digest for c in candidates}) != len(candidates):
         raise CapabilityError()
     failed = False

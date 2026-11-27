@@ -3,7 +3,7 @@
 **Status:** Isolated development foundation for DSE-725. This module selects from
 existing exact signed grants and prepares data. It does not issue leases, consume
 calls, sign receipts, execute a tool, authenticate callers, or mediate a transport.
-It is absent from the published 2.0.0 package and is not wired into `guard`.
+It is available in the source checkout as an offline SDK. Runtime guard integration is pending.
 
 The governing security contracts remain [Agent Trust Kernel](AGENT_TRUST_KERNEL.md),
 [PDP/PEP](POLICY_ENFORCEMENT.md) and [decision receipts](DECISION_RECEIPTS.md).
