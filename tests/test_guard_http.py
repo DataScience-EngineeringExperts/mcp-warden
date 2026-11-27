@@ -11,7 +11,13 @@ import pytest
 
 from mcp_warden import guard_result
 from mcp_warden.guard_http import run_http_guard_async
-from mcp_warden.guard_http_frames import FrameLimit, TransportFailure, bounded_body, bounded_lines
+from mcp_warden.guard_http_frames import (
+    FrameLimit,
+    TransportFailure,
+    bounded_body,
+    bounded_lines,
+    parse_frame,
+)
 from mcp_warden.guard_http_trace import HTTPTrace
 from mcp_warden.guard_http_transport import checked_endpoint
 from mcp_warden.guard_loop import GuardConfig, GuardState
@@ -491,3 +497,12 @@ async def test_unsolicited_resume_cannot_wait_past_the_deadline():
 
     async with harness(Delayed(handle), timeout=0.1) as (_, adapter):
         assert await asyncio.wait_for(adapter, 2) == 2
+
+
+@pytest.mark.parametrize("body", [
+    b'{"jsonrpc":"2.0","result":{"value":789123456789}}',
+    rb'{"jsonrpc":"2.0","result":{"value":"\u003789123456789"}}',
+])
+def test_auth_material_is_refused_as_numeric_or_escaped_json(body):
+    with pytest.raises(TransportFailure, match="credential-bearing frame refused"):
+        parse_frame(body, ("789123456789",))

@@ -345,12 +345,12 @@ follows the layout in `docs/COMMUNITY_CORPUS.md`.
 
 **Still NOT in scope, even with v0.2 `guard`/`inspect`:**
 - No behavioral defense (`T-BEHAVE`) — content is inspected, side effects are not.
-- No cross-call/conversational correlation; each frame is inspected independently.
+- Correlation uses a bounded observation window within one runtime session or offline trace.
 - No decoding of image/audio/blob/base64 result content (coverage gap recorded as
   `WRD-RES-UNINSPECTABLE`).
-- No network calls / no DNS resolution by checks, policy, or the proxy. Exfil + SSRF match
-  on literal host strings **and (#54, D6) raw IP literals** in result text/args against the
-  SSRF/exfil address ranges (`net_rules`) — deterministic, still no DNS-name resolution.
+- Offline result inspection and argument-policy evaluation match literal hosts and IP
+  addresses without network access. Runtime result inspection can also resolve DNS
+  names. The Streamable HTTP adapter applies a DNS deadline and candidate limit.
 - Runtime `guard --url` uses Streamable HTTP. The legacy HTTP+SSE transport and upstream-initiated client RPC are outside the adapter contract.
 - The fuzzy `WRD-RES-INJECT-PHRASE` MONITOR tier is **never default-block**, even in v0.3
   (opt-in only via `--block-inject-phrase`).

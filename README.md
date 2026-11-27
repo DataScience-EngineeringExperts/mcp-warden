@@ -429,8 +429,10 @@ is mutually exclusive with a server command. Set `WARDEN_LOG_LEVEL=INFO` for dia
 ### Runtime result inspection
 
 `guard` inspects tool results from either runtime transport and blocks deterministic hazards by default.
-`--audit-only` restores observation; `--strict` terminates on inspection errors.
-Framing errors still fail open. Prompt-injection phrase matching remains monitor-only.
+`--audit-only` reports findings without applying their policy action. Launched stdio
+fails open on framing errors and uses `--strict` to terminate on inspection errors.
+The Streamable HTTP adapter refuses malformed frames and incomplete inspections.
+Prompt-injection phrase matching remains monitor-only by default.
 See [runtime examples](docs/archive/2026-10-02-runtime-cli-examples.md) and the
 [guard contract](docs/GUARD_PROXY_V3.md) for flags, reserved errors, and limitations.
 

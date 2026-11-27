@@ -105,6 +105,8 @@ def _finite_float(value: str) -> float:
 
 
 def parse_frame(body: bytes, credentials: tuple[str, ...]) -> Frame:
+    if any(secret.encode("ascii") in body for secret in credentials):
+        raise TransportFailure("credential-bearing frame refused")
     try:
         obj = json.loads(body.decode("utf-8"), object_pairs_hook=_unique_object,
                          parse_constant=_invalid_constant, parse_float=_finite_float)
