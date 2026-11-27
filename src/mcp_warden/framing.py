@@ -85,7 +85,10 @@ class FrameReader:
         try:
             chunk = await self._receive()
         except Exception as exc:  # stream closed mid-read
-            logger.debug("receive raised (treating as EOF): %s", exc)
+            if self._strict_evidence:
+                logger.debug("guard: evidence frame receive failed")
+            else:
+                logger.debug("receive raised (treating as EOF): %s", exc)
             self._eof = True
             return False
         if not chunk:

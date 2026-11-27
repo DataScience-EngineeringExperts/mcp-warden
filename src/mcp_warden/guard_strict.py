@@ -151,7 +151,10 @@ async def _handle_strict_abort(
         await client_err.send((line + "\n").encode())
     except Exception as exc:  # noqa: BLE001 - stderr may be gone; do not leak original
         # exc_info=False semantics (binding #4b): never format the abort/original.
-        logger.debug("guard: could not write strict-abort stderr line: %s", exc)
+        if state.local_evidence is None:
+            logger.debug("guard: could not write strict-abort stderr line: %s", exc)
+        else:
+            logger.debug("guard: could not write strict-abort stderr line")
 
     # Graceful child teardown (binding #7): reuse the existing SIGTERM+grace path.
     await teardown_child(proc, on_note=state.emit)

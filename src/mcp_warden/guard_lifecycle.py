@@ -355,7 +355,10 @@ async def synthesize_pending_errors(state, client_out, mode: str, returncode: in
         try:
             await client_out.send(serialize_frame(err, mode))
         except Exception as exc:  # noqa: BLE001 - client may be gone; keep going
-            logger.debug("guard: could not deliver -32002 for id=%r: %s", rpc_id, exc)
+            if state.local_evidence is None:
+                logger.debug("guard: could not deliver -32002 for id=%r: %s", rpc_id, exc)
+            else:
+                logger.debug("guard: could not deliver -32002")
     state.inflight.clear()
     state.inflight_tool.clear()
 
@@ -388,7 +391,10 @@ async def synthesize_strict_abort(
         try:
             await client_out.send(serialize_frame(err, mode))
         except Exception as exc:  # noqa: BLE001 - client may be gone; keep going
-            logger.debug("guard: could not deliver -32003 for id=%r: %s", rpc_id, exc)
+            if state.local_evidence is None:
+                logger.debug("guard: could not deliver -32003 for id=%r: %s", rpc_id, exc)
+            else:
+                logger.debug("guard: could not deliver -32003")
     state.inflight.clear()
     state.inflight_tool.clear()
 
