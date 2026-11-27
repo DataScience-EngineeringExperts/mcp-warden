@@ -8,6 +8,10 @@ describe and visualize the implementation that satisfies that contract.
 
 ---
 
+## Privacy operations
+
+[Control mappings and local fixture report](docs/PRIVACY_EVIDENCE.md) · [Deployment record template](docs/PRIVACY_OPERATOR_TEMPLATE.md)
+
 ## Core docs (3-core rule)
 
 | # | Doc | Purpose |
