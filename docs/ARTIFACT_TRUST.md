@@ -181,6 +181,10 @@ mcp-warden trust prepare deployment-observation current.json \
   --signing-out current.signing.bin
 ```
 
+The host selects and protects the reference observation and its signature
+independently of the current candidate. Both observations use the enrolled
+measurement role.
+
 After external signing, compare the observations with their raw detached signatures:
 
 ```bash
@@ -196,11 +200,16 @@ mcp-warden identity compare baseline.canonical.json current.canonical.json \
 | 1 | `drift` | Both complete observations verified and at least one commitment differs. |
 | 2 | `indeterminate` | Input, evidence or signature validation is incomplete. Reported field differences may come from unverified claims. |
 
+`identity compare` verifies signatures over the canonical form of each
+supplied observation. In the separate `trust verify` workflow, the input file
+must already contain the exact canonical bytes.
+
 Without signature options the command reports evidence gaps and claimed
 differences with exit 2. JSON output contains reason codes and each side's
-identity digests only when that side is complete and signature-verified. The
-report compares supplied records offline. Live collection, observation freshness,
-human approval, and revocation require separate integration.
+identity digests only when that side is complete and signature-verified.
+A match describes the two supplied records, so comparing the same signed
+observation twice can return a match. Live collection, production measurement,
+observation freshness, human approval, and revocation require separate integration.
 
 ## SDK activation
 
