@@ -38,6 +38,7 @@ from .cli_corpus import validate_flags as consensus_validate_flags
 from .cli_deploy_gate import register as register_deploy_gate_command
 from .cli_diff import register as register_diff_command
 from .cli_doctor import register as register_doctor_command
+from .cli_evidence import register as register_evidence_commands
 from .cli_guard import register as register_guard_commands
 from .cli_identity import register as register_identity_commands
 from .cli_lock import register as register_lock_commands
@@ -93,6 +94,7 @@ def _root(
 # v0.2 runtime commands (guard/inspect) + the #19 `lock` sub-app live in their
 # own modules to keep this file under the LOC budget; register them here.
 register_guard_commands(app, console, err_console)
+register_evidence_commands(app, err_console)
 register_lock_commands(app, console, err_console)
 register_diff_command(app, console, err_console)
 register_auth_commands(app, console, err_console)

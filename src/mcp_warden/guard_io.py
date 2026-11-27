@@ -9,11 +9,12 @@ to respect the per-module LOC budget.
 from __future__ import annotations
 
 import os
+import stat
 
 import anyio
 
 
-def wrap_recv(binary_io):
+def wrap_recv(binary_io, *, cancellable_fd: bool = False):
     """Adapt a blocking binary stdin to an async ``receive()`` over a thread.
 
     Uses ``os.read`` on the underlying fd so a small line returns immediately
@@ -32,8 +33,14 @@ def wrap_recv(binary_io):
     except (OSError, AttributeError, ValueError):
         fileno = None
 
+    regular = cancellable_fd and fileno is not None and stat.S_ISREG(os.fstat(fileno).st_mode)
+
     class _Recv:
         async def receive(self) -> bytes:
+            if cancellable_fd and fileno is not None:
+                if not regular:
+                    await anyio.wait_readable(fileno)
+                return os.read(fileno, 65536)
             # abandon_on_cancel=True: when the loop is cancelled mid-read (e.g. the
             # child exited and the teardown path must run), do NOT wait for this
             # blocking client-stdin read to return — abandon the thread so the task

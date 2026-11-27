@@ -27,6 +27,7 @@ from .framing import (
     FrameReader,
     declared_over_cap_value,
 )
+from .guard_evidence import LocalEvidenceCapture, evidence_abort
 from .guard_io import wrap_recv, wrap_send
 from .guard_lifecycle import (
     exit_code_for_child,
@@ -84,7 +85,10 @@ async def _pump_client_to_server(
                 chan.client_eof = True
                 break
             _note_truncation(state, "c2s", frame)
-            if len(frame.raw) > state.config.max_frame_bytes:
+            over_cap = (len(frame.body) if reader.mode == MODE_CONTENT_LENGTH else len(frame.raw)) > state.config.max_frame_bytes
+            if state.local_evidence is not None and (over_cap or frame.parse_error == FRAME_OVER_CAP_PARSE_ERROR):
+                raise evidence_abort()
+            if len(frame.raw) > state.config.max_frame_bytes and state.local_evidence is None:
                 # Over-cap: pass through unmodified with a frame-error note (§2.4).
                 from .guard_loop import _frame_error_note
 
@@ -148,6 +152,8 @@ async def _pump_server_to_client(
             else:
                 over_cap = len(frame.raw) > state.config.max_frame_bytes
             if over_cap:
+                if state.local_evidence is not None:
+                    raise evidence_abort()
                 out = _handle_s2c_over_cap(state, frame)
             else:
                 out = handle_s2c(state, frame, reader.mode or MODE_NEWLINE)
@@ -285,7 +291,19 @@ async def run_guard_async(
         state.config.validate_normalization()
         if state.record is not None:
             return GUARD_FATAL_EXIT  # universal mode never records uninspected raw input
-    client_in = stdin if stdin is not None else wrap_recv(sys.stdin.buffer)
+    if state.local_evidence is not None:
+        from .evidence_key_service import EvidenceKeyServiceError
+
+        if state.record is not None or state.config.normalization_image is not None:
+            return GUARD_FATAL_EXIT
+        try:
+            state.local_evidence.preflight()
+        except (OSError, ValueError, EvidenceKeyServiceError):
+            logger.error("guard: EVD-REFUSED")
+            return GUARD_FATAL_EXIT
+    client_in = stdin if stdin is not None else wrap_recv(
+        sys.stdin.buffer, cancellable_fd=state.local_evidence is not None,
+    )
     client_out = stdout if stdout is not None else wrap_send(sys.stdout.buffer)
     client_err = stderr if stderr is not None else wrap_send(sys.stderr.buffer)
 
@@ -302,22 +320,29 @@ async def run_guard_async(
             [command, *args],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.PIPE if state.local_evidence is None else subprocess.DEVNULL,
             **posix_kwargs,
         )
     except FileNotFoundError:
-        logger.error("guard: server command not found: %s", command)
+        if state.local_evidence is None:
+            logger.error("guard: server command not found: %s", command)
+        else:
+            logger.error("guard: EVD-CHILD")
         return GUARD_FATAL_EXIT
     except Exception as exc:  # spawn failure
-        logger.error("guard: failed to spawn child: %s", exc)
+        if state.local_evidence is None:
+            logger.error("guard: failed to spawn child: %s", exc)
+        else:
+            logger.error("guard: EVD-CHILD")
         return GUARD_FATAL_EXIT
 
     # Windows: assign child to a Job Object with KILL_ON_JOB_CLOSE so the child
     # tree is reaped when guard exits (even on unexpected exit). No-op on POSIX.
     win32_register_child(proc.pid)
 
-    c2s_reader = FrameReader(client_in.receive, state.config.max_frame_bytes)
-    s2c_reader = FrameReader(proc.stdout.receive, state.config.max_frame_bytes)
+    strict_evidence = state.local_evidence is not None
+    c2s_reader = FrameReader(client_in.receive, state.config.max_frame_bytes, strict_evidence=strict_evidence)
+    s2c_reader = FrameReader(proc.stdout.receive, state.config.max_frame_bytes, strict_evidence=strict_evidence)
     chan = _Channels()
 
     async def _watch_child(tg: anyio.abc.TaskGroup) -> None:
@@ -357,7 +382,9 @@ async def run_guard_async(
         # internal error, not a strict abort.
         abort = _find_strict_abort(group_exc)
         if abort is None:
-            raise
+            if state.local_evidence is None or not isinstance(group_exc, Exception):
+                raise
+            abort = evidence_abort()
         return await _handle_strict_abort(state, proc, client_out, client_err, chan.client_mode, abort)
 
     # Decide the teardown path: client gone first vs child exited first (§2.1/§2.2).
@@ -392,6 +419,7 @@ def run_guard(
     record: Callable | None = None,
     record_withheld: Callable | None = None,
     on_summary: Callable[[int], None] | None = None,
+    local_evidence: LocalEvidenceCapture | None = None,
 ) -> int:
     """Synchronous entry point for the CLI: build state and run the loop.
 
@@ -420,6 +448,7 @@ def run_guard(
         on_finding=on_finding,
         record=record,
         record_withheld=record_withheld,
+        local_evidence=local_evidence,
     )
     code = anyio.run(run_guard_async, command, args, state)
     if on_summary is not None:

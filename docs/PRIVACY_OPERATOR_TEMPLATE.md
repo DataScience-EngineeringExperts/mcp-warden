@@ -13,6 +13,18 @@ Complete one record for each deployment and processing purpose. Store the record
 | Rights requests | Identify intake and identity-verification owners, systems searched, due date, response owner and any exception decision. Keep verification material out of ordinary audit exports. |
 | Evidence and signoff | Attach the [versioned control evidence table](PRIVACY_EVIDENCE.md) and the deployment's test run; record the operator and review date. Identify every control whose production enforcement remains unverified. |
 
+## Local evidence custody record
+
+Complete this section when local evidence capture is enabled. Keep the completed record in the deployment's access-controlled store.
+
+| Field | Record |
+|---|---|
+| Custody | Owner of the local key service, service account, protected storage location, key recovery owner and most recent recovery exercise. |
+| Access | Approved operator accounts, roles, purposes and evidence categories. Record who approves human review, when access expires and who can revoke it. |
+| Capture and disclosure | Data categories selected for capture, reason for retaining them, permitted local output destinations and controls on copies made by reviewers. |
+| Retention and holds | Retention periods by category, hold authority, release procedure, deletion evidence, backup schedule and backup expiry owner. |
+| Verification | Deployment version, dates and verdicts for offline authorized read, denied read, service outage, hold and expiry exercises with synthetic data. |
+
 ## Source mapping
 
 For covered Colorado controllers, the Colorado Attorney General describes purpose specification, minimization, secondary-use limits, security, rights handling, and assessments. These topics correspond to the purpose, inputs, minimization, sensitive-data and rights-request entries above. [Colorado Attorney General](https://coag.gov/resources/colorado-privacy-act/)

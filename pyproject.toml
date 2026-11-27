@@ -47,6 +47,8 @@ dev = [
 sigstore = ["sigstore>=4.3.0,<5"]
 # Public-key governance artifact verification; never loads private signing keys.
 artifact-trust = ["cryptography>=50.0.0,<51"]
+# Customer-operated local evidence daemon (Linux).
+local-evidence = ["cryptography>=50.0.0,<51", "anyio>=4.7.0"]
 
 [project.scripts]
 mcp-warden = "mcp_warden.cli:app"

@@ -12,6 +12,12 @@ Use the [deployment record](PRIVACY_OPERATOR_TEMPLATE.md) to document one approv
 | Vendor oversight | The [guard](../src/mcp_warden/guard_result.py) can compare the server surface to a reviewed lock. | The live stdio fixture changes server metadata and verifies blocking. Maintain approved providers, data categories, destinations, contract terms and renewal dates outside Warden. |
 | Audit evidence | The [receipt projection contract](DECISION_RECEIPTS.md) limits agent and reviewer output to defined fields. | The projection fixture checks for private details and signature material. Restrict access to source evidence and review linkability before release. |
 
+## Qualify local encrypted evidence
+
+For deployments that enable the [local evidence service](LOCAL_EVIDENCE.md), keep a separate record of the service identity, authorized reviewer accounts and permitted purposes. Exercise the deployed guard with synthetic data. Confirm that the intended reviewer can retrieve the sample offline, that an unauthorized account is denied, and that a service failure stops the guarded operation. Check that the sample is absent from ordinary logs and exported summaries.
+
+Use two synthetic records to exercise retention. Place one on hold and leave the other eligible to expire. Record the outcome of both operations and inspect the local audit history. Inventory snapshots, backups, and reviewer-created copies separately. Record which copies follow the tested deletion policy and who verifies disposal of the rest.
+
 ## Export a local fixture report
 
 From a clean source checkout with the project's test dependencies installed, run the following command. The script runs a fixed set of synthetic tests. It writes only the source revision, UTC time, scope and control verdicts to standard output. Keep the resulting file in an approved local evidence store. Retention and subject erasure remain operator checks in every export.

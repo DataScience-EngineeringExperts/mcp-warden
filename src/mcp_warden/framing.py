@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -69,12 +70,13 @@ class FrameReader:
             caller can fail-open and pass it through (§2.5).
     """
 
-    def __init__(self, receive, max_frame_bytes: int) -> None:
+    def __init__(self, receive, max_frame_bytes: int, *, strict_evidence: bool = False) -> None:
         self._receive = receive
         self._buf = bytearray()
         self._eof = False
         self.mode: str | None = None
         self.max_frame_bytes = max_frame_bytes
+        self._strict_evidence = strict_evidence
 
     async def _fill(self) -> bool:
         """Pull one more chunk into the buffer. Returns False at EOF."""
@@ -83,7 +85,10 @@ class FrameReader:
         try:
             chunk = await self._receive()
         except Exception as exc:  # stream closed mid-read
-            logger.debug("receive raised (treating as EOF): %s", exc)
+            if self._strict_evidence:
+                logger.debug("guard: evidence frame receive failed")
+            else:
+                logger.debug("receive raised (treating as EOF): %s", exc)
             self._eof = True
             return False
         if not chunk:
@@ -131,25 +136,33 @@ class FrameReader:
                 line = bytes(self._buf[: nl + 1])  # include the newline in raw
                 del self._buf[: nl + 1]
                 body = line.rstrip(b"\r\n")
+                if self._strict_evidence and len(line) > self.max_frame_bytes:
+                    return Frame(raw=b"", body=b"", json=None, parse_error=FRAME_OVER_CAP_PARSE_ERROR)
                 if not body.strip():
                     # Blank line between frames; skip but keep going.
                     if not self._buf and self._eof:
                         return None
                     continue
-                return _parse_frame(line, body)
+                return _parse_frame(line, body, strict_evidence=self._strict_evidence)
+            if self._strict_evidence and len(self._buf) >= self.max_frame_bytes:
+                return Frame(raw=b"", body=b"", json=None, parse_error=FRAME_OVER_CAP_PARSE_ERROR)
             if not await self._fill():
                 if self._buf:
+                    if self._strict_evidence:
+                        return Frame(raw=b"", body=b"", json=None, parse_error="truncated evidence line")
                     line = bytes(self._buf)
                     self._buf.clear()
                     body = line.rstrip(b"\r\n")
                     if not body.strip():
                         return None
-                    return _parse_frame(line, body)
+                    return _parse_frame(line, body, strict_evidence=self._strict_evidence)
                 return None
 
     async def _read_content_length(self) -> Frame | None:
         """Read a Content-Length-framed message (header block + body)."""
         while b"\r\n\r\n" not in self._buf:
+            if self._strict_evidence and len(self._buf) > 16384:
+                return Frame(raw=b"", body=b"", json=None, parse_error="oversized header")
             if not await self._fill():
                 if self._buf:  # truncated header at EOF -> surface as parse error
                     raw = bytes(self._buf)
@@ -157,7 +170,11 @@ class FrameReader:
                     return Frame(raw=raw, body=b"", json=None, parse_error="truncated header at EOF")
                 return None
         sep = self._buf.find(b"\r\n\r\n")
+        if self._strict_evidence and sep > 16384:
+            return Frame(raw=b"", body=b"", json=None, parse_error="oversized header")
         header_bytes = bytes(self._buf[:sep])
+        if self._strict_evidence and not _evidence_headers(header_bytes):
+            return Frame(raw=b"", body=b"", json=None, parse_error="invalid evidence header")
         length = _parse_content_length(header_bytes, self.max_frame_bytes)
         if length is None:
             raw = bytes(self._buf[: sep + 4])
@@ -182,7 +199,7 @@ class FrameReader:
         raw = bytes(self._buf[: body_start + length])
         body = bytes(self._buf[body_start : body_start + length])
         del self._buf[: body_start + length]
-        return _parse_frame(raw, body)
+        return _parse_frame(raw, body, strict_evidence=self._strict_evidence)
 
 
 def _parse_content_length(header_bytes: bytes, max_frame_bytes: int) -> int | None:
@@ -310,14 +327,57 @@ def declared_over_cap_value(header_bytes: bytes, max_frame_bytes: int) -> int | 
     return None
 
 
-def _parse_frame(raw: bytes, body: bytes) -> Frame:
+def _evidence_headers(header: bytes) -> bool:
+    names = set()
+    for line in header.split(b"\r\n"):
+        name, sep, value = line.partition(b":")
+        name = name.lower()
+        if not sep or name in names or name not in {b"content-length", b"content-type"} or any(
+            byte < 32 or byte > 126 for byte in value
+        ):
+            return False
+        names.add(name)
+    return True
+
+
+def _unique_keys(pairs):
+    obj = {}
+    for name, value in pairs:
+        if name in obj:
+            raise ValueError("duplicate JSON member")
+        obj[name] = value
+    return obj
+
+
+def _reject_constant(_value):
+    raise ValueError("non-finite JSON number")
+
+
+def _finite_float(value: str) -> float:
+    number = float(value)
+    if not math.isfinite(number):
+        return _reject_constant(value)
+    return number
+
+
+def _parse_frame(raw: bytes, body: bytes, *, strict_evidence: bool = False) -> Frame:
     """Parse a frame body into JSON, capturing parse errors (fail-open upstream)."""
     try:
-        obj = json.loads(body)
+        if strict_evidence:
+            obj = json.loads(
+                body.decode("utf-8"), object_pairs_hook=_unique_keys,
+                parse_constant=_reject_constant, parse_float=_finite_float,
+            )
+        else:
+            obj = json.loads(body)
         if not isinstance(obj, dict):
             return Frame(raw=raw, body=body, json=None, parse_error="frame body is not a JSON object")
         return Frame(raw=raw, body=body, json=obj)
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+    except (ValueError, RecursionError) as exc:
+        if strict_evidence:
+            return Frame(raw=b"", body=b"", json=None, parse_error="invalid evidence frame")
+        if not isinstance(exc, (json.JSONDecodeError, UnicodeDecodeError)):
+            raise
         return Frame(raw=raw, body=body, json=None, parse_error=str(exc))
 
 
